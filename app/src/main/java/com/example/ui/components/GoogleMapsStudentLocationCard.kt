@@ -212,8 +212,21 @@ fun GoogleMapsStudentLocationCard(
     }
 
     var isExpanded by remember { mutableStateOf(false) }
-    var layerIndex by remember { mutableStateOf(0) }
-    var zoomLevel by remember { mutableStateOf(18.0) }
+    // Lop map va muc zoom tung duoc chon bang nut "Lớp", truoc day chi song trong
+    // `remember`: mo lai man hinh la quay ve "Đường phố". O nong thon, lop duong
+    // pho cua OSM trong gan nhu trang nen, nguoi dung tuong la bi doi do hoa.
+    // Lan choi nay giu nguyen nguyen vong chon cua ho, va mac dinh la Vệ tinh.
+    val mapPrefs = remember {
+        context.getSharedPreferences("map_view", android.content.Context.MODE_PRIVATE)
+    }
+    var layerIndex by remember { mutableStateOf(mapPrefs.getInt("layer", MapLayer.SATELLITE.ordinal)) }
+    var zoomLevel by remember { mutableStateOf(mapPrefs.getFloat("zoom", 18f).toDouble()) }
+    LaunchedEffect(layerIndex, zoomLevel) {
+        mapPrefs.edit()
+            .putInt("layer", layerIndex.coerceIn(0, MapLayer.entries.lastIndex))
+            .putFloat("zoom", zoomLevel.toFloat())
+            .apply()
+    }
     var followMode by remember { mutableStateOf(true) }
     var mapViewRef by remember { mutableStateOf<org.osmdroid.views.MapView?>(null) }
 
@@ -395,15 +408,16 @@ fun GoogleMapsStudentLocationCard(
 
                         org.osmdroid.views.MapView(ctx).apply {
                             isTilesScaledToDpi = true
-                            setTileSource(MapLayer.STREET.source)
-                            // maxZoom lay theo dung tile source dang chon:
-                            // MAPNIK 19, Esri 19 (da chep xuong 19 vi z20 o xi),
-                            // OpenTopo theo source.maximumZoomLevel.
-                            maxZoomLevel = MapLayer.STREET.maxZoom()
+                            val initialLayer = layerAt(layerIndex)
+                            setTileSource(initialLayer.source)
+                            // maxZoom lay theo DUNG tile source dang chon (khong phai
+                            // cung cap mac dinh): MAPNIK 19, Esri 19 (da chep xuong 19
+                            // vi z20 tra ve o xam), OpenTopo theo source.maximumZoomLevel.
+                            maxZoomLevel = initialLayer.maxZoom()
                             minZoomLevel = 3.0
                             setMultiTouchControls(true)
                             setBuiltInZoomControls(false)
-                            controller.setZoom(18.0)
+                            controller.setZoom(zoomLevel.coerceAtMost(initialLayer.maxZoom()))
                             controller.setCenter(org.osmdroid.util.GeoPoint(latitude, longitude))
 
                             overlays.add(

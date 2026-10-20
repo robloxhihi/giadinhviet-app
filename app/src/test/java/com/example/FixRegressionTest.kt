@@ -198,4 +198,20 @@ class FixRegressionTest {
         )
         assertTrue("Phải nói rõ nút không xóa dữ liệu máy chủ", src.contains("KHÔNG xóa hồ sơ"))
     }
+
+    /**
+     * Lớp bản đồ chỉ nằm trong `remember`, nên mo lai man hinh la quay ve
+     * "Đường phố". O nong thon, lop duong pho OSM trong gan nhu trang ran,
+     * nguoi dung doc thanh "app bi doi do hoa". Phai luu vao SharedPreferences
+     * va mac dinh mo bang lop ve tinh.
+     */
+    @Test
+    fun mapLayer_choiceSurvivesReopeningTheScreen() {
+        val src = projectFile(
+            "src/main/java/com/example/ui/components/GoogleMapsStudentLocationCard.kt"
+        ).readText()
+        assertTrue("Phải đọc lớp đã lưu thay vì cứng số 0", src.contains("mapPrefs.getInt(\"layer\""))
+        assertTrue("Mặc định phải mở bằng lớp chi tiết nhất", src.contains("MapLayer.SATELLITE.ordinal"))
+        assertTrue("Không được khóa cứng nền đường phố khi tạo MapView", !src.contains("setTileSource(MapLayer.STREET.source)"))
+    }
 }
