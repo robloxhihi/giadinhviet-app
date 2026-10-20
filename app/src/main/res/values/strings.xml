@@ -1,0 +1,13 @@
+<resources>
+    <string name="app_name">Gia Đình Việt</string>
+    <string name="default_web_client_id">931971500070-jfd9trfl7vpq14l82p2ro4vtvtoui03v.apps.googleusercontent.com</string>
+    <string name="tagline">Đồng hành gia đình • An tâm từng khoảnh khắc</string>
+    <string name="sign_in_google">Tiếp tục với Google</string>
+    <string name="role_parent">Phụ huynh (Parent)</string>
+    <string name="role_child">Học sinh (Child)</string>
+    <string name="pair_code_label">Mã kết nối học sinh</string>
+    <string name="enter_pair_code">Nhập mã học sinh (vd: HS-8F29K)</string>
+    <string name="request_pair">Gửi yêu cầu ghép nối</string>
+    <string name="disconnect">Hủy liên kết</string>
+    <string name="accessibility_blocker_description">Gia Đình Việt dùng quyền Trợ năng chỉ để chặn ứng dụng theo lịch mà gia đình đã thống nhất. Ứng dụng không đọc nội dung trên màn hình.</string>
+</resources>

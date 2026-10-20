@@ -1,0 +1,593 @@
+package com.example.ui.screens
+
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.BatteryChargingFull
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.Place
+import androidx.compose.material.icons.filled.Speed
+import androidx.compose.material.icons.filled.Timeline
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Slider
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.example.ui.components.GlassButton
+import com.example.ui.components.GlassCard
+import com.example.ui.components.GradientProgressBar
+import com.example.ui.components.PremiumChip
+import com.example.ui.components.PremiumTopBar
+import com.example.ui.components.SectionHeader
+import com.example.ui.components.StatTile
+import com.example.ui.theme.Premium
+import com.example.ui.theme.TextMuted
+import com.example.ui.theme.TextPrimary
+import com.example.ui.theme.TextSecondary
+import com.example.ui.viewmodel.VesperaUiState
+
+/**
+ * "Hành trình & Vùng an toàn" — location intelligence.
+ *
+ * A stylised route trace, a chronological journey timeline, frequent places
+ * and a safe-zone (geofence) manager with live radius control.
+ */
+@Composable
+fun LocationHistoryScreen(
+    uiState: VesperaUiState,
+    onBack: () -> Unit,
+    onToggleLocationHistory: (Boolean) -> Unit
+) {
+    val scrollState = rememberScrollState()
+    val history = uiState.locationHistory
+
+    // Danh sach mau: app CHUA luu tru nay van toan (geofence) nao tren may chu.
+    // LocationData.currentSafeZone chi la nhan mo ta vi tri hien tai, khong phai
+    // danh sach vung da bat. Giu list de minh hoa nhung gan nhan "Mau" that thuc.
+    val safeZonesAreSample = true
+    val safeZones = remember {
+        mutableStateListOf(
+            Triple("Trường học", 300f, true),
+            Triple("Nhà riêng", 250f, true),
+            Triple("Nhà bà ngoại", 400f, false)
+        )
+    }
+    var newZoneRadius by remember { mutableFloatStateOf(300f) }
+    var selectedZone by remember { mutableStateOf(0) }
+
+    val stopsToday = history.size
+    val maxSpeed = history.maxOfOrNull { it.speed } ?: 0f
+    // CHỈ tính các điểm có telemetry thật (batteryLevel > 0). LocationData mặc định
+    // batteryLevel = 0 khi chưa gửi pin, tính gộp cả điểm 0 sẽ kéo trung bình thấp hơn thực.
+    val batteryReadings = history.map { it.batteryLevel }.filter { it > 0 }
+    val avgBattery = if (batteryReadings.isEmpty()) 0 else batteryReadings.average().toInt()
+    val frequentPlaces = history.groupBy { it.placeName }
+        .mapValues { it.value.size }
+        .toList()
+        .sortedByDescending { it.second }
+        .take(4)
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(scrollState)
+            .padding(horizontal = 16.dp, vertical = 16.dp)
+            .testTag("location_history_screen")
+    ) {
+        PremiumTopBar(
+            title = "Hành trình của con",
+            subtitle = "Lịch sử di chuyển & vùng an toàn",
+            onBack = onBack
+        )
+
+        Spacer(modifier = Modifier.height(18.dp))
+
+        // Bao cao trang thai ghi that, de nguoi dung biet cong tac dang bat hay
+        // da tat — khong chi thay ngon den mau o phia duoi.
+        if (!uiState.isLocationHistoryEnabled) {
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp),
+                color = Premium.amber.copy(alpha = 0.14f)
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.History,
+                        contentDescription = null,
+                        tint = Premium.amber,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Text(
+                        text = "Đang TẮT ghi lịch sử — danh sách dưới đây là điểm cũ, " +
+                            "máy sẽ không lưu thêm cho tới khi bật lại.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Premium.amber,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.height(14.dp))
+        }
+
+        // ── Route trace ───────────────────────────────────────────────────
+        GlassCard(modifier = Modifier.fillMaxWidth(), glow = Premium.cyan, contentPadding = 0.dp) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(190.dp)
+                    .clip(RoundedCornerShape(22.dp))
+                    .background(
+                        Brush.linearGradient(
+                            listOf(
+                                Premium.glowPrimary.copy(alpha = 0.35f),
+                                Premium.glowSecondary.copy(alpha = 0.25f)
+                            )
+                        )
+                    )
+            ) {
+                val accentCyan = Premium.cyan
+                val accentViolet = Premium.violet
+                val accentEmerald = Premium.emerald
+                Canvas(modifier = Modifier.fillMaxSize()) {
+                    val w = size.width
+                    val h = size.height
+                    // soft grid
+                    var x = 0f
+                    while (x < w) {
+                        drawLine(Color.White.copy(alpha = 0.06f), Offset(x, 0f), Offset(x, h), 1f)
+                        x += w / 8f
+                    }
+                    var y = 0f
+                    while (y < h) {
+                        drawLine(Color.White.copy(alpha = 0.06f), Offset(0f, y), Offset(w, y), 1f)
+                        y += h / 5f
+                    }
+
+                    val points = if (history.size >= 2) {
+                        history.take(24).mapIndexed { index, entry ->
+                            val fx = 0.08f + 0.84f * (index.toFloat() / (history.take(24).size - 1).coerceAtLeast(1))
+                            val fy = 0.30f + 0.45f * (0.5f + 0.5f * kotlin.math.sin(index * 0.9f))
+                            Offset(fx * w, fy * h)
+                        }
+                    } else {
+                        listOf(
+                            Offset(w * 0.14f, h * 0.68f),
+                            Offset(w * 0.36f, h * 0.42f),
+                            Offset(w * 0.58f, h * 0.60f),
+                            Offset(w * 0.80f, h * 0.34f)
+                        )
+                    }
+
+                    val path = Path().apply {
+                        moveTo(points.first().x, points.first().y)
+                        points.drop(1).forEach { lineTo(it.x, it.y) }
+                    }
+                    drawPath(
+                        path = path,
+                        color = Color.White.copy(alpha = 0.20f),
+                        style = Stroke(width = 12f, cap = StrokeCap.Round)
+                    )
+                    drawPath(
+                        path = path,
+                        brush = Brush.horizontalGradient(listOf(accentCyan, accentViolet)),
+                        style = Stroke(width = 5f, cap = StrokeCap.Round)
+                    )
+                    points.forEachIndexed { index, point ->
+                        val isLast = index == points.lastIndex
+                        drawCircle(
+                            color = if (isLast) accentEmerald else Color.White,
+                            radius = if (isLast) 9f else 5.5f,
+                            center = point
+                        )
+                        if (isLast) {
+                            drawCircle(
+                                color = accentEmerald.copy(alpha = 0.35f),
+                                radius = 18f,
+                                center = point
+                            )
+                        }
+                    }
+                }
+
+                Row(
+                    modifier = Modifier
+                        .align(Alignment.TopStart)
+                        .padding(14.dp)
+                ) {
+                    PremiumChip(
+                        text = if (uiState.isLocationHistoryEnabled) "Đang ghi lịch sử" else "Tạm dừng ghi",
+                        tint = if (uiState.isLocationHistoryEnabled) Premium.emerald else Premium.amber,
+                        filled = true
+                    )
+                }
+
+                Row(
+                    modifier = Modifier
+                        .align(Alignment.BottomStart)
+                        .padding(14.dp)
+                ) {
+                    PremiumChip(
+                        text = "Hôm nay: $stopsToday điểm dừng",
+                        tint = Premium.primaryBright,
+                        filled = true
+                    )
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(14.dp))
+
+        // ── History toggle ────────────────────────────────────────────────
+        GlassCard(modifier = Modifier.fillMaxWidth()) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    modifier = Modifier
+                        .size(38.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(Premium.primary.copy(alpha = 0.16f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(Icons.Default.History, contentDescription = null, tint = Premium.primaryBright, modifier = Modifier.size(19.dp))
+                }
+                Spacer(modifier = Modifier.width(12.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Ghi lịch sử di chuyển",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = TextPrimary,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = "Tự động lưu lại khi di chuyển hơn 5 mét",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = TextSecondary
+                    )
+                }
+                Switch(
+                    checked = uiState.isLocationHistoryEnabled,
+                    onCheckedChange = { onToggleLocationHistory(it) },
+                    colors = SwitchDefaults.colors(
+                        checkedThumbColor = Color.White,
+                        checkedTrackColor = Premium.primary
+                    )
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(14.dp))
+
+        // ── KPIs ──────────────────────────────────────────────────────────
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            StatTile(
+                modifier = Modifier.weight(1f),
+                icon = Icons.Default.Place,
+                label = "ĐIỂM DỪNG",
+                value = "$stopsToday",
+                hint = "Hôm nay",
+                tint = Premium.primaryBright
+            )
+            StatTile(
+                modifier = Modifier.weight(1f),
+                icon = Icons.Default.Speed,
+                label = "TỐC ĐỘ MAX",
+                value = "${maxSpeed.toInt()} km/h",
+                hint = "Di chuyển",
+                tint = Premium.amber
+            )
+        }
+
+        Spacer(modifier = Modifier.height(10.dp))
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            StatTile(
+                modifier = Modifier.weight(1f),
+                icon = Icons.Default.BatteryChargingFull,
+                label = "PIN TRUNG BÌNH",
+                value = if (avgBattery > 0) "$avgBattery%" else "—",
+                hint = "Khi di chuyển",
+                tint = if (avgBattery > 0) Premium.emerald else TextMuted
+            )
+            StatTile(
+                modifier = Modifier.weight(1f),
+                icon = Icons.Default.Home,
+                label = "VÙNG AN TOÀN",
+                value = "${safeZones.count { it.third }}/${safeZones.size}",
+                hint = "Mẫu — chưa lưu",
+                tint = if (safeZonesAreSample) Premium.amber else Premium.violet
+            )
+        }
+
+        Spacer(modifier = Modifier.height(14.dp))
+
+        // ── Frequent places ───────────────────────────────────────────────
+        if (frequentPlaces.isNotEmpty()) {
+            GlassCard(modifier = Modifier.fillMaxWidth()) {
+                Column {
+                    SectionHeader(
+                        title = "Địa điểm quen thuộc",
+                        subtitle = "Xếp hạng theo tần suất ghé thăm",
+                        icon = Icons.Default.Place,
+                        tint = Premium.cyan
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    val maxCount = frequentPlaces.first().second.coerceAtLeast(1)
+                    frequentPlaces.forEach { (place, count) ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = place,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = TextPrimary,
+                                modifier = Modifier.weight(1f),
+                                maxLines = 1
+                            )
+                            Text(
+                                text = "$count lần",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Premium.primaryBright,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                        GradientProgressBar(
+                            progress = count.toFloat() / maxCount.toFloat(),
+                            colors = listOf(Premium.cyan, Premium.violet),
+                            height = 6.dp
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                    }
+                }
+            }
+            Spacer(modifier = Modifier.height(14.dp))
+        }
+
+        // ── Safe zones manager ────────────────────────────────────────────
+        GlassCard(modifier = Modifier.fillMaxWidth(), glow = Premium.emerald) {
+            Column {
+                SectionHeader(
+                    title = if (safeZonesAreSample) "Vùng an toàn (mẫu — chưa lưu vào máy chủ)" else "Vùng an toàn (Geofence)",
+                    subtitle = "Nhận thông báo khi con ra khỏi vùng",
+                    icon = Icons.Default.LocationOn,
+                    tint = if (safeZonesAreSample) Premium.amber else Premium.emerald
+                )
+                if (safeZonesAreSample) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "Chưa có vùng an toàn thật nào được lưu hoặc bật trên máy chủ — " +
+                            "các mục và công tắc bên dưới chỉ là dữ liệu mẫu để minh hoạ giao diện.",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Premium.amber
+                    )
+                }
+                Spacer(modifier = Modifier.height(12.dp))
+                safeZones.forEachIndexed { index, zone ->
+                    val selected = index == selectedZone
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(if (selected) Premium.emerald.copy(alpha = 0.12f) else Premium.glassFillTop)
+                            .border(
+                                1.dp,
+                                if (selected) Premium.emerald.copy(alpha = 0.5f) else Premium.glassBorder,
+                                RoundedCornerShape(16.dp)
+                            )
+                            .clickable { selectedZone = index }
+                            .padding(horizontal = 12.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(30.dp)
+                                .clip(CircleShape)
+                                .background(Premium.emerald.copy(alpha = 0.18f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(Icons.Default.LocationOn, contentDescription = null, tint = Premium.emerald, modifier = Modifier.size(16.dp))
+                        }
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = zone.first,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = TextPrimary,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Text(
+                                text = "Bán kính ${zone.second.toInt()} m",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = TextSecondary
+                            )
+                            if (safeZonesAreSample) {
+                                Spacer(modifier = Modifier.height(4.dp))
+                                PremiumChip(text = "Mẫu", tint = Premium.amber)
+                            }
+                        }
+                        Switch(
+                            checked = zone.third,
+                            onCheckedChange = { enabled ->
+                                safeZones[index] = Triple(zone.first, zone.second, enabled)
+                            },
+                            colors = SwitchDefaults.colors(
+                                checkedThumbColor = Color.White,
+                                checkedTrackColor = Premium.emerald
+                            )
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                }
+
+                Spacer(modifier = Modifier.height(6.dp))
+                Text(
+                    text = "Bán kính vùng đang chọn: ${newZoneRadius.toInt()} m",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Premium.emerald,
+                    fontWeight = FontWeight.Bold
+                )
+                Slider(
+                    value = newZoneRadius,
+                    onValueChange = {
+                        newZoneRadius = it
+                        val zone = safeZones[selectedZone]
+                        safeZones[selectedZone] = Triple(zone.first, it, zone.third)
+                    },
+                    valueRange = 100f..1000f,
+                    steps = 17
+                )
+                Spacer(modifier = Modifier.height(6.dp))
+                GlassButton(
+                    text = "Thêm vùng an toàn mới",
+                    icon = Icons.Default.Add,
+                    onClick = {
+                        safeZones.add(Triple("Vùng mới ${safeZones.size + 1}", newZoneRadius, true))
+                    },
+                    tint = Premium.emerald,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(14.dp))
+
+        // ── Timeline ──────────────────────────────────────────────────────
+        GlassCard(modifier = Modifier.fillMaxWidth()) {
+            Column {
+                SectionHeader(
+                    title = "Dòng thời gian di chuyển",
+                    subtitle = if (history.isEmpty()) "Chưa có dữ liệu" else "${history.size} mốc gần nhất",
+                    icon = Icons.Default.Timeline,
+                    tint = Premium.violet
+                )
+                Spacer(modifier = Modifier.height(14.dp))
+
+                if (history.isEmpty()) {
+                    Text(
+                        text = "Lịch sử sẽ xuất hiện sau khi thiết bị học sinh di chuyển và dịch vụ định vị nền gửi dữ liệu về.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = TextMuted
+                    )
+                } else {
+                    history.take(12).forEachIndexed { index, entry ->
+                        Row(modifier = Modifier.fillMaxWidth()) {
+                            // Rail
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                modifier = Modifier.width(26.dp)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(12.dp)
+                                        .clip(CircleShape)
+                                        .background(if (index == 0) Premium.primaryBright else Premium.violet.copy(alpha = 0.55f))
+                                )
+                                if (index != history.take(12).lastIndex) {
+                                    Box(
+                                        modifier = Modifier
+                                            .width(2.dp)
+                                            .height(58.dp)
+                                            .background(Premium.glassBorder.copy(alpha = 0.5f))
+                                    )
+                                }
+                            }
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Text(
+                                        text = entry.placeName.ifEmpty { "Điểm dừng chân" },
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = TextPrimary,
+                                        fontWeight = FontWeight.SemiBold,
+                                        maxLines = 1,
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                    Text(
+                                        text = entry.timeStr.ifEmpty { "--:--" },
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = Premium.primaryBright,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                                Text(
+                                    text = entry.dateStr.ifEmpty { "" },
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = TextMuted
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    // batteryLevel == 0 = điểm không có telemetry → "—" xám, không in "0%"
+                                    PremiumChip(
+                                        text = if (entry.batteryLevel > 0) "${entry.batteryLevel}%${if (entry.isCharging) " ⚡" else ""}" else "—",
+                                        tint = if (entry.batteryLevel > 0) Premium.emerald else TextMuted
+                                    )
+                                    PremiumChip(text = "${entry.speed.toInt()} km/h", tint = Premium.amber)
+                                }
+                                Spacer(modifier = Modifier.height(10.dp))
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(28.dp))
+    }
+}

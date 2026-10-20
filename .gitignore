@@ -1,0 +1,23 @@
+*.iml
+.gradle
+.kotlin
+/.idea/
+.DS_Store
+build/
+captures
+.externalNativeBuild
+.cxx
+local.properties
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+*.pfx
+*-debug.log
+
+# Debug keystore DUOC commit co y.
+# Day la keystore debug mac dinh cua Android, mat khau "android" va
+# keyAlias "androiddebugkey" la thong tin cong khai, khong phai bi mat.
+# CI can file nay vi app/build.gradle.kts ky ban debug bang debugConfig.
+# TUYET DOI khong dung no de ky ban phat hanh that.

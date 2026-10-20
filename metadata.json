@@ -1,0 +1,6 @@
+{
+  "name": "Gia Đình Việt",
+  "description": "Ứng dụng Gia Đình Việt: Định vị GPS học sinh thời gian thực, giám sát thời gian sử dụng ứng dụng chạy ngầm, giao diện tối sang trọng chuẩn Facebook và bảo mật liên kết gia đình.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

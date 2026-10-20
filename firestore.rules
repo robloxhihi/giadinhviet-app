@@ -1,0 +1,126 @@
+rules_version = '2';
+// TRANG THAI FILE NAY (doc ky truoc khi deploy):
+//
+// Da khat: noi quy (`pairings/{id}/schedules`), nhat ky noi quy
+// (`pairings/{id}/rule_audit` — chi them, khong sua/xoa), va cac thu
+// collection con lai nam DUOI document ghep noi (agreements, extra_time,
+// privacy_requests, messages, location_history) — chi me/con cua cap do
+// doc/ghi duoc.
+//
+// VAN CON MO, chua sua o day vi sua la co the lam hong tinh nang khac:
+//   - /locations/{userId}       : bat ky tai khoan nao doc/ghi duoc vi tri
+//   - /location_history/{id}    : (collection o ngon) bat ky ai doc/ghi
+//   - /sos_alerts/{alertId}     : bat ky ai doc/ghi
+//   - /calls/{callId}           : bat ky ai doc/ghi
+//   - /pairings/{id}            : bat ky ai doc (create/delete van rong)
+// Voi bai thi KHKT thi day la gioi han PHAI noi thang, tuyet doi khong
+// duoc noi "du lieu gia dinh duoc bao ve".
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    // Thanh vien cua mot ghep noi: phai la parentId hoac childId tren chinh
+    // document do. Dung cho noi quy + nhat ky, la noi me/con phai dong y.
+    function isPairMember(pairingId) {
+      return isAuthenticated() && (
+        get(/databases/$(database)/documents/pairings/$(pairingId)).data.parentId == request.auth.uid ||
+        get(/databases/$(database)/documents/pairings/$(pairingId)).data.childId == request.auth.uid
+      );
+    }
+
+    // User profiles
+    match /users/{userId} {
+      allow read: if isAuthenticated();
+      allow create, update: if isOwner(userId);
+      allow delete: if false;
+    }
+
+    // Pairings
+    match /pairings/{pairingId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      // update phai thuoc ve hai ben cua chinh cap do (me hoac con) — day la
+      // cho ghi "ai dang tat/bat ghi dinh vi" va trang thai ghep noi.
+      allow update: if isAuthenticated() && (
+        resource.data.parentId == request.auth.uid ||
+        resource.data.childId == request.auth.uid ||
+        request.resource.data.parentId == request.auth.uid ||
+        request.resource.data.childId == request.auth.uid
+      );
+      allow delete: if isAuthenticated();
+
+      // NOI QUY GIA DINH. Hai ben deu ghi duoc vi co che me-con-dong-long
+      // cho phep ca hai ben goi de xuat; quyen "tu duyet phieu cua minh" la
+      // quy tac UI, kiem tra o ConsentPolicy.kt (chua phai o day).
+      match /schedules/{scheduleId} {
+        allow read, write: if isPairMember(pairingId);
+      }
+
+      // Nhat ky noi quy: chi them, khong sua, khong xoa — de khong ai xoa
+      // duoc vet cua viec minh da doi luat.
+      match /rule_audit/{entryId} {
+        allow read, create: if isPairMember(pairingId);
+        allow update, delete: if false;
+      }
+
+      match /agreements/{agreementId} {
+        allow read, write: if isPairMember(pairingId);
+      }
+
+      match /extra_time/{requestId} {
+        allow read, write: if isPairMember(pairingId);
+      }
+
+      match /privacy_requests/{requestId} {
+        allow read, write: if isPairMember(pairingId);
+      }
+
+      match /messages/{messageId} {
+        allow read, write: if isPairMember(pairingId);
+      }
+
+      match /location_history/{historyId} {
+        allow read, write: if isPairMember(pairingId);
+      }
+    }
+
+    // Pairing requests
+    match /pairing_requests/{requestId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated();
+      allow delete: if isAuthenticated();
+    }
+
+    // Realtime locations
+    match /locations/{userId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    // Location history (Lịch sử vị trí đẩy lên Cloud)
+    match /location_history/{historyId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    // SOS Alerts
+    match /sos_alerts/{alertId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    // Calls (WebRTC signaling)
+    match /calls/{callId} {
+      allow read, write: if isAuthenticated();
+
+      match /{document=**} {
+        allow read, write: if isAuthenticated();
+      }
+    }
+  }
+}

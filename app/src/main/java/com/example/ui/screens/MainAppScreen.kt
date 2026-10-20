@@ -1,0 +1,312 @@
+package com.example.ui.screens
+
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Chat
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.unit.dp
+import com.example.data.model.PairingStatus
+import com.example.data.model.UserRole
+import com.example.ui.components.DraggableFloatingSosButton
+import com.example.ui.components.ExtraTimeDialog
+import com.example.ui.components.PremiumBottomBar
+import com.example.ui.components.PrivacyDialog
+import com.example.ui.theme.DialogSurface
+import com.example.ui.theme.PremiumBackground
+import com.example.ui.viewmodel.VesperaUiState
+import com.example.ui.viewmodel.VesperaViewModel
+
+/**
+ * Root shell. All five tabs share one living [PremiumBackground], one frosted
+ * floating navigation pill, and the always-available draggable SOS orb.
+ *
+ * "Overlay" screens (Insights, Location History) are pushed over the tabs and
+ * dismissed with the system back gesture. "Phòng học tập trung" và "Liên kết
+ * gia đình" da bi cat theo yeu cau — noi dung cua chung khong con o dau het.
+ */
+@Composable
+fun MainAppScreen(
+    viewModel: VesperaViewModel,
+    uiState: VesperaUiState,
+    onOpenUsageSettings: () -> Unit,
+    onRequestRuntimePermissions: (Array<String>) -> Unit = {},
+    onOpenSpecialPermission: (com.example.service.PermissionManager.PermissionItem) -> Unit = {},
+    onRecheckPermissions: () -> Unit = {}
+) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val isChild = uiState.userProfile?.role == UserRole.CHILD
+    var selectedTab by remember { mutableIntStateOf(0) }
+    var overlayScreen by remember { mutableStateOf<String?>(null) }
+    var showExtraTimeDialog by remember { mutableStateOf(false) }
+    var showPrivacyDialog by remember { mutableStateOf(false) }
+    var showPermissionDialog by remember { mutableStateOf(false) }
+    var autoShownPermissions by remember { mutableStateOf(false) }
+    val snackbarHostState = remember { SnackbarHostState() }
+
+    val missingRequired = uiState.permissionSnapshot.count { !it.granted && it.required }
+
+    // Mở Trung tâm quyền một lần khi vào app mà còn thiếu quyền bắt buộc (đúng thời điểm).
+    LaunchedEffect(uiState.permissionSnapshot.isNotEmpty(), missingRequired) {
+        if (!autoShownPermissions && uiState.permissionSnapshot.isNotEmpty() && missingRequired > 0) {
+            autoShownPermissions = true
+            showPermissionDialog = true
+        }
+    }
+
+    LaunchedEffect(uiState.errorMessage) {
+        uiState.errorMessage?.let {
+            snackbarHostState.showSnackbar(it)
+            viewModel.clearMessages()
+        }
+    }
+
+    LaunchedEffect(uiState.successMessage) {
+        uiState.successMessage?.let {
+            snackbarHostState.showSnackbar(it)
+            viewModel.clearMessages()
+        }
+    }
+
+    val navItems = listOf(
+        Triple("Tổng quan", Icons.Default.Home, 0),
+        Triple("Vị trí", Icons.Default.LocationOn, 1),
+        Triple("Giờ dùng", Icons.Default.Schedule, 2),
+        Triple("Chat", Icons.Default.Chat, 3),
+        Triple("Cài đặt", Icons.Default.Settings, 4)
+    )
+
+    PremiumBackground(modifier = Modifier.fillMaxSize()) {
+        if (uiState.isSosAlertActive) {
+            com.example.ui.components.SosEmergencyWarningDialog(
+                message = uiState.activeSosMessage,
+                channel = uiState.currentSosChannel,
+                onDismiss = { viewModel.dismissSosAlert() }
+            )
+        }
+
+        Scaffold(
+            modifier = Modifier.fillMaxSize(),
+            containerColor = Color.Transparent,
+            snackbarHost = { SnackbarHost(snackbarHostState) },
+            bottomBar = {
+                Box(modifier = Modifier.navigationBarsPadding().padding(bottom = 6.dp)) {
+                    PremiumBottomBar(
+                        items = navItems,
+                        selectedIndex = selectedTab,
+                        onSelect = { selectedTab = it },
+                        modifier = Modifier.testTag("bottom_navigation_bar")
+                    )
+                }
+            }
+        ) { innerPadding ->
+            androidx.compose.foundation.layout.Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(innerPadding)
+            ) {
+                if (missingRequired > 0) {
+                    com.example.ui.components.PermissionCenterBanner(
+                        missingRequired = missingRequired,
+                        onOpen = { showPermissionDialog = true },
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
+                    )
+                }
+                Box(modifier = Modifier.fillMaxSize()) {
+                when (selectedTab) {
+                    0 -> if (isChild) {
+                        StudentMainScreen(
+                            uiState = uiState,
+                            onAcceptPairing = { req -> viewModel.acceptPairing(req) },
+                            onRejectPairing = { id -> viewModel.rejectPairing(id) },
+                            onSendZenlyBump = { viewModel.sendZenlyBump(context) },
+                            onOpenChat = { selectedTab = 3 },
+                            onRequestExtraTime = { showExtraTimeDialog = true },
+                            onRequestPrivacyClick = { showPrivacyDialog = true },
+                            onSignOut = { viewModel.signOut() },
+                            onRegenerateCode = { viewModel.regenerateStudentCode() }
+                        )
+                    } else {
+                        DashboardScreen(
+                            uiState = uiState,
+                            onPairDirectly = { code -> viewModel.pairDirectly(code) },
+                            onAcceptPairing = { req -> viewModel.acceptPairing(req) },
+                            onRejectPairing = { id -> viewModel.rejectPairing(id) },
+                            onApproveExtraTime = { reqId, mins -> viewModel.respondToExtraTime(reqId, true, mins) },
+                            onRejectExtraTime = { reqId -> viewModel.respondToExtraTime(reqId, false, 0) },
+                            onApprovePrivacy = { reqId, childId -> viewModel.respondToPrivacyRequest(reqId, childId, true) },
+                            onRejectPrivacy = { reqId -> viewModel.respondToPrivacyRequest(reqId, "", false) },
+                            onRequestExtraTimeClick = { showExtraTimeDialog = true },
+                            onRequestPrivacyClick = { showPrivacyDialog = true },
+                            onNavigateToTab = { index -> selectedTab = index },
+                            onSelectEmotion = { emotion -> viewModel.setSelectedEmotion(emotion) },
+                            onSendZenlyBump = { viewModel.sendZenlyBump(context) },
+                            onClearMessages = { viewModel.clearMessages() },
+                            onOpenLocationHistory = { overlayScreen = "history" }
+                        )
+                    }
+                    1 -> LocationScreen(
+                        uiState = uiState,
+                        onRefreshLocation = { viewModel.broadcastSelfTelemetry() },
+                        onRequestPrivacyClick = { showPrivacyDialog = true },
+                        onSendZenlyBump = { viewModel.sendZenlyBump(context) },
+                        onToggleLocationHistory = { enabled -> viewModel.toggleLocationHistory(enabled) },
+                        onOpenLocationHistory = { overlayScreen = "history" }
+                    )
+                    2 -> ScreenTimeScreen(
+                        uiState = uiState,
+                        onOpenUsageSettings = onOpenUsageSettings,
+                        onRequestExtraTimeClick = { showExtraTimeDialog = true },
+                        // "Sửa lịch" phải đưa tới nơi CHỨA lịch (thẻ Chặn ứng dụng
+                        // nằm ở tab Cài đặt), không phải mở đồng hồ Pomodoro.
+                        onEditScheduleClick = { selectedTab = 4 },
+                        onToggleBackgroundService = { viewModel.toggleBackgroundService(context) },
+                        onStartFocusSession = { viewModel.startFocusSession(25) },
+                        onStopFocusSession = { viewModel.stopFocusSession() },
+                        onOpenInsights = { overlayScreen = "insights" },
+                        onProposeAgreement = { viewModel.proposeAgreement(it) },
+                        onRespondToAgreement = { agr, accept -> viewModel.respondToAgreement(agr, accept) },
+                        onRespondRuleChange = { accept -> viewModel.respondToRuleChange(accept) },
+                        onWithdrawRuleProposal = { viewModel.withdrawRuleProposal() }
+                    )
+                    3 -> {
+                        val isPaired = uiState.activePairing != null &&
+                            uiState.activePairing.status == PairingStatus.PAIRED
+                        if (isChild && !isPaired) {
+                            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                Text(
+                                    text = "Vui lòng ghép nối với phụ huynh để trò chuyện.",
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                            }
+                        } else {
+                            ChatScreen(
+                                uiState = uiState,
+                                onSendMessage = { text, url, type -> viewModel.sendMessage(text, url, type) },
+                                onToggleStar = { id, star -> viewModel.toggleMessageStar(id, star) },
+                                onSelectEmotion = { emotion -> viewModel.setSelectedEmotion(emotion) },
+                                onConnectMeshPeer = { peerId -> viewModel.connectMeshPeer(peerId) },
+                                onSendMeshMessage = { peerId, text -> viewModel.sendMeshMessage(peerId, text) }
+                            )
+                        }
+                    }
+                    4 -> SettingsScreen(
+                        uiState = uiState,
+                        onOpenUsageSettings = onOpenUsageSettings,
+                        onUnpair = { viewModel.unpairConnection() },
+                        onSignOut = { viewModel.signOut() },
+                        onToggleDarkMode = { enabled -> viewModel.setDarkMode(enabled) },
+                        onColorThemeSelected = { theme -> viewModel.setColorTheme(theme) },
+                        onToggleIosPreview = { viewModel.toggleIosPreviewMode() },
+                        onSaveEmergencyPhone = { phone -> viewModel.saveEmergencyPhoneNumber(phone) },
+                        onSaveSosSchedule = { restricted, startH, endH -> viewModel.saveSosSchedule(restricted, startH, endH) },
+                        onUpdateProfile = { name, photo -> viewModel.updateUserProfile(name, photo) },
+                        onUpdateBlockRules = { packages, reminderOnly, allowedApps, minutes ->
+                            viewModel.updateBlockRules(packages, reminderOnly, allowedApps, minutes)
+                        },
+                        onRespondRuleChange = { accept -> viewModel.respondToRuleChange(accept) },
+                        onWithdrawRuleProposal = { viewModel.withdrawRuleProposal() }
+                    )
+                }
+                }
+            }
+        }
+
+        // ── Overlay screens ────────────────────────────────────────────────
+        // Phai ve SAU Scaffold. Box ve theo thu tu con em: node ghi sau nam
+        // tren. Dat node nay truoc Scaffold thi noi dung tab boi den len man
+        // overlay va chan luon cu chi cham vao cong tac / nut bam o duoi.
+        // Nen cua overlay BAT BUOC phai kin: PremiumBackground ve hoa lan
+        // + scrim day du, va no nam duoi man overlay de tab ben duoi khong
+        // boi xuyen qua (lau nay dung DialogSurface phang thi mat nen theo
+        // thiet ke mau).
+        val overlay = overlayScreen
+        if (overlay != null) {
+            BackHandler { overlayScreen = null }
+            val close = { overlayScreen = null }
+            PremiumBackground(modifier = Modifier.fillMaxSize()) {
+                when (overlay) {
+                    "insights" -> InsightsScreen(
+                        uiState = uiState,
+                        onBack = close,
+                        onOpenUsageSettings = onOpenUsageSettings
+                    )
+                    "history" -> LocationHistoryScreen(
+                        uiState = uiState,
+                        onBack = close,
+                        onToggleLocationHistory = { enabled -> viewModel.toggleLocationHistory(enabled) }
+                    )
+                }
+            }
+        }
+
+        // Draggable floating SOS orb — available on every screen
+        DraggableFloatingSosButton(
+            isOnline = uiState.isOnline,
+            currentChannel = uiState.currentSosChannel,
+            isSosAllowedNow = viewModel.isSosAllowedNow(),
+            onSendSosToFamily = { viewModel.sendSmartSosToFamily() },
+            onSendSosToRescue = { hotline -> viewModel.sendSmartSosToRescue(hotline) },
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(end = 16.dp, bottom = 104.dp)
+        )
+    }
+
+    if (showExtraTimeDialog) {
+        ExtraTimeDialog(
+            onDismiss = { showExtraTimeDialog = false },
+            onSubmit = { mins, reason ->
+                showExtraTimeDialog = false
+                viewModel.requestExtraTime(mins, reason)
+            }
+        )
+    }
+
+    if (showPrivacyDialog) {
+        PrivacyDialog(
+            onDismiss = { showPrivacyDialog = false },
+            onSubmit = { startD, startH, startM, endD, endH, endM, reason ->
+                showPrivacyDialog = false
+                viewModel.requestPrivacyHours(startD, startH, startM, endD, endH, endM, reason)
+            }
+        )
+    }
+
+    if (showPermissionDialog) {
+        com.example.ui.components.PermissionCenterDialog(
+            items = uiState.permissionSnapshot,
+            onRequestRuntime = { perms -> onRequestRuntimePermissions(perms) },
+            onOpenSpecial = { item -> onOpenSpecialPermission(item) },
+            onRecheck = {
+                onRecheckPermissions()
+                if (uiState.permissionSnapshot.count { !it.granted && it.required } == 0) {
+                    showPermissionDialog = false
+                }
+            },
+            onDismiss = { showPermissionDialog = false }
+        )
+    }
+}

@@ -1,0 +1,181 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "User profile with role and pairing state",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "email": { "type": "string" },
+        "displayName": { "type": "string" },
+        "photoUrl": { "type": "string" },
+        "role": { "type": "string", "enum": ["PARENT", "CHILD"] },
+        "studentCode": { "type": "string" },
+        "pairedWith": { "type": "string" },
+        "activePairingId": { "type": "string" },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["id", "email", "role"]
+    },
+    "Pairing": {
+      "title": "Pairing",
+      "description": "Long term pairing link between parent and child",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "parentId": { "type": "string" },
+        "childId": { "type": "string" },
+        "studentCode": { "type": "string" },
+        "parentName": { "type": "string" },
+        "childName": { "type": "string" },
+        "status": { "type": "string", "enum": ["PAIRING_PENDING", "PAIRED", "UNPAIRING", "UNPAIRED"] },
+        "createdAt": { "type": "number" },
+        "updatedAt": { "type": "number" }
+      },
+      "required": ["id", "parentId", "childId", "status"]
+    },
+    "PairingRequest": {
+      "title": "PairingRequest",
+      "description": "Pairing invitation request from parent to child",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "studentCode": { "type": "string" },
+        "parentId": { "type": "string" },
+        "parentName": { "type": "string" },
+        "parentEmail": { "type": "string" },
+        "childId": { "type": "string" },
+        "status": { "type": "string", "enum": ["PENDING", "ACCEPTED", "REJECTED"] },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["id", "studentCode", "parentId", "status"]
+    },
+    "LocationData": {
+      "title": "LocationData",
+      "description": "Realtime telemetry location and battery status",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "pairingId": { "type": "string" },
+        "userName": { "type": "string" },
+        "latitude": { "type": "number" },
+        "longitude": { "type": "number" },
+        "accuracy": { "type": "number" },
+        "speed": { "type": "number" },
+        "batteryLevel": { "type": "number" },
+        "isPrivacyActive": { "type": "boolean" },
+        "updatedAt": { "type": "number" }
+      },
+      "required": ["userId", "latitude", "longitude", "updatedAt"]
+    },
+    "UsageSchedule": {
+      "title": "UsageSchedule",
+      "description": "Screen time allowance schedule and daily targets",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "pairingId": { "type": "string" },
+        "title": { "type": "string" },
+        "dailyTargetMinutes": { "type": "number" },
+        "usedMinutes": { "type": "number" },
+        "allowedStartHour": { "type": "number" },
+        "allowedStartMinute": { "type": "number" },
+        "allowedEndHour": { "type": "number" },
+        "allowedEndMinute": { "type": "number" },
+        "daysOfWeek": { "type": "string" },
+        "isReminderOnly": { "type": "boolean" },
+        "isActive": { "type": "boolean" },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["id", "pairingId", "dailyTargetMinutes"]
+    },
+    "ExtraTimeRequest": {
+      "title": "ExtraTimeRequest",
+      "description": "Student request for extra screen time",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "pairingId": { "type": "string" },
+        "childId": { "type": "string" },
+        "childName": { "type": "string" },
+        "minutesRequested": { "type": "number" },
+        "reason": { "type": "string" },
+        "status": { "type": "string", "enum": ["PENDING", "APPROVED", "REJECTED"] },
+        "respondedAt": { "type": "number" },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["id", "pairingId", "minutesRequested", "status"]
+    },
+    "PrivacyRequest": {
+      "title": "PrivacyRequest",
+      "description": "Student request for privacy hours shield",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "pairingId": { "type": "string" },
+        "childId": { "type": "string" },
+        "childName": { "type": "string" },
+        "startHour": { "type": "number" },
+        "startMinute": { "type": "number" },
+        "endHour": { "type": "number" },
+        "endMinute": { "type": "number" },
+        "reason": { "type": "string" },
+        "status": { "type": "string", "enum": ["PENDING", "APPROVED", "REJECTED"] },
+        "respondedAt": { "type": "number" },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["id", "pairingId", "startHour", "endHour", "status"]
+    },
+    "FamilyMessage": {
+      "title": "FamilyMessage",
+      "description": "Realtime family chat message with emotion tags",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "pairingId": { "type": "string" },
+        "senderId": { "type": "string" },
+        "senderName": { "type": "string" },
+        "senderRole": { "type": "string" },
+        "text": { "type": "string" },
+        "emotion": { "type": "string" },
+        "isStarred": { "type": "boolean" },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["id", "pairingId", "senderId", "text", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserProfile" },
+      "description": "Registered user profile and identity"
+    },
+    "/pairings/{pairingId}": {
+      "schema": { "$ref": "#/entities/Pairing" },
+      "description": "Active parent and child pairing records"
+    },
+    "/pairing_requests/{requestId}": {
+      "schema": { "$ref": "#/entities/PairingRequest" },
+      "description": "Pending and completed pairing invites"
+    },
+    "/locations/{userId}": {
+      "schema": { "$ref": "#/entities/LocationData" },
+      "description": "Realtime location and battery telemetry"
+    },
+    "/pairings/{pairingId}/schedules/{scheduleId}": {
+      "schema": { "$ref": "#/entities/UsageSchedule" },
+      "description": "Usage limits and schedule rules"
+    },
+    "/pairings/{pairingId}/extra_time/{requestId}": {
+      "schema": { "$ref": "#/entities/ExtraTimeRequest" },
+      "description": "Extra screen time requests"
+    },
+    "/pairings/{pairingId}/privacy_requests/{requestId}": {
+      "schema": { "$ref": "#/entities/PrivacyRequest" },
+      "description": "Privacy shield hours requests"
+    },
+    "/pairings/{pairingId}/messages/{messageId}": {
+      "schema": { "$ref": "#/entities/FamilyMessage" },
+      "description": "Family chat messages"
+    }
+  }
+}

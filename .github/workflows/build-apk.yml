@@ -1,0 +1,109 @@
+name: Build Android APK
+
+on:
+  push:
+    branches: [ "main" ]
+    tags: [ "v*" ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up JDK 21
+      uses: actions/setup-java@v4
+      with:
+        distribution: 'temurin'
+        # Robolectric can khong tao duoc sandbox voi compileSdk 36 neu dung JDK 17:
+        # "Android SDK 36 requires Java 21 (have Java 17)".
+        # AGP 9 van chay duoc tren 21, nen build APK khong bi anh huong.
+        java-version: '21'
+
+    # android-actions/setup-android@v3 that cai go "tools" ma Google da go khoi
+    # sdkmanager moi -> "Failed to find package 'tools'".
+    # Runner ubuntu-latest da co san Android SDK, chi can chan license va
+    # cai them platform/build-tools thieu (AGP se tu tai neu duoc phep).
+    - name: Prepare Android SDK
+      run: |
+        echo "ANDROID_HOME=$ANDROID_HOME"
+        SDKMGR="$(find "$ANDROID_HOME/cmdline-tools" -maxdepth 3 -type f -name sdkmanager | head -n 1)"
+        echo "SDKMGR=$SDKMGR"
+        test -n "$SDKMGR"
+        echo "SDKMGR=$SDKMGR" >> "$GITHUB_ENV"
+        yes | "$SDKMGR" --licenses > /dev/null 2>&1 || true
+        "$SDKMGR" --list_installed | sed -n '1,60p'
+        "$SDKMGR" "platform-tools" "build-tools;36.0.0" "platforms;android-36" || \
+          echo "::warning::Thu cai SDK bo sung that bai, de AGP tu giai quyet."
+
+    - name: Point Gradle at the runner SDK
+      run: |
+        echo "sdk.dir=$ANDROID_HOME" > local.properties
+        cat local.properties
+
+    - name: Setup Gradle
+      uses: gradle/actions/setup-gradle@v3
+
+    - name: Ensure Gradle Wrapper exists
+      run: |
+        if [ ! -f "./gradlew" ]; then
+          VER="$(sed -n 's/.*gradle-\([0-9.][0-9.]*\)-bin.zip.*/\1/p' gradle/wrapper/gradle-wrapper.properties)"
+          echo "Dang sinh wrapper voi Gradle $VER"
+          gradle wrapper --gradle-version "$VER" --distribution-type bin
+        fi
+        chmod +x gradlew
+
+    - name: Run unit tests
+      # That bai o day thi khong con nghia gi dang APK: BlockPolicy quyet dinh
+      # cai gi bi khoa tren may hoc sinh.
+      run: ./gradlew :app:testDebugUnitTest --stacktrace
+
+    - name: In ket qua test khi do
+      if: failure()
+      run: |
+        find app/build/test-results -name '*.xml' -print0 2>/dev/null |
+          xargs -0 -I{} sh -c 'echo "===== {} ====="; cat "{}"' || true
+
+    - name: Build Debug APK
+      run: ./gradlew assembleDebug --stacktrace --warning-mode all
+
+    - name: Rename APK
+      run: |
+        cp app/build/outputs/apk/debug/app-debug.apk GiaDinhViet.apk
+        ls -la GiaDinhViet.apk
+        sha256sum GiaDinhViet.apk
+
+    - name: Upload APK artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: GiaDinhViet
+        path: GiaDinhViet.apk
+        if-no-files-found: error
+
+    # Chi chay khi day tag dang v* (vi du v3) -> tao Release tai file APK
+    - name: Publish release with APK
+      if: startsWith(github.ref, 'refs/tags/v')
+      uses: softprops/action-gh-release@v2
+      with:
+        files: GiaDinhViet.apk
+        prerelease: true
+        generate_release_notes: true
+        body: |
+          Ban debug — ky bang debug keystore, chua phat hanh tren CH Play.
+
+          Tai ve: **GiaDinhViet.apk**
+          https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/GiaDinhViet.apk
+
+          **Loi cai:** go ban cu truoc khi cai ban nay, vi may co the khac chu ky
+          (INSTALL_FAILED_UPDATE_INCOMPATIBLE).
+
+          Ban nay CO bo chan ung dung (AccessibilityService). Nguoi dung phai tu bat:
+          Cai dat -> Tro nang tiep can -> Gia Dinh Viet.
+
+          Trang gioi thieu: https://robloxhihi.github.io/giadinhviet-web/
