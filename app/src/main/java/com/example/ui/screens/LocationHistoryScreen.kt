@@ -646,13 +646,10 @@ fun LocationHistoryScreen(
                                         maxLines = 1,
                                         modifier = Modifier.weight(1f)
                                     )
-                                    Text(
-                                        text = endStr,
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = Premium.primaryBright,
-                                        fontWeight = FontWeight.Bold
-                                    )
                                 }
+                                // Gio ket qua o dong "Tu ... den ..." ben duoi. In
+                                // muon o goi cung bi nut SOS che mat va lap lai van
+                                // mot con so.
                                 Text(
                                     text = "Từ ${entry.timeStr.ifEmpty { "--:--" }} đến $endStr • " +
                                         if (ongoing) "đang ở đây $stayStr" else "ở đây $stayStr",
