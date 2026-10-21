@@ -357,4 +357,64 @@ class AiChatRegressionTest {
             assertTrue("$path phai loc theo chu nhan", screen.contains("it.userId == id") || screen.contains("it.userId == partnerLoc.userId"))
         }
     }
+
+    /**
+     * The card titled "Thiết bị này" drew its polyline and its "đã ở đây" from
+     * the SHARED pairing history, so a child's pings could appear as the parent's
+     * own route. Same collection, same rule: filter by the device being shown.
+     */
+    @Test
+    fun selfLocationCardUsesOnlyThisDevicesPoints() {
+        val screen = source("src/main/java/com/example/ui/screens/LocationScreen.kt")
+        assertTrue(
+            "the/`routePoints` phai lay tu selfHistory",
+            screen.contains("val routePoints: List<Pair<Double, Double>> = selfHistory")
+        )
+        assertTrue(
+            "'đã ở đây' của thẻ máy này không được lấy từ ping của máy kia",
+            screen.contains("selfHistory.firstOrNull()")
+        )
+    }
+
+    /** No GPS fix must never be rendered as if the sensor were working. */
+    @Test
+    fun locationCardStopsClaimingAFixItDoesNotHave() {
+        val screen = source("src/main/java/com/example/ui/screens/LocationScreen.kt")
+        assertTrue("phai noi ro khi khong do duoc GPS", screen.contains("\"Chưa dò được GPS\""))
+        assertFalse(
+            "khong duoc mac dinh 'Đang định vị' khi speed = 0 vi thieu fix",
+            screen.contains("safeZoneName = if (displaySpd > 5f) \"Đang di chuyển\" else \"Đang định vị\",")
+        )
+    }
+
+    /**
+     * `sched.usedMinutes` khong ai ghi lai sau khi tao tai lieu, nen no in het
+     * so cua ngay ghep noi. Ban 30.0 quay ve dung no moi lan may con bao 0 phut
+     * — ngay dung cua hom do bi thay bang con so cu.
+     */
+    @Test
+    fun dashboardNeverFallsBackToTheFrozenUsageField() {
+        val screen = source("src/main/java/com/example/ui/screens/DashboardScreen.kt")
+        assertFalse(
+            "khong duoc lay sched.usedMinutes lam gia tri bo sung",
+            screen.contains("if (it > 0) it else (sched?.usedMinutes ?: 0)")
+        )
+        assertTrue("phai noi thang khi chua co telemetry", screen.contains("Chưa nhận được giờ dùng hôm nay từ máy con"))
+    }
+
+    /** A zero minute day must not draw a 15%-height coloured bar. */
+    @Test
+    fun weeklyChartDoesNotInventBarHeight() {
+        val screen = source("src/main/java/com/example/ui/screens/ScreenTimeScreen.kt")
+        assertFalse("ngay 0 phut khong duoc mo cot mau", screen.contains(".coerceIn(0.15f, 1f)"))
+        assertTrue("ngay khong du lieu phai co mau rieng", screen.contains("if (mins <= 0) 3.dp else"))
+    }
+
+    /** `take(n)` duoi mot tieu de tong quan phai noi ro no chi la mot phan. */
+    @Test
+    fun truncatedListsSayTheyAreTruncated() {
+        val screen = source("src/main/java/com/example/ui/screens/InsightsScreen.kt")
+        assertTrue("nhom ung dung phai ghi 6/N", screen.contains("6/\${uiState.usageCategories.size} nhóm"))
+        assertTrue("ung dung phai ghi 8/N", screen.contains("8/\${uiState.detailedAppUsage.size} ứng dụng"))
+    }
 }

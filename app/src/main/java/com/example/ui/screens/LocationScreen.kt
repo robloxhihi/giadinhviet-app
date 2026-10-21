@@ -97,9 +97,15 @@ fun LocationScreen(
     val isPrivacy = partnerLoc?.isPrivacyActive == true
     val timeFormat = SimpleDateFormat("HH:mm:ss", Locale.getDefault())
 
-    // Tuyến đường di chuyển gần đây (cũ → mới) để vẽ polyline trên bản đồ.
+    // Tuyen duong di chuyen gan day (cu -> moi) de ve polyline tren ban do.
     // Loc bo moi diem 0/0 hoac ngoai khoang hop le — khong ve diem bia.
-    val routePoints: List<Pair<Double, Double>> = uiState.locationHistory
+    // `pairings/<id>/location_history` chua ping cua CA HAI may, nen the "Thiet
+    // bi nay" phai chi dung diem cua chinh may dang mo app; neu khong phu huynh
+    // thay duong ke cua con ve chen vao ban do cua minh.
+    val selfUserId = myLoc?.userId.orEmpty()
+    val selfHistory = uiState.locationHistory.filter { it.userId == selfUserId }
+    val historyOwners = uiState.locationHistory.map { it.userId }.distinct().size
+    val routePoints: List<Pair<Double, Double>> = selfHistory
         .sortedBy { it.timestamp }
         .filter { isValidFix(it.latitude, it.longitude) }
         .map { it.latitude to it.longitude }
@@ -107,7 +113,7 @@ fun LocationScreen(
     // "Da o day" cua the ban do = thoi gian diem dung gan nhat, tinh ca phan
     // duration da cong don trong luc ghi — neu khong no luon bat dau tu 0 sau
     // moi lan ping du tre o nguyen cho do hang gio.
-    val selfStayMillis = uiState.locationHistory.firstOrNull()?.let {
+    val selfStayMillis = selfHistory.firstOrNull()?.let {
         (System.currentTimeMillis() - it.timestamp).coerceAtLeast(0L) + it.duration.coerceAtLeast(0L)
     } ?: -1L
 
@@ -255,7 +261,11 @@ fun LocationScreen(
                 studentName = "Thiết bị này",
                 latitude = displayLat,
                 longitude = displayLng,
-                safeZoneName = if (displaySpd > 5f) "Đang di chuyển" else "Đang định vị",
+                safeZoneName = when {
+                    !hasSelfFix -> "Chưa dò được GPS"
+                    displaySpd > 5f -> "Đang di chuyển"
+                    else -> "Đang định vị"
+                },
                 batteryLevel = displayBat,
                 isCharging = displayChg,
                 speedKmh = displaySpd,
@@ -440,7 +450,10 @@ fun LocationScreen(
                 fontWeight = FontWeight.Bold
             )
             Text(
-                text = "${uiState.locationHistory.size} bản ghi",
+                text = if (historyOwners > 1)
+                    "${uiState.locationHistory.size} bản ghi · ${historyOwners} máy"
+                else
+                    "${uiState.locationHistory.size} bản ghi",
                 style = MaterialTheme.typography.labelSmall,
                 color = FacebookBlue,
                 fontWeight = FontWeight.Bold
@@ -462,7 +475,8 @@ fun LocationScreen(
         ) {
             Text(
                 text = if (uiState.isLocationHistoryEnabled)
-                    "Đang tự ghi khi con di chuyển"
+                    if (isPaired) "Đang tự ghi khi con di chuyển"
+                    else "Đang tự ghi vị trí máy này khi di chuyển"
                 else
                     "Đã TẮT ghi — không lưu thêm điểm mới",
                 style = MaterialTheme.typography.labelSmall,
@@ -526,7 +540,7 @@ fun LocationScreen(
 
             // List cua pairing co the tron ping hai may -> ghi ten chu nhan cua
             // tung diem de phu huynh khong doc nhàm. List mot chu thi khong lam dai dong.
-            val mixedHistory = uiState.locationHistory.map { it.userId }.distinct().size > 1
+            val mixedHistory = historyOwners > 1
 
             Column(
                 modifier = Modifier.fillMaxWidth(),

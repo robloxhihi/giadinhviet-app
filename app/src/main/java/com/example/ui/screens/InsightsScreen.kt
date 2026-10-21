@@ -238,7 +238,9 @@ fun InsightsScreen(
                 Column {
                     SectionHeader(
                         title = "Phân loại theo nhóm ứng dụng",
-                        subtitle = "Học tập, giải trí, mạng xã hội…",
+                        subtitle = if (uiState.usageCategories.size > 6)
+                            "6/${uiState.usageCategories.size} nhóm — chỉ hiện 6 nhóm nhiều thời lượng nhất"
+                        else "Học tập, giải trí, mạng xã hội…",
                         icon = Icons.Default.Apps,
                         tint = Premium.violet
                     )
@@ -297,7 +299,9 @@ fun InsightsScreen(
             Column {
                 SectionHeader(
                     title = "Ứng dụng dùng nhiều nhất",
-                    subtitle = "Dữ liệu đo trực tiếp trên thiết bị",
+                    subtitle = if (uiState.detailedAppUsage.size > 8)
+                        "8/${uiState.detailedAppUsage.size} ứng dụng — đo trực tiếp trên thiết bị"
+                    else "Dữ liệu đo trực tiếp trên thiết bị",
                     icon = Icons.Default.Apps,
                     tint = Premium.amber
                 )

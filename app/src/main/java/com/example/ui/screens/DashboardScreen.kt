@@ -1029,9 +1029,13 @@ fun DashboardScreen(
                 // So phut cua NGUOI BEN KIA phai lay tu telemetry ho do phat
                 // len (`totalUsedMinutes` = tong do chinh may ho tinh), khong
                 // lay `sched.usedMinutes` — truong nay khong ai ghi lai sau khi
-                // tao tai lieu nen no in het gia tri cua ngay ghep noi.
-                val used = (partnerLoc?.totalUsedMinutes ?: 0)
-                    .let { if (it > 0) it else (sched?.usedMinutes ?: 0) }
+                // tao tai lieu nen no in het gia tri cua ngay ghep noi. Truoc
+                // day khi may con bao 0 phut, code quay lai dung `usedMinutes`
+                // cu — dung thu chinh comment nghem cam. Thieu telemetry thi
+                // noi thang la chua co, khong gia vao so.
+                val partnerMinutes = partnerLoc?.totalUsedMinutes
+                val used = partnerMinutes ?: 0
+                val hasPartnerUsage = partnerMinutes != null
                 val remaining = (target - used).coerceAtLeast(0)
 
                 BentoStatCard(
@@ -1039,8 +1043,9 @@ fun DashboardScreen(
                     icon = Icons.Default.HourglassTop,
                     iconTint = NeonEmerald,
                     title = "CÒN LẠI HÔM NAY",
-                    value = "$remaining ph",
-                    subtitle = "Mục tiêu: $target ph",
+                    value = if (hasPartnerUsage) "$remaining ph" else "—",
+                    subtitle = if (hasPartnerUsage) "Mục tiêu: $target ph"
+                               else "Chưa nhận được giờ dùng hôm nay từ máy con",
                     testTag = "remaining_stat_card"
                 )
 
@@ -1049,8 +1054,9 @@ fun DashboardScreen(
                     icon = Icons.Default.Schedule,
                     iconTint = NeonCyan,
                     title = "ĐÃ DÙNG",
-                    value = "$used ph",
-                    subtitle = "Của người đã ghép nối, trong ngày",
+                    value = if (hasPartnerUsage) "$used ph" else "—",
+                    subtitle = if (hasPartnerUsage) "Máy con tự đo và gửi lên"
+                               else "Máy con chưa gửi số liệu hôm nay",
                     testTag = "used_stat_card"
                 )
             }

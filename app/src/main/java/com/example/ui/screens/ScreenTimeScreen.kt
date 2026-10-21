@@ -467,7 +467,16 @@ fun ScreenTimeScreen(
                     }
                     uiState.weeklyUsage.forEachIndexed { index, weekEntry ->
                         val (day, mins) = weekEntry
-                        val ratio = (mins / maxMins).coerceIn(0.15f, 1f)
+                        // San 15% truoc day khien ngay 0 phut van mo cot mau
+                        // trong khi dinh no ghi "0" — hai thu mau thuan nhau.
+                        // Ngay khong du lieu chi con mot gach xam rat ngan.
+                        val ratio = (mins / maxMins).coerceIn(0.06f, 1f)
+                        val barHeight = if (mins <= 0) 3.dp else (70 * ratio).dp
+                        val barColor = when {
+                            mins <= 0 -> TextMuted.copy(alpha = 0.28f)
+                            isToday -> NeonCyan
+                            else -> NeonViolet.copy(alpha = 0.5f)
+                        }
                         val isToday = index == todayIndex
                         Column(
                             horizontalAlignment = Alignment.CenterHorizontally,
@@ -483,9 +492,9 @@ fun ScreenTimeScreen(
                             Box(
                                 modifier = Modifier
                                     .width(22.dp)
-                                    .height((70 * ratio).dp)
+                                    .height(barHeight)
                                     .clip(RoundedCornerShape(topStart = 6.dp, topEnd = 6.dp))
-                                    .background(if (isToday) NeonCyan else NeonViolet.copy(alpha = 0.5f))
+                                    .background(barColor)
                             )
                             Spacer(modifier = Modifier.height(6.dp))
                             Text(
