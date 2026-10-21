@@ -467,6 +467,7 @@ fun ScreenTimeScreen(
                     }
                     uiState.weeklyUsage.forEachIndexed { index, weekEntry ->
                         val (day, mins) = weekEntry
+                        val isToday = index == todayIndex
                         // San 15% truoc day khien ngay 0 phut van mo cot mau
                         // trong khi dinh no ghi "0" — hai thu mau thuan nhau.
                         // Ngay khong du lieu chi con mot gach xam rat ngan.
@@ -477,7 +478,6 @@ fun ScreenTimeScreen(
                             isToday -> NeonCyan
                             else -> NeonViolet.copy(alpha = 0.5f)
                         }
-                        val isToday = index == todayIndex
                         Column(
                             horizontalAlignment = Alignment.CenterHorizontally,
                             modifier = Modifier.weight(1f)
