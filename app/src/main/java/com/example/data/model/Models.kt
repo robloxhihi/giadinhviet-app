@@ -1,5 +1,9 @@
 package com.example.data.model
 
+import com.google.firebase.firestore.PropertyName
+import com.google.firebase.firestore.ServerTimestamp
+import java.util.Date
+
 enum class UserRole {
     PARENT,
     CHILD
@@ -267,8 +271,13 @@ data class LocationHistoryEntry(
     val placeName: String = "Điểm dừng chân",
     val speed: Float = 0.0f,
     val batteryLevel: Int = 0,
-    val isCharging: Boolean = false,
+    // Kotlin sinh getter `isCharging()`, Firestore cat chu "is" va doi doc
+    // "charging" trong khi ben ghi luon ghi khoa "isCharging" -> moi doc mot
+    // tai lieu luu bao "No setter/field for isCharging" va co pin sac bi rung
+    // khi hien thi lich su. Ten khoa phai khai bao ro.
+    @get:PropertyName("isCharging") val isCharging: Boolean = false,
     val duration: Long = 0,
+    @get:ServerTimestamp val serverTimestamp: Date? = null,
     val timestamp: Long = System.currentTimeMillis(),
     val dateStr: String = "",
     val timeStr: String = "",

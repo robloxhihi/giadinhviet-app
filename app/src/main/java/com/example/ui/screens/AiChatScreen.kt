@@ -39,7 +39,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.ai.DailyUsageStore
@@ -89,6 +92,7 @@ fun AiChatScreen(
     var error by remember { mutableStateOf<String?>(null) }
     var key by remember { mutableStateOf(AiKey.effective(context)) }
     var keyDraft by remember { mutableStateOf("") }
+    var showStats by remember { mutableStateOf(false) }
 
     val stats = remember(turns.size, busy) { usage.summaryForAi() }
     val hasKey = AiKey.isUsable(key)
@@ -195,20 +199,35 @@ fun AiChatScreen(
         }
 
         // ── So lieu that app do duoc — nguon cua moi cau tra loi ───────────
+        // An theo mac dinh: bang so lieu chiem toi 1/3 man hinh nganh, day
+        // doan chat xuong cot 3 dong va cau tra loi dai khong doc het duoc
+        // (loc tren BlueStacks ban 22.0). So lieu van gui cho AI day du, chi
+        // la khong chiem cho cua nguoi dung khi ho khong xem no.
         GlassCard(modifier = Modifier.fillMaxWidth()) {
             Column {
                 SectionHeader(
                     title = "Hôm nay máy đo được",
-                    subtitle = "Bảng số liệu gửi kèm mỗi câu hỏi",
+                    subtitle = if (showStats) "Bảng số liệu gửi kèm mỗi câu hỏi" else "Đang ẩn để dành chỗ cho đoạn chat",
                     tint = Premium.cyan
                 )
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    text = stats,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = TextSecondary,
-                    lineHeight = 18.sp
+                Spacer(modifier = Modifier.height(6.dp))
+                GlassButton(
+                    text = if (showStats) "Ẩn bảng số liệu" else "Xem bảng số liệu",
+                    onClick = { showStats = !showStats },
+                    modifier = Modifier.fillMaxWidth().testTag("ai_toggle_stats"),
+                    tint = Premium.cyan,
+                    height = 34.dp,
+                    fontSize = 12
                 )
+                if (showStats) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = stats,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = TextSecondary,
+                        lineHeight = 18.sp
+                    )
+                }
             }
         }
 
@@ -279,11 +298,9 @@ fun AiChatScreen(
                                 )
                                 .padding(12.dp)
                         ) {
-                            Text(
+                            AiBubbleText(
                                 text = turn.text,
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = if (fromModel) TextPrimary else Color.White,
-                                lineHeight = 20.sp
+                                color = if (fromModel) TextPrimary else Color.White
                             )
                         }
                     }
@@ -366,4 +383,31 @@ fun AiChatScreen(
             }
         }
     }
+}
+
+/**
+ * Mot bong bong chat: `**...**` cua Gemini in thanh chu dam, gach dau dong
+ * `-` thanh `• `. Khong dung WebView hay thu vien markdown — doan van bang
+ * chuoi ngan va kiem soat duoc font la dieu nguoi dung yeu cau.
+ */
+@Composable
+private fun AiBubbleText(text: String, color: Color) {
+    val body = remember(text) {
+        val parsed = AiMarkdown.segments(AiMarkdown.normalize(text))
+        buildAnnotatedString {
+            parsed.forEach { seg ->
+                if (seg.bold) {
+                    withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(seg.text) }
+                } else {
+                    append(seg.text)
+                }
+            }
+        }
+    }
+    Text(
+        text = body,
+        style = MaterialTheme.typography.bodyMedium,
+        color = color,
+        lineHeight = 20.sp
+    )
 }

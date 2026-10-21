@@ -74,17 +74,24 @@ class DailyUsageStore(context: Context) {
             quotaMinutes = quotaMinutes,
             blockedAttempts = prefs.getInt("$KEY_BLOCKED$day", 0),
             distinctBlockedApps = distinct.size,
+            // Cung mot ung dung co the xuat hien nhieu lan trong UsageStats
+            // (nhieu user/appro id khac nhau), nen phai gong theo ten truoc
+            // khi lay top — ban 22.0 hien "Gia Đình Việt 26ph, Gia Đình Việt
+            // 10ph" ngay tren man hinh tro ly.
             topApps = detailed
-                .sortedByDescending { it.minutesUsed }
+                .groupBy { it.appName.trim().ifEmpty { it.packageName } }
+                .mapValues { (_, rows) -> rows.sumOf { it.minutesUsed } }
+                .filterValues { it > 0 }
+                .entries
+                .sortedByDescending { it.value }
                 .take(6)
-                .filter { it.minutesUsed > 0 }
-                .joinToString(", ") { "${it.appName} ${it.minutesUsed}ph" }
-                .ifEmpty { "chua ghi nhan app nao" },
+                .joinToString(", ") { "${it.key} ${it.value}ph" }
+                .ifEmpty { "chưa ghi nhận ứng dụng nào" },
             categories = categories
                 .sortedByDescending { it.minutes }
                 .take(5)
                 .joinToString(", ") { "${it.categoryName} ${it.percentage}%" }
-                .ifEmpty { "chua co so phep (thieu quyen truy cap su dung)" },
+                .ifEmpty { "chưa có số phép (thiếu quyền truy cập sử dụng)" },
             locationPings = locationPings,
             emotion = emotion
         )
@@ -109,23 +116,23 @@ class DailyUsageStore(context: Context) {
         val history = recent(8).filter { it.day != t.day }.take(7).reversed()
         val sb = StringBuilder()
         sb.append("HÔM NAY (").append(t.label).append("):\n")
-        sb.append("- Phut dung may: ").append(t.usedMinutes).append(" / han muc ").append(t.quotaMinutes).append("\n")
-        sb.append("- So lan bi bo chan chan app: ").append(t.blockedAttempts)
-            .append(" (").append(t.distinctBlockedApps).append(" ung dung khac nhau)\n")
-        sb.append("- Ung dung dung nhieu nhat: ").append(t.topApps).append("\n")
-        sb.append("- Theo nhom: ").append(t.categories).append("\n")
-        sb.append("- Diem vi tri ghi nhan trong ngay: ").append(t.locationPings).append("\n")
-        if (t.emotion.isNotBlank()) sb.append("- Cam xuc con ghi nhan: ").append(t.emotion).append("\n")
+        sb.append("- Phút dùng máy: ").append(t.usedMinutes).append(" / hạn mức ").append(t.quotaMinutes).append("\n")
+        sb.append("- Số lần bộ chặn giữ lại: ").append(t.blockedAttempts)
+            .append(" (").append(t.distinctBlockedApps).append(" ứng dụng khác nhau)\n")
+        sb.append("- Ứng dụng dùng nhiều nhất: ").append(t.topApps).append("\n")
+        sb.append("- Theo nhóm: ").append(t.categories).append("\n")
+        sb.append("- Điểm vị trí ghi nhận trong ngày: ").append(t.locationPings).append("\n")
+        if (t.emotion.isNotBlank()) sb.append("- Cảm xúc con ghi nhận: ").append(t.emotion).append("\n")
         if (history.isNotEmpty()) {
-            sb.append("\n7 NGAY TRUOC (moi nhat ben phai):\n")
+            sb.append("\n7 NGÀY TRƯỚC (mới nhất bên phải):\n")
             history.forEach { r ->
                 sb.append("- ").append(r.label)
                     .append(": ").append(r.usedMinutes).append("ph/").append(r.quotaMinutes)
-                    .append(", chan ").append(r.blockedAttempts).append(" lan")
+                    .append(", bộ chặn giữ ").append(r.blockedAttempts).append(" lần")
                     .append("\n")
             }
             val avg = history.sumOf { it.usedMinutes } / history.size
-            sb.append("Trung binh 7 ngay truoc: ").append(avg).append(" phut/ngay.\n")
+            sb.append("Trung bình 7 ngày trước: ").append(avg).append(" phút/ngày.\n")
         }
         return sb.toString().trim()
     }
