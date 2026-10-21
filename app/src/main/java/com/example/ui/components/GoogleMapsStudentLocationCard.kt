@@ -246,17 +246,14 @@ fun GoogleMapsStudentLocationCard(
     }
 
     var isExpanded by remember { mutableStateOf(false) }
-    // Lop map va muc zoom tung duoc chon bang nut "Lớp", truoc day chi song trong
-    // `remember`: mo lai man hinh la quay ve "Đường phố". O nong thon, lop duong
-    // pho cua OSM trong gan nhu trang nen, nguoi dung tuong la bi doi do hoa.
-    // Lan choi nay giu nguyen nguyen vong chon cua ho, va mac dinh la Vệ tinh.
+    // Lop va muc zoom tung chon bang nut "Lớp" phai song qua lan mo lai man hinh.
+    // Key mang ten moi ("layer2"/"zoom2"): ban cu luu "layer" = lop Duong pho cua
+    // OSM, ma host tile.openstreetmap.org do hom 2026-10-21 khong tra ve HTTP nao
+    // => tai su dung gia tri cu se hien gan nhu trang, dung cai nguoi dung bao
+    // "bi doi do hoa". Voi key moi, ai nang cap cung mo duoc lop co anh that z19.
     val mapPrefs = remember {
         context.getSharedPreferences("map_view", android.content.Context.MODE_PRIVATE)
     }
-    // Key co ten moi ("layer2"/"zoom2"): ban cu luu "layer" = lop Duong pho cua
-    // OSM (host tile.openstreetmap.org khong tra ve HTTP nao), neu tai su dung
-    // thi nguyen van gia tri cu do => van thay ban trong. Khoi moi buoc moi
-    // nguoi dung mo bang lop "Vệ tinh + tên đường" z19.
     var layerIndex by remember { mutableStateOf(mapPrefs.getInt("layer2", MapLayer.HYBRID.ordinal)) }
     var zoomLevel by remember { mutableStateOf(mapPrefs.getFloat("zoom2", 19f).toDouble()) }
     LaunchedEffect(layerIndex, zoomLevel) {
