@@ -313,7 +313,9 @@ class FixRegressionTest {
         assertTrue("Phai quy ve theo ngay", src.contains("timeInMillis / 86_400_000L"))
         assertTrue("Phai cat lich su qua cu", src.contains("MAX_HISTORY_DAYS"))
         assertTrue("Phai luu so lan bi chan that", src.contains("recordBlockedAttempt"))
-        assertTrue("Bang dieu tra phai gui kem han muc phut", src.contains("han muc"))
+        // Ban 24.0 doi bang dieu tra sang tieng Viet co dau, nen khoa kiem tra
+        // la chuoi THAT ma nguoi dung nhin thay, khong con dang ASCII khong dau.
+        assertTrue("Bang dieu tra phai gui kem han muc phut", src.contains("/ hạn mức "))
         assertTrue("Du lieu cua tre luu tren may, khong len Firestore",
             !src.contains("FirebaseFirestore") && !src.contains("repository"))
     }
