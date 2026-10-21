@@ -8,6 +8,8 @@ on:
 
 permissions:
   contents: write
+  # Can de comment bao cao that bai len commit (xem buoc ben duoi).
+  pull-requests: write
 
 jobs:
   build:
@@ -93,6 +95,46 @@ jobs:
       run: |
         find app/build/test-results -name '*.xml' -print0 2>/dev/null |
           xargs -0 -I{} sh -c 'echo "===== {} ====="; cat "{}"' || true
+
+    # Log cua GitHub Actions chi doc duoc sau khi dang nhap. Khi do, bao cao
+    # that bai duoc dang thanh comment CONG KHAI ngay tren commit de ben agent
+    # doc duoc ma khong can tai khoan cua ban. Chi chay khi do, khong anh
+    # huong ban APK.
+    - name: Dang bao cao that bai cong khai tren commit
+      if: failure()
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        {
+          echo "### Run $GITHUB_RUN_NUMBER do (tag/branch $GITHUB_REF_NAME)"
+          echo
+          echo '```'
+          for f in $(find app/build/test-results -name '*.xml' 2>/dev/null); do
+            grep -Eo 'testcase name="[^"]+"|<failure message="[^"]{0,200}' "$f" | head -40 || true
+          done
+          ./gradlew :app:testDebugUnitTest --console=plain 2>&1 |
+            grep -E '^e: |FAILED|error:|Unresolved' | head -40 || true
+          echo '```'
+        } > /tmp/fail.md || true
+        wc -c /tmp/fail.md
+        python3 - <<'PY'
+        import json, os, urllib.request
+        body = open('/tmp/fail.md', encoding='utf-8', errors='replace').read()[:55000]
+        url = "https://api.github.com/repos/%s/commits/%s/comments" % (
+            os.environ['GITHUB_REPOSITORY'], os.environ['GITHUB_SHA'])
+        req = urllib.request.Request(url,
+                                     data=json.dumps({'body': body}).encode(),
+                                     method='POST',
+                                     headers={'Authorization': 'token ' + os.environ['GH_TOKEN'],
+                                              'Accept': 'application/vnd.github+json',
+                                              'Content-Type': 'application/json',
+                                              'User-Agent': 'ci-failure-report'})
+        try:
+            with urllib.request.urlopen(req) as r:
+                print('Da dang bao cao:', r.json().get('html_url'))
+        except Exception as e:
+            print('Khong dang duoc bao cao:', e)
+        PY
 
     - name: Build Debug APK
       run: ./gradlew assembleDebug --stacktrace --warning-mode all

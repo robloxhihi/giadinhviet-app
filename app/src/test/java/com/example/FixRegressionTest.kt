@@ -253,30 +253,18 @@ class FixRegressionTest {
 
     /**
      * Key that cua Gemini do nguoi dung cung cap. APK tai tu GitHub Release la
-     * cong khai, nen mot chuoi trong classes.dex la mot no loi du dung thanh
-     * than. Bat cu chuoi nao trong repo (ma khong phai cua .env.example) deu
-     * vi pham quy tac "khong dang api token len repo".
+     * cong khai, nen mot chuoi trong file nguon cung la mot no loi dung thanh
+     * than. Test quyet theo HINH DANG chuoi, khong theo mot chuoi cu the: chen
+     * thang key vao day thi chinh file test da vi pham va lan do xanh khong
+     * bao gio xay ra (dinh luu cua ban 22.0 chet vi chinh ly do nay).
      */
     @Test
     fun noGeminiKeyIsEverCommitted() {
-        // Unit test chay voi working dir = app/, nen cay thu muc goc cua repo la
-        // cha no. Bo build va `.env` (cho chua key cua MAY duoc phep) khong tinh.
-        val repoRoot = File(".").absoluteFile.parentFile ?: error("Khong tim thay goc repo")
-        val scanned = repoRoot.walkTopDown()
-            .filter { it.isFile }
-            .filter { !it.invariantSeparatorsPath.contains("/build/") }
-            .filter { it.name != ".env" }
-            .filter { it.extension in setOf("kt", "kts", "yml", "yaml", "json", "xml", "gradle", "properties", "example") }
-            .toList()
-        val offenders = scanned.filter { file ->
-            val text = file.readText()
-            text.contains("AQ.Ab8RN6JI") ||
-                Regex("""GEMINI_API_KEY\s*=\s*([A-Za-z0-9_.\-]{25,})""")
-                    .find(text)
-                    ?.groupValues?.get(1)
-                    ?.let { !it.contains("REPLACE_ME") } == true
-        }
+        val repoRoot = findRepoRoot()
+        val scanned = textFilesIn(repoRoot)
+        val offenders = scanned.filter { looksLikeRealKey(readUtf8(it)) }
         assertTrue("File co duong nhu chua key that: ${offenders.map { it.name } }", offenders.isEmpty())
+        assertTrue("Phan quet phai thay duoc nguon cua app", scanned.any { it.name == "GeminiClient.kt" })
 
         val example = File(repoRoot, ".env.example")
         assertTrue("Phai co .env.example de BuildConfig luoan sinh ra truong key", example.exists())
@@ -287,7 +275,7 @@ class FixRegressionTest {
     /** Build luon phai co truong BuildConfig, ke ca khi CI khong co repo secret. */
     @Test
     fun geminiKeyFallsBackToOnDeviceEntry() {
-        val repoRoot = File(".").absoluteFile.parentFile ?: error("Khong tim thay goc repo")
+        val repoRoot = findRepoRoot()
         val key = projectFile("src/main/java/com/example/service/ai/AiKey.kt").readText()
         assertTrue("Phai lay key tu BuildConfig khi nguoi dung chua nhap", key.contains("BuildConfig.GEMINI_API_KEY"))
         assertTrue("Key nhap tay phai duoc uu tien", key.contains("entered(context).ifBlank"))
@@ -353,4 +341,61 @@ class FixRegressionTest {
         assertTrue("Man hinh AI phai tu goi khi chua co key", chat.contains("AiKey.isUsable(key)"))
         assertTrue("Lich su chat phai luu tren may", chat.contains("ChatHistoryStore(context)"))
     }
+
+    // ── Do dung cho test quet key ──────────────────────────────────────────
+
+    private val keyFileExtensions = setOf("kt", "kts", "yml", "yaml", "json", "xml", "gradle", "properties", "example")
+
+    /** Thu muc khong thuoc nguon commit — `.git`/`.gradle`/`build` chang day
+     *  toan bo lan quet va co the chua file dang bi khoa. */
+    private val skippedDirectories = setOf(".git", ".gradle", "build", "node_modules", ".idea", ".kotlin")
+
+    /**
+     * Goc repo khong phai luc nao cung la cha cua working dir: goi
+     * `./gradlew :app:testDebugUnitTest` tu goc thi Gradle dat working dir cua
+     * test la app/, nhung cach goi khac co the de no ngay tai goc. Di nguoc
+     * len den khi thay file workflow la cach duy nhat dung cho ca hai.
+     */
+    private fun findRepoRoot(): File {
+        var dir: File? = File(".").absoluteFile
+        while (dir != null) {
+            if (File(dir, ".github/workflows/build-apk.yml").isFile) return dir
+            dir = dir.parentFile
+        }
+        return error("Khong tim thay goc repo: di nguoc tu working dir khong thay .github/workflows/build-apk.yml")
+    }
+
+    private fun textFilesIn(root: File): List<File> {
+        val found = ArrayList<File>()
+        collectTextFiles(root, found)
+        return found
+    }
+
+    private fun collectTextFiles(dir: File, out: MutableList<File>) {
+        val entries = dir.listFiles() ?: return
+        for (entry in entries) {
+            when {
+                entry.isDirectory -> if (entry.name !in skippedDirectories) collectTextFiles(entry, out)
+                // `.env` la cho chua key cua MAY duoc phep, no da nam trong
+                // .gitignore nen khong bao gio lên repo.
+                entry.name == ".env" -> Unit
+                entry.isFile && entry.extension in keyFileExtensions -> out.add(entry)
+            }
+        }
+    }
+
+    /** Doc bang UTF-8 thu cong: `readText()` nang exception neu gap byte ngoai
+     *  UTF-8, va mot file nhiem mau trong repo se biem thanh "khong tim thay
+     *  key" chu khong phai mot bao cao ro rang. */
+    private fun readUtf8(file: File): String =
+        String(file.readBytes(), Charsets.UTF_8)
+
+    /** `AQ.` + 25 ky tu lien ke la dang khoa Google API moi; GEMINI_API_KEY=
+     *  theo sau la chuoi dai khong phai cho cho cua `.env.example`. */
+    private fun looksLikeRealKey(text: String): Boolean =
+        Regex("""AQ\.[A-Za-z0-9_\-]{25,}""").containsMatchIn(text) ||
+            Regex("""GEMINI_API_KEY\s*=\s*([A-Za-z0-9_.\-]{25,})""")
+                .find(text)
+                ?.groupValues?.get(1)
+                ?.let { !it.contains("REPLACE_ME") } == true
 }
