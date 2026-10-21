@@ -297,4 +297,21 @@ class AiChatRegressionTest {
             .toList()
         assertTrue("con noi do gia chinh xac: $offenders", offenders.isEmpty())
     }
+
+    /**
+     * `timestamp` cua mot diem dung la ping CUOI CUNG, `duration` la thoi gian da
+     * o do duoc cong don luc ghi. Lay rieng (now - timestamp) lam "da o day" sinh
+     * ra dong "Tu 21:33 den 23:14 • Da o day: 2p 13s" — hai so mau thuan nhau
+     * ngay tren man hinh (ban 28.0 do tren BlueStacks).
+     */
+    @Test
+    fun historyStayMatchesTheClockRangeItShows() {
+        val screen = source("src/main/java/com/example/ui/screens/LocationScreen.kt")
+        assertTrue("phai cong don thoi gian luu tru", screen.contains("it.duration.coerceAtLeast(0L)"))
+        assertTrue("diem dung da ket thi dung bang o ping cuoi", screen.contains("if (ongoing) currentEpochMillis else entry.timestamp"))
+        assertFalse(
+            "khong duoc lay (now - timestamp) khong cong duration",
+            screen.contains("(endTimeMillis - entry.timestamp) / 1000L")
+        )
+    }
 }
