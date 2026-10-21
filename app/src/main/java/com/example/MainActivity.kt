@@ -67,7 +67,8 @@ class MainActivity : ComponentActivity() {
         telemetryHelper = TelemetryAndUsageHelper(applicationContext)
         repository = VesperaRepository(applicationContext)
 
-        // Cấu hình OsmDroid User-Agent chuẩn OpenStreetMap Tile Usage Policy tránh bị server chặn
+        // OsmDroid bat buoc co User-Agent; chuoi nay da do voi nen Google (200) va
+        // Esri (200), con OSM thi bi chan tu phía host.
         try {
             org.osmdroid.config.Configuration.getInstance().load(
                 applicationContext,

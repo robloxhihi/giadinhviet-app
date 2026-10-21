@@ -8,7 +8,6 @@ import kotlinx.coroutines.withContext
 import org.osmdroid.config.Configuration
 import org.osmdroid.tileprovider.modules.SqlTileWriter
 import org.osmdroid.tileprovider.tilesource.ITileSource
-import org.osmdroid.tileprovider.tilesource.TileSourceFactory
 import org.osmdroid.util.MapTileIndex
 import java.io.BufferedInputStream
 import java.net.HttpURLConnection
@@ -23,8 +22,9 @@ import kotlin.math.sinh
 import kotlin.math.tan
 
 /**
- * Tải bản đồ OFFLINE thật: tải các ô bản đồ (tiles) của OpenStreetMap về kho
- * tiles của osmdroid để xem được khi không có Internet.
+ * Tải bản đồ OFFLINE thật: tải các ô nền (tile) về kho tiles của osmdroid để xem
+ * được khi không có Internet. Nền mặc định là lớp đang hiển thị trên màn hình
+ * (MapTileSources.HYBRID), khong phai OSM nua vi host do khong tra ve HTTP nao.
  *
  * Đây là bản sửa lỗi "báo đã tải thành công nhưng không tải gì" — mọi ô đều
  * được tải thực, và kết quả trả về phản ánh đúng số ô thành công/thất bại.
@@ -94,16 +94,23 @@ object OfflineMapDownloader {
 
     /**
      * Tải một vùng. [onProgress] được gọi trên luồng IO: (đãTải, tổng, tênVùng).
+     *
+     * [tileSource] PHAI la dung nền mà thẻ bản đồ trên màn hình đang hiển thị:
+     * osmdroid tra kho luong theo ten source, nen tai bang nen cu cua OSM (nhu ban
+     * cu) thi tai xong van trang — va hom 2026-10-21 do dc host do khong tra ve
+     * HTTP nao.
+     * [maxZoom] tu chep theo tran da do cua tung nen (xem MapTileSources).
      */
     suspend fun downloadRegion(
         context: Context,
         region: Region,
+        tileSource: org.osmdroid.tileprovider.tilesource.OnlineTileSourceBase = MapTileSources.HYBRID,
         minZoom: Int = 11,
         maxZoom: Int = 13,
         cancelFlag: AtomicBoolean = AtomicBoolean(false),
         onProgress: (downloaded: Int, total: Int) -> Unit = { _, _ -> }
     ): Result = withContext(Dispatchers.IO) {
-        val tileSource: org.osmdroid.tileprovider.tilesource.OnlineTileSourceBase = TileSourceFactory.MAPNIK
+        val zoomCeil = minOf(maxZoom, MapTileSources.suggestedMaxZoom(tileSource))
         try {
             Configuration.getInstance().load(
                 context,
@@ -121,7 +128,7 @@ object OfflineMapDownloader {
         val maxLon = region.centerLng + half
 
         val tiles = mutableListOf<Long>()
-        for (z in minZoom..maxZoom) {
+        for (z in minZoom..zoomCeil) {
             val x0 = lonToTileX(minLon, z)
             val x1 = lonToTileX(maxLon, z)
             val y0 = latToTileY(maxLat, z) // north = smaller y

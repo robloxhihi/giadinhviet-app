@@ -228,8 +228,24 @@ class FixRegressionTest {
         ).readText()
         val enumBlock = src.substringAfter("private enum class MapLayer").substringBefore("private fun layerAt")
         assertTrue("Lop Duong pho khong duoc con la MAPNIK (host chet)", !enumBlock.contains("MAPNIK"))
-        assertTrue("Phai co lop Google hybrid lam mac dinh", enumBlock.contains("GoogleHybridSource"))
-        assertTrue("Esri phai chep o z18 la muc cuoi co that", enumBlock.contains("EsriWorldImageryTileSource, 18"))
-        assertTrue("Nhom Google duoc phong toi z21 (da do anh that o 10 diem)", enumBlock.contains("21, \"© Google"))
+        assertTrue("Phai co lop Google hybrid lam mac dinh", enumBlock.contains("MapTileSources.HYBRID"))
+        assertTrue("Esri phai chep o z18 la muc cuoi co that", enumBlock.contains("ESRI_MAX_ZOOM"))
+        assertTrue("The map khong duoc tu khai báo source rieng", !src.contains("XYTileSource("))
+    }
+
+    /**
+     * Kho tile offline cua osmdroid tra theo TEN cua tile source. Neu tai vung
+     * offline dung mot nen khac voi nen the dang hien thi thi tai xong van thay
+     * trang, va do la loi "bao tai thanh cong nhung khong tai duoc" ban cu.
+     */
+    @Test
+    fun offlineMapPackIsDownloadedForTheLayerUserActuallySees() {
+        val dl = projectFile("src/main/java/com/example/service/map/OfflineMapDownloader.kt").readText()
+        val shared = projectFile("src/main/java/com/example/service/map/MapTileSources.kt").readText()
+        assertTrue("Tai offline khong duoc cung cap nen OSM da chet", !dl.contains("TileSourceFactory.MAPNIK"))
+        assertTrue("Phai tai dung nen mac dinh cua the ban do", dl.contains("MapTileSources.HYBRID"))
+        assertTrue("Zoom offline phai bi chep theo tran da do", dl.contains("suggestedMaxZoom(tileSource)"))
+        assertTrue("Tran Esri da do la z18", shared.contains("val ESRI_MAX_ZOOM = 18"))
+        assertTrue("Tran Google da do la z21", shared.contains("val GOOGLE_MAX_ZOOM = 21"))
     }
 }

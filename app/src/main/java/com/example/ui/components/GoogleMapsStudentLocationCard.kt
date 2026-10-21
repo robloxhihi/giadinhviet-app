@@ -63,6 +63,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.example.service.AddressHelper
+import com.example.service.map.MapTileSources
 import com.example.ui.theme.FacebookBlue
 import com.example.ui.theme.NeonAmber
 import com.example.ui.theme.NeonCyan
@@ -74,7 +75,6 @@ import com.example.ui.theme.TextPrimary
 import com.example.ui.theme.TextSecondary
 import kotlinx.coroutines.delay
 import org.osmdroid.tileprovider.tilesource.TileSourceFactory
-import org.osmdroid.util.MapTileIndex
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -85,64 +85,10 @@ import kotlin.math.sin
 import kotlin.math.sqrt
 
 /**
- * Lop "Ve tinh" — Esri World Imagery.
+ * Cac lop bản đồ có thể chuyển đổi.
  *
- * osmdroid 6.1.18 KHONG co TileSourceFactory.ESRI_WORLDMAP (da doi cheu constant
- * pool cua TileSourceFactory.class), nen tu khai báo source theo đúng cach
- * osmdroid lam cho USGS ArcGIS: XYTileSource(ten, zoomMin, zoomMax, 256, duoi, baseUrls).
- *
- * max = 18 la ket qua DO TRUC TIEP 2026-10-21: z16-z18 tra anh that o moi diem
- * thu, nhung z19-20 tra ve 2521 byte giong het nhau (md5 f27d9de7) = ô xám
- * "khong co du lieu", nen khong duoc phep phat toi z19.
- */
-private object EsriWorldImageryTileSource : org.osmdroid.tileprovider.tilesource.XYTileSource(
-    "EsriWorldImagery", 0, 18, 256, ".jpg",
-    arrayOf("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/")
-) {
-    /** Esri dung thu tu {z}/{y}/{x} (row/col), khong giong {z}/{x}/{y} cua OSM. */
-    override fun getTileURLString(pMapTileIndex: Long): String {
-        val sb = StringBuilder(getBaseUrl())
-        sb.append(MapTileIndex.getZoom(pMapTileIndex)).append('/')
-        sb.append(MapTileIndex.getY(pMapTileIndex)).append('/')
-        sb.append(MapTileIndex.getX(pMapTileIndex))
-        sb.append(".jpg")
-        return sb.toString()
-    }
-}
-
-/**
- * Nen cua Google (`/vt/lyrs=...`) — nguồn CO ANH THAT SAU NHAT da do duoc.
- *
- * Do truc tiep 2026-10-21 tren 10 diem (nong thon Quang Ngai ngay tai toa do
- * 14.45722/107.91763, Ha Noi, Sai Gon, Ha Giang, Da Nang, Hai Phong, rung
- * Tay Nguyen, Tuyen Son, bien Phu Quy) voi `lyrs=y`:
- *   z18 14 341 B · z19 13 178 B · z20 11 250 B · z21 7 669 B o nong thon Quang
- *   Ngai, moi tile deu la anh mau that (256 gia tri byte khac nhau trong tile),
- *   va chi co diem giữa bien Phu Quy tra ve 664 B xanh nhat quan = dung la nuoc.
- * Khong co ky hieu ô xám nhu Esri, nen lop nay cho phep toi z21.
- */
-private class GoogleTileSource(
-    keyName: String,
-    layers: String,
-    imageExt: String
-) : org.osmdroid.tileprovider.tilesource.XYTileSource(
-    keyName, 0, 21, 256, ".$imageExt",
-    arrayOf("https://mt1.google.com/vt/lyrs=$layers&")
-) {
-    /** Google dung query string, khong dung duong danh {z}/{x}/{y}. */
-    override fun getTileURLString(pMapTileIndex: Long): String = StringBuilder(getBaseUrl())
-        .append("x=").append(MapTileIndex.getX(pMapTileIndex))
-        .append("&y=").append(MapTileIndex.getY(pMapTileIndex))
-        .append("&z=").append(MapTileIndex.getZoom(pMapTileIndex))
-        .toString()
-}
-
-private val GoogleHybridSource = GoogleTileSource("GoogleHybrid", "y", "jpg")
-private val GoogleSatelliteSource = GoogleTileSource("GoogleSatellite", "s", "jpg")
-private val GoogleStreetSource = GoogleTileSource("GoogleStreet", "m", "png")
-
-/**
- * Các lớp bản đồ có thể chuyển đổi.
+ * Tile source nam trong `service/map/MapTileSources` de THE MAP tren man hinh va
+ * TAI VUNG OFFLINE dung chung mot kho dem theo ten source.
  *
  * DA LOAI CAC LOP CHET do do tile truc tiep 2026-10-19 va 2026-10-21:
  *  - HIKEBIKEMAP (tiles.wmflabs.org/hikebike) => HTTP 000, host ngung, trang tran.
@@ -162,10 +108,10 @@ private enum class MapLayer(
     val zoomCap: Int = 0,
     val credit: String
 ) {
-    HYBRID("Vệ tinh + tên đường", GoogleHybridSource, 21, "© Google, Maxar"),
-    SATELLITE("Vệ tinh", GoogleSatelliteSource, 21, "© Google, Maxar"),
-    STREET("Đường phố", GoogleStreetSource, 21, "© Google"),
-    ESRI("Vệ tinh Esri", EsriWorldImageryTileSource, 18, "© Esri, Maxar"),
+    HYBRID("Vệ tinh + tên đường", MapTileSources.HYBRID, MapTileSources.GOOGLE_MAX_ZOOM, "© Google, Maxar"),
+    SATELLITE("Vệ tinh", MapTileSources.SATELLITE, MapTileSources.GOOGLE_MAX_ZOOM, "© Google, Maxar"),
+    STREET("Đường phố", MapTileSources.STREET, MapTileSources.GOOGLE_MAX_ZOOM, "© Google"),
+    ESRI("Vệ tinh Esri", MapTileSources.ESRI, MapTileSources.ESRI_MAX_ZOOM, "© Esri, Maxar"),
     TERRAIN("Địa hình", TileSourceFactory.OpenTopo, 0, "© OpenTopoMap")
 }
 

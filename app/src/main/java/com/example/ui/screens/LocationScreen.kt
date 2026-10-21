@@ -615,7 +615,7 @@ fun LocationScreen(
                         verticalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
                         Text(
-                            text = "Tải dữ liệu bản đồ (OpenStreetMap) để xem khi không có Internet. " +
+                            text = "Tải ảnh bản đồ vệ tinh (lớp Google, z11–z13) để xem khi không có Internet. " +
                                     "Quá trình tải thật — sẽ báo đúng số ô thành công/lỗi.",
                             style = MaterialTheme.typography.bodySmall,
                             color = TextSecondary
