@@ -56,6 +56,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.data.model.PairingStatus
 import com.example.ui.components.GlassButton
 import com.example.ui.components.GlassCard
 import com.example.ui.components.GradientProgressBar
@@ -82,9 +83,23 @@ fun LocationHistoryScreen(
     onToggleLocationHistory: (Boolean) -> Unit
 ) {
     val scrollState = rememberScrollState()
-    val history = uiState.locationHistory
 
-    // Danh sach mau: app CHUA luu tru nay van toan (geofence) nao tren may chu.
+    // `pairings/<id>/location_history` là collection CHUNG của cả hai máy. Đọc
+    // thẳng ra danh sách sẽ vẽ hành trình của con lẫn ping của máy phụ huynh,
+    // nên phải lọc theo chủ nhân của thiết bị đang được theo dõi ở đây.
+    val isPaired = uiState.activePairing?.status == PairingStatus.PAIRED
+    val isChild = uiState.userProfile?.role == com.example.data.model.UserRole.CHILD
+    val partnerName = if (isChild) uiState.activePairing?.parentName.orEmpty().ifEmpty { "Phụ huynh" }
+                      else uiState.activePairing?.childName.orEmpty().ifEmpty { "Học sinh" }
+    val trackedUserId = if (isPaired) uiState.partnerLocation?.userId else uiState.myLocation?.userId
+    val history = trackedUserId?.let { id ->
+        uiState.locationHistory.filter { it.userId == id }
+    } ?: uiState.locationHistory
+
+    val todayStr = java.text.SimpleDateFormat("dd/MM/yyyy", java.util.Locale.getDefault())
+        .format(java.util.Date())
+
+    // Danh sach mau: app CHUA luu tru vung an toan (geofence) nao tren may chu.
     // LocationData.currentSafeZone chi la nhan mo ta vi tri hien tai, khong phai
     // danh sach vung da bat. Giu list de minh hoa nhung gan nhan "Mau" that thuc.
     val safeZonesAreSample = true
@@ -98,7 +113,8 @@ fun LocationHistoryScreen(
     var newZoneRadius by remember { mutableFloatStateOf(300f) }
     var selectedZone by remember { mutableStateOf(0) }
 
-    val stopsToday = history.size
+    val stopsToday = history.count { it.dateStr == todayStr }
+    val routeFixCount = history.count { it.latitude != 0.0 || it.longitude != 0.0 }
     val maxSpeed = history.maxOfOrNull { it.speed } ?: 0f
     // CHỈ tính các điểm có telemetry thật (batteryLevel > 0). LocationData mặc định
     // batteryLevel = 0 khi chưa gửi pin, tính gộp cả điểm 0 sẽ kéo trung bình thấp hơn thực.
@@ -118,8 +134,9 @@ fun LocationHistoryScreen(
             .testTag("location_history_screen")
     ) {
         PremiumTopBar(
-            title = "Hành trình của con",
-            subtitle = "Lịch sử di chuyển & vùng an toàn",
+            title = if (isPaired) "Hành trình của $partnerName" else "Hành trình của máy này",
+            subtitle = if (isPaired) "Lịch sử di chuyển & vùng an toàn"
+                       else "Chưa ghép nối — đây là lịch sử của CHÍNH máy bạn",
             onBack = onBack
         )
 
@@ -190,21 +207,31 @@ fun LocationHistoryScreen(
                         y += h / 5f
                     }
 
-                    val points = if (history.size >= 2) {
-                        history.take(24).mapIndexed { index, entry ->
-                            val fx = 0.08f + 0.84f * (index.toFloat() / (history.take(24).size - 1).coerceAtLeast(1))
-                            val fy = 0.30f + 0.45f * (0.5f + 0.5f * kotlin.math.sin(index * 0.9f))
-                            Offset(fx * w, fy * h)
-                        }
-                    } else {
-                        listOf(
-                            Offset(w * 0.14f, h * 0.68f),
-                            Offset(w * 0.36f, h * 0.42f),
-                            Offset(w * 0.58f, h * 0.60f),
-                            Offset(w * 0.80f, h * 0.34f)
-                        )
+                    // Tuyen duong THAT: toa do do duoc quy ve vung hien thi.
+                    // Truoc day khi co <2 diem, mang ve 4 diem bieu dien — nguoi
+                    // doc nhàm do la hanh trinh cua con trong khi may chua ghi
+                    // du mot diem. Thieu du lieu thi de trong, khong boi them.
+                    val fixes = history.sortedBy { it.timestamp }
+                        .filter { it.latitude != 0.0 || it.longitude != 0.0 }
+                        .take(24)
+                    val lats = fixes.map { it.latitude }
+                    val lngs = fixes.map { it.longitude }
+                    val latMin = lats.minOrNull() ?: 0.0
+                    val latMax = lats.maxOrNull() ?: 0.0
+                    val lngMin = lngs.minOrNull() ?: 0.0
+                    val lngMax = lngs.maxOrNull() ?: 0.0
+                    val latSpan = latMax - latMin
+                    val lngSpan = lngMax - lngMin
+                    val points = if (fixes.size < 2) emptyList() else fixes.mapIndexed { index, entry ->
+                        val fx = if (lngSpan > 1e-9)
+                            0.08f + 0.84f * ((entry.longitude - lngMin) / lngSpan).toFloat()
+                        else 0.08f + 0.84f * (index.toFloat() / (fixes.size - 1))
+                        val fy = if (latSpan > 1e-9)
+                            0.88f - 0.70f * ((entry.latitude - latMin) / latSpan).toFloat()
+                        else 0.5f
+                        Offset(fx * w, fy * h)
                     }
-
+                    if (points.size >= 2) {
                     val path = Path().apply {
                         moveTo(points.first().x, points.first().y)
                         points.drop(1).forEach { lineTo(it.x, it.y) }
@@ -234,6 +261,7 @@ fun LocationHistoryScreen(
                             )
                         }
                     }
+                    }
                 }
 
                 Row(
@@ -258,6 +286,30 @@ fun LocationHistoryScreen(
                         tint = Premium.primaryBright,
                         filled = true
                     )
+                }
+
+                if (routeFixCount < 2) {
+                    Column(
+                        modifier = Modifier
+                            .align(Alignment.Center)
+                            .padding(horizontal = 28.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text(
+                            text = "Chưa đủ điểm để vẽ tuyến đường",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = TextPrimary,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "Máy mới lưu được $routeFixCount điểm định vị có toạ độ hợp lệ. " +
+                                "Đường nối sẽ hiện ra khi thiết bị di chuyển và ghi thêm điểm.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = TextMuted,
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                        )
+                    }
                 }
             }
         }
@@ -321,7 +373,7 @@ fun LocationHistoryScreen(
                 icon = Icons.Default.Speed,
                 label = "TỐC ĐỘ MAX",
                 value = "${maxSpeed.toInt()} km/h",
-                hint = "Di chuyển",
+                hint = "Trong toàn bộ lịch sử",
                 tint = Premium.amber
             )
         }
@@ -337,7 +389,7 @@ fun LocationHistoryScreen(
                 icon = Icons.Default.BatteryChargingFull,
                 label = "PIN TRUNG BÌNH",
                 value = if (avgBattery > 0) "$avgBattery%" else "—",
-                hint = "Khi di chuyển",
+                hint = "Trung bình các điểm có số pin",
                 tint = if (avgBattery > 0) Premium.emerald else TextMuted
             )
             StatTile(
@@ -402,7 +454,8 @@ fun LocationHistoryScreen(
             Column {
                 SectionHeader(
                     title = if (safeZonesAreSample) "Vùng an toàn (mẫu — chưa lưu vào máy chủ)" else "Vùng an toàn (Geofence)",
-                    subtitle = "Nhận thông báo khi con ra khỏi vùng",
+                    subtitle = if (safeZonesAreSample) "Danh sách minh hoạ — chưa cảnh báo thật"
+                               else "Nhận thông báo khi con ra khỏi vùng",
                     icon = Icons.Default.LocationOn,
                     tint = if (safeZonesAreSample) Premium.amber else Premium.emerald
                 )
@@ -518,12 +571,46 @@ fun LocationHistoryScreen(
 
                 if (history.isEmpty()) {
                     Text(
-                        text = "Lịch sử sẽ xuất hiện sau khi thiết bị học sinh di chuyển và dịch vụ định vị nền gửi dữ liệu về.",
+                        text = if (isPaired)
+                            "Lịch sử sẽ xuất hiện sau khi máy con di chuyển và dịch vụ định vị nền gửi dữ liệu về."
+                        else
+                            "Chưa ghép nối nên đây là lịch sử của chính máy này. Máy chưa ghi lại điểm nào — " +
+                                "danh sách sẽ có dữ liệu sau khi thiết bị di chuyển hơn 5 mét khi đang bật ghi lịch sử.",
                         style = MaterialTheme.typography.bodyMedium,
                         color = TextMuted
                     )
                 } else {
+                    var nowMillis by remember { mutableStateOf(System.currentTimeMillis()) }
+                    androidx.compose.runtime.LaunchedEffect(Unit) {
+                        while (true) {
+                            kotlinx.coroutines.delay(1000L)
+                            nowMillis = System.currentTimeMillis()
+                        }
+                    }
+                    val vnTz = java.util.TimeZone.getTimeZone("Asia/Ho_Chi_Minh")
+                    val vnCal = java.util.Calendar.getInstance(vnTz)
                     history.take(12).forEachIndexed { index, entry ->
+                        // `timestamp` = ping CUOI CUNG cua diem dung, `duration` = tong
+                        // thoi gian o do da cong don luc ghi, `timeStr` = gio ping DAU
+                        // TIEN. Diem moi nhat cua mot chu van đang mở nên tinh den bay gio.
+                        val newerSameOwner = history.take(index).any { it.userId == entry.userId }
+                        val ongoing = !newerSameOwner
+                        val endMillis = if (ongoing) nowMillis else entry.timestamp
+                        val stayMillis = entry.duration.coerceAtLeast(0L) +
+                            if (ongoing) (nowMillis - entry.timestamp).coerceAtLeast(0L) else 0L
+                        val staySecs = (stayMillis / 1000L).coerceAtLeast(0L)
+                        val stayStr = when {
+                            staySecs / 3600L > 0 -> "${staySecs / 3600L}g ${staySecs / 60L % 60}p"
+                            staySecs / 60L > 0 -> "${staySecs / 60L}p ${staySecs % 60L}s"
+                            else -> "${staySecs}s"
+                        }
+                        vnCal.timeInMillis = endMillis
+                        val endStr = String.format(
+                            java.util.Locale.getDefault(), "%02d:%02d:%02d",
+                            vnCal.get(java.util.Calendar.HOUR_OF_DAY),
+                            vnCal.get(java.util.Calendar.MINUTE),
+                            vnCal.get(java.util.Calendar.SECOND)
+                        )
                         Row(modifier = Modifier.fillMaxWidth()) {
                             // Rail
                             Column(
@@ -560,12 +647,18 @@ fun LocationHistoryScreen(
                                         modifier = Modifier.weight(1f)
                                     )
                                     Text(
-                                        text = entry.timeStr.ifEmpty { "--:--" },
+                                        text = endStr,
                                         style = MaterialTheme.typography.labelSmall,
                                         color = Premium.primaryBright,
                                         fontWeight = FontWeight.Bold
                                     )
                                 }
+                                Text(
+                                    text = "Từ ${entry.timeStr.ifEmpty { "--:--" }} đến $endStr • " +
+                                        if (ongoing) "đang ở đây $stayStr" else "ở đây $stayStr",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = Premium.emerald
+                                )
                                 Text(
                                     text = entry.dateStr.ifEmpty { "" },
                                     style = MaterialTheme.typography.labelSmall,

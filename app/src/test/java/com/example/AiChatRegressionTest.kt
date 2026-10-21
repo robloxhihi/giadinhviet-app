@@ -314,4 +314,47 @@ class AiChatRegressionTest {
             screen.contains("(endTimeMillis - entry.timestamp) / 1000L")
         )
     }
+
+    /**
+     * Man hinh "Hanh trinh & Vung an toan" mo tu tab Vi tri tung ve 4 diem bieu
+     * dien khi may chua co diem nao, va tu xung la "hanh trinh cua con" du chua
+     * ghep noi — dung cai nguoi dung phan nan nhat: so lieu khong that.
+     */
+    @Test
+    fun routeTraceOnlyDrawsRealFixes() {
+        val screen = source("src/main/java/com/example/ui/screens/LocationHistoryScreen.kt")
+        assertFalse(
+            "khong duoc boi diem gia khi thieu du lieu",
+            screen.contains("Offset(w * 0.14f, h * 0.68f)")
+        )
+        assertTrue("phai noi ro vi sao chua co duong", screen.contains("Chưa đủ điểm để vẽ tuyến đường"))
+        assertTrue("diem phai lay theo toa do that", screen.contains("filter { it.latitude != 0.0 || it.longitude != 0.0 }"))
+    }
+
+    /** Chua ghep noi thi tuyet doi khong duoc ghi "cua con". */
+    @Test
+    fun historyScreenNamesTheOwnerItActuallyShows() {
+        val screen = source("src/main/java/com/example/ui/screens/LocationHistoryScreen.kt")
+        assertTrue(
+            "tieu de phai doi theo trang thai ghep noi",
+            screen.contains("if (isPaired) \"Hành trình của \$partnerName\" else \"Hành trình của máy này\"")
+        )
+        assertFalse("khong duoc cung kieu hoa mot tieu de", screen.contains("title = \"Hành trình của con\""))
+    }
+
+    /**
+     * `pairings/<id>/location_history` dung chung cho ca hai may, nen moi man
+     * hinh doc no phai loc theo userId — neu khong phu huynh thay ca ping cua
+     * minh trong hanh trinh cua con.
+     */
+    @Test
+    fun historyIsScopedToTheTrackedDevice() {
+        for (path in listOf(
+            "src/main/java/com/example/ui/screens/LocationHistoryScreen.kt",
+            "src/main/java/com/example/ui/screens/LocationScreen.kt"
+        )) {
+            val screen = source(path)
+            assertTrue("$path phai loc theo chu nhan", screen.contains("it.userId == id") || screen.contains("it.userId == partnerLoc.userId"))
+        }
+    }
 }
