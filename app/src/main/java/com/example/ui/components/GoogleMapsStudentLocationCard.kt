@@ -217,6 +217,7 @@ fun GoogleMapsStudentLocationCard(
     // nen, khong them chi tiet that (luc 26.0 map nguyen z19 "±1m" tren may
     // gia lap chua ghep noi voi ai).
     val honestAcc = FixPrecision.honestAccuracyMeters(accuracyMeters)
+    val accuracyNoteText = FixPrecision.accuracyNote(accuracyMeters)
     val zoomCeiling = FixPrecision.maxZoomForAccuracy(honestAcc)
     val usableZoom = zoomLevel.coerceAtMost(zoomCeiling)
     val zoomWasCapped = zoomLevel > zoomCeiling + 0.01
@@ -617,10 +618,18 @@ fun GoogleMapsStudentLocationCard(
                         if (showMap) {
                             Text(
                                 text = "${FixPrecision.formatCoordinates(latitude, longitude, honestAcc)}" +
-                                    " • ${FixPrecision.accuracyLabel(accuracyMeters)}",
+                                    " • ${FixPrecision.accuracyShortLabel(accuracyMeters)}",
                                 color = FacebookBlue, fontSize = 9.sp, fontWeight = FontWeight.Medium,
                                 maxLines = 1, overflow = TextOverflow.Ellipsis
                             )
+                            // Sai so bi huy (bang 0 hoac duoi 3 m) thi phoi thay ro ly do,
+                            // khong de dong tren bi cat elip va bi hieu la "chinh xac ±3m".
+                            if (accuracyNoteText != null) {
+                                Text(
+                                    text = "⚠️ $accuracyNoteText",
+                                    color = NeonAmber, fontSize = 9.sp, fontWeight = FontWeight.SemiBold
+                                )
+                            }
                             Text(
                                 text = "${layerAt(layerIndex).label} " +
                                     "z${String.format(Locale.US, "%.1f", usableZoom)}" +

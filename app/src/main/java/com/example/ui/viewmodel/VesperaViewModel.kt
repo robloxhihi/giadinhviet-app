@@ -1627,7 +1627,9 @@ class VesperaViewModel(
                     "Chưa xác định được vị trí GPS"
                 } else context?.let { ctx ->
                     AddressHelper.getReadableAddress(ctx, lat, lng)
-                } ?: "Tọa độ GPS (${String.format(java.util.Locale.US, "%.4f, %.4f", lat, lng)})"
+                } ?: "Tọa độ GPS (${com.example.service.map.FixPrecision.formatCoordinates(
+                    lat, lng, com.example.service.map.FixPrecision.honestAccuracyMeters(acc)
+                )})"
 
                 val safeZone = when {
                     loc == null -> "Không có vị trí GPS"

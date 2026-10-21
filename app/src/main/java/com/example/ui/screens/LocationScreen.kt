@@ -305,17 +305,28 @@ fun LocationScreen(
             }
 
             if (partnerLoc != null) {
+                // pairing/<id>/location_history cat ping cua CA HAI may. Ve tran no
+                // duoi ten mot nguoi la ghep du lieu sai nguoi, nen loc theo userId
+                // cua may dang hien; khong co diem nao cua ho thi khong ve gi ca.
+                val partnerHistory = uiState.locationHistory.filter { it.userId == partnerLoc.userId }
+                val partnerRoute = partnerHistory
+                    .sortedBy { it.timestamp }
+                    .filter { isValidFix(it.latitude, it.longitude) }
+                    .map { it.latitude to it.longitude }
+                val partnerStayMillis = partnerHistory.maxOfOrNull { it.timestamp }
+                    ?.let { (System.currentTimeMillis() - it).coerceAtLeast(0L) } ?: -1L
+
                 GoogleMapsStudentLocationCard(
                     studentName = partnerName,
                     latitude = partnerLoc.latitude,
                     longitude = partnerLoc.longitude,
-                    safeZoneName = partnerLoc.currentSafeZone.ifEmpty { "Khu vực an toàn" },
+                    safeZoneName = partnerLoc.currentSafeZone.ifEmpty { "Chưa xác định được khu vực" },
                     batteryLevel = partnerLoc.batteryLevel,
                     isCharging = partnerLoc.isCharging,
                     speedKmh = partnerLoc.speed,
                     isPrivacyActive = isPrivacy,
-                    routePoints = routePoints,
-                    stayDurationMillis = selfStayMillis,
+                    routePoints = partnerRoute,
+                    stayDurationMillis = partnerStayMillis,
                     lastUpdatedAt = partnerLoc.updatedAt,
                     accuracyMeters = partnerLoc.accuracy,
                     headingDegrees = null,
@@ -508,16 +519,21 @@ fun LocationScreen(
             val vnTz = java.util.TimeZone.getTimeZone("Asia/Ho_Chi_Minh")
             val vnCalendar = java.util.Calendar.getInstance(vnTz)
 
+            // List cua pairing co the tron ping hai may -> ghi ten chu nhan cua
+            // tung diem de phu huynh khong doc nhàm. List mot chu thi khong lam dai dong.
+            val mixedHistory = uiState.locationHistory.map { it.userId }.distinct().size > 1
+
             Column(
                 modifier = Modifier.fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 uiState.locationHistory.forEachIndexed { index, entry ->
-                    val endTimeMillis = if (index == 0) {
-                        currentEpochMillis
-                    } else {
-                        uiState.locationHistory[index - 1].timestamp
-                    }
+                    // Danh sach cua pairing tron ping ca hai may: "thoi gian o day"
+                    // phai tinh den lan di chuyen tiep theo CUNG MOT MAY, khong phai
+                    // ping cua nguoi kia — neu khong so phut ao tang len dot bien.
+                    val prevSameOwner = uiState.locationHistory.take(index)
+                        .firstOrNull { it.userId == entry.userId }
+                    val endTimeMillis = prevSameOwner?.timestamp ?: currentEpochMillis
 
                     val elapsedSeconds = ((endTimeMillis - entry.timestamp) / 1000L).coerceAtLeast(0L)
                     val durationMins = elapsedSeconds / 60L
@@ -528,13 +544,8 @@ fun LocationScreen(
                     val endH = vnCalendar.get(java.util.Calendar.HOUR_OF_DAY)
                     val endM = vnCalendar.get(java.util.Calendar.MINUTE)
                     val endS = vnCalendar.get(java.util.Calendar.SECOND)
-                    val endFormattedTime = if (index == 0) {
-                        String.format(Locale.getDefault(), "%02d:%02d:%02d", endH, endM, endS)
-                    } else {
-                        uiState.locationHistory[index - 1].timeStr.ifEmpty {
-                            String.format(Locale.getDefault(), "%02d:%02d:%02d", endH, endM, endS)
-                        }
-                    }
+                    val endFormattedTime = prevSameOwner?.timeStr?.ifEmpty { null }
+                        ?: String.format(Locale.getDefault(), "%02d:%02d:%02d", endH, endM, endS)
 
                     // Siêu nhỏ gọn (gấp 5 lần so với trước)
                     Card(
@@ -565,6 +576,16 @@ fun LocationScreen(
                                     )
                                 }
                                 Spacer(modifier = Modifier.height(2.dp))
+                                if (mixedHistory) {
+                                    Text(
+                                        text = "Máy: ${entry.userName.ifEmpty { "chưa ghi danh" }}",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = TextMuted,
+                                        fontSize = 9.sp,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
                                 Text(
                                     text = "Từ ${entry.timeStr.ifEmpty { "00:00:00" }} đến $endFormattedTime • Đã ở đây: $durationStr",
                                     style = MaterialTheme.typography.bodySmall,

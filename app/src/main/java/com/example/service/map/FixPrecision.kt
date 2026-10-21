@@ -55,14 +55,21 @@ object FixPrecision {
         return String.format(Locale.US, "%.${d}f, %.${d}f", latitude, longitude)
     }
 
-    /** Chuoi sai so trung thuc, khong bao gio in "±1m" nhu mot khang dinh. */
-    fun accuracyLabel(reported: Float): String {
-        val honest = honestAccuracyMeters(reported).toInt()
-        return when {
-            reported <= 0f -> "không rõ sai số — vẽ theo ±$honest m"
-            reported < MIN_PLAUSIBLE_ACCURACY_M ->
-                "nhà cung cấp báo ±${reported.toInt()} m, dưới ngưỡng điện thoại — dùng ±$honest m"
-            else -> "±$honest m"
-        }
+    /** Chuoi sai so in ngay canh toa do — luc nao cung la ±<sai so dung>, khong phai so tho. */
+    fun accuracyShortLabel(reported: Float): String =
+        "±${honestAccuracyMeters(reported).toInt()} m"
+
+    /**
+     * Loi khi con so tho bi huy (bang 0 hoac duoi nguong phan giai cua dien
+     * thoai). Tra ve null khi so bao nhieu thi dung vay, de man hinh khoi dai
+     * thuat khong can.
+     */
+    fun accuracyNote(reported: Float): String? = when {
+        reported <= 0f ->
+            "Máy không báo sai số — không được nói chính xác hơn ±${UNKNOWN_ACCURACY_M.toInt()} m."
+        reported < MIN_PLAUSIBLE_ACCURACY_M ->
+            "Nhà cung cấp báo ±${reported.toInt()} m — dưới ngưỡng phân giải của điện thoại," +
+                    " mọi tính toán dùng ±${MIN_PLAUSIBLE_ACCURACY_M.toInt()} m."
+        else -> null
     }
 }

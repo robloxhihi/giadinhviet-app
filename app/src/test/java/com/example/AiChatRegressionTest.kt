@@ -3,6 +3,7 @@ package com.example
 import com.example.ui.screens.AiMarkdown
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
@@ -62,7 +63,8 @@ class AiChatRegressionTest {
     fun chatScreenUsesMarkdownRendererNotRawText() {
         val manHinh = source("src/main/java/com/example/ui/screens/AiChatScreen.kt")
         assertTrue("bong bong chat phai goi AiMarkdown", manHinh.contains("AiMarkdown.segments"))
-        assertTrue("bong bong chat phai render qua AiBubbleText", manHinh.contains("AiBubbleText("))
+        assertTrue("bong bong chat phai render qua AiAnswerBody", manHinh.contains("AiAnswerBody("))
+        assertFalse("khong duoc quay lai AiBubbleText da xoa", manHinh.contains("AiBubbleText("))
     }
 
     @Test
@@ -233,9 +235,19 @@ class AiChatRegressionTest {
                 com.example.service.map.FixPrecision.maxZoomForAccuracy(500f)
         )
 
-        val label = com.example.service.map.FixPrecision.accuracyLabel(1f)
-        assertFalse("khong duoc in ro rang '±1 m' nhu mot khang dinh", label == "±1 m")
-        assertTrue("phai noi vi sao con so bi doi", label.contains("dưới ngưỡng"))
+        assertEquals(
+            "in thi ±<sai so dung>, khong in so tho",
+            "±3 m",
+            com.example.service.map.FixPrecision.accuracyShortLabel(1f)
+        )
+        assertEquals("±42 m", com.example.service.map.FixPrecision.accuracyShortLabel(42f))
+        assertEquals("±100 m", com.example.service.map.FixPrecision.accuracyShortLabel(0f))
+        assertNull("sai so that thi khong can thong bao", com.example.service.map.FixPrecision.accuracyNote(42f))
+        val note = com.example.service.map.FixPrecision.accuracyNote(1f) ?: ""
+        assertTrue("phai noi vi sao con so bi doi", note.contains("dưới ngưỡng"))
+        assertTrue("phai noi ro da dung ±3m", note.contains("±3 m"))
+        assertTrue("may khong bao thi khong duoc noi hon ±100m",
+            (com.example.service.map.FixPrecision.accuracyNote(0f) ?: "").contains("±100 m"))
     }
 
     /** Map card phai an theo FixPrecision, khong in toa do/ sai so tho nua. */
@@ -243,7 +255,7 @@ class AiChatRegressionTest {
     fun mapCardStopsQuotingRawSensorPrecision() {
         val card = source("src/main/java/com/example/ui/components/GoogleMapsStudentLocationCard.kt")
         assertTrue("toa do phai qua FixPrecision", card.contains("FixPrecision.formatCoordinates("))
-        assertTrue("sai so phai qua FixPrecision", card.contains("FixPrecision.accuracyLabel("))
+        assertTrue("sai so phai qua FixPrecision", card.contains("FixPrecision.accuracyShortLabel("))
         assertTrue("vong tron dung sai so trung thuc", card.contains("honestAcc.toDouble()"))
         assertTrue("maxZoom phai bi chan theo sai so", card.contains("coerceAtMost(zoomCeiling)"))
         assertFalse(

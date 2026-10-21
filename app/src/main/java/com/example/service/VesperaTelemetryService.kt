@@ -27,6 +27,7 @@ import com.example.data.model.LocationData
 import com.example.data.model.LocationHistoryEntry
 import com.example.data.model.hasRealFix
 import com.example.data.repository.VesperaRepository
+import com.example.service.map.FixPrecision
 import com.google.android.gms.location.FusedLocationProviderClient
 import com.google.android.gms.location.LocationCallback
 import com.google.android.gms.location.LocationRequest
@@ -562,13 +563,17 @@ class VesperaTelemetryService : Service() {
                 val realAddr = AddressHelper.getReadableAddress(applicationContext, location.latitude, location.longitude)
                 val accuracyNote = when {
                     unknownAccuracy -> "sai số không rõ"
-                    poorAccuracy -> "±${location.accuracy.toInt()} m"
+                    poorAccuracy -> "±${FixPrecision.honestAccuracyMeters(location.accuracy).toInt()} m"
                     else -> null
                 }
                 val baseZone = when {
                     location.speed > 8f -> "Đang di chuyển (${(location.speed * 3.6f).toInt()} km/h)"
                     realAddr.isNotBlank() -> realAddr
-                    else -> "Vị trí GPS (${String.format(Locale.US, "%.4f, %.4f", location.latitude, location.longitude)})"
+                    else -> "Vị trí GPS (${FixPrecision.formatCoordinates(
+                        location.latitude,
+                        location.longitude,
+                        FixPrecision.honestAccuracyMeters(location.accuracy)
+                    )})"
                 }
                 // Định vị kém / vị trí cũ phải hiện ngay trong chuỗi an toàn, phụ huynh đọc là hiểu.
                 val safeZone = buildString {
@@ -578,12 +583,18 @@ class VesperaTelemetryService : Service() {
                 }
 
                 // Update Foreground Notification so user sees GPS & app tracking live in notification bar
+                // Notification cũng phải nói đúng: số lẻ lấy theo sai số thật, không
+                // in "±1m" cua may gia lap hay mock.
+                val honestAcc = FixPrecision.honestAccuracyMeters(location.accuracy)
                 val notifStatus = String.format(
                     Locale.US,
-                    "📍 GPS: %.4f, %.4f (±%.0fm) | 📱 %s: %d ph | ⚡ Pin: %d%%%s%s",
-                    location.latitude,
-                    location.longitude,
-                    location.accuracy,
+                    "📍 GPS: %s (±%.0fm) | 📱 %s: %d ph | ⚡ Pin: %d%%%s%s",
+                    FixPrecision.formatCoordinates(
+                        location.latitude,
+                        location.longitude,
+                        honestAcc
+                    ),
+                    honestAcc,
                     topApp,
                     topAppMins,
                     batteryLevel,

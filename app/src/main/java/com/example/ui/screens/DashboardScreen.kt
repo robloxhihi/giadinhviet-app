@@ -69,6 +69,7 @@ import com.example.data.model.EmotionTag
 import com.example.data.model.PairingRequest
 import com.example.data.model.PairingStatus
 import com.example.data.model.UserRole
+import com.example.data.model.hasRealFix
 import com.example.ui.components.BentoCard
 import com.example.ui.components.BentoProgressBar
 import com.example.ui.components.BentoStatCard
@@ -887,8 +888,13 @@ fun DashboardScreen(
                                 icon = Icons.Default.GpsFixed,
                                 iconTint = NeonCyan,
                                 title = "GPS MÁY NÀY",
-                                value = if (myLoc != null) "Hoạt động" else "Đang dò",
-                                subtitle = if (myLoc != null) "±${myLoc.accuracy.toInt()}m" else "Vệ tinh",
+                                // "Vệ tinh" khi myLoc == null la noi xau: may CHƯA
+                                // do duoc gi ca. Sai so cung phai qua FixPrecision
+                                // de khong in "±1m" cua may gia lap.
+                                value = if (myLoc != null && myLoc.hasRealFix) "Đã có vị trí" else "Chưa có vị trí",
+                                subtitle = if (myLoc != null && myLoc.hasRealFix)
+                                    "±${com.example.service.map.FixPrecision.honestAccuracyMeters(myLoc.accuracy).toInt()} m"
+                                else "máy chưa dò được GPS",
                                 testTag = "device_gps_stat"
                             )
 

@@ -13,6 +13,7 @@ import android.telephony.SmsManager
 import android.telephony.TelephonyManager
 import android.util.Log
 import androidx.core.content.ContextCompat
+import com.example.service.map.FixPrecision
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withTimeoutOrNull
@@ -122,10 +123,18 @@ class FallbackSmsManager(private val context: Context) {
         if (!hasPlausibleFix(latitude, longitude)) {
             append(noFixLabel())
         } else {
+            // Link giu nguyen toa do tho (nguoi nhan may cuu nan can diem chinh xac
+            // nhat co the), con dong "Sai số"/"Tọa độ" doc duoi thi phai theo
+            // FixPrecision: dien thoai khong phan biet duoc 1 m thi khong duoc noi 5 le.
             append("Vị trí GPS: https://maps.google.com/?q=%.6f,%.6f".format(latitude, longitude))
-            if (accuracyMeters > 0f) append("\nSai số: ±${accuracyMeters.toInt()}m")
+            append("\nSai số: ${FixPrecision.accuracyShortLabel(accuracyMeters)}")
+            FixPrecision.accuracyNote(accuracyMeters)?.let { append("\nLưu ý: $it") }
             if (fixTimeMillis > 0L) append("\nVị trí lấy lúc ${fmtTime(fixTimeMillis)}")
-            append("\nTọa độ: %.5f, %.5f".format(latitude, longitude))
+            append("\nTọa độ: ${FixPrecision.formatCoordinates(
+                latitude,
+                longitude,
+                FixPrecision.honestAccuracyMeters(accuracyMeters)
+            )}")
         }
     }
 
@@ -184,7 +193,8 @@ class FallbackSmsManager(private val context: Context) {
             noFixLabel()
         } else {
             "Toa do: https://maps.google.com/?q=%.6f,%.6f".format(latitude, longitude) +
-                    (if (accuracyMeters > 0f) " ±${accuracyMeters.toInt()}m" else "") +
+                    (if (accuracyMeters > 0f)
+                        " ±${FixPrecision.honestAccuracyMeters(accuracyMeters).toInt()}m" else "") +
                     (if (fixTimeMillis > 0L) " (lay luc ${fmtTime(fixTimeMillis)})" else "")
         }
         val body = "[SOS CUU HO $hotline] $senderName can cuu ho! $locPart. " +
