@@ -276,4 +276,25 @@ class AiChatRegressionTest {
         assertTrue("moi y mot dong", client.contains("Mỗi ý nằm trọn trong MỘT dòng"))
         assertTrue("cam emoji vi bong chat khong co cho", client.contains("không emoji"))
     }
+
+    /**
+     * Ca app khong duoc tu in toa do 4-5 chu so thap phan nua — moi chu so phai
+     * di qua FixPrecision. Truong hop ngoai le duy nhat la URL `maps.google.com`
+     * trong SMS cuu nan, noi con so tho giup luc luong va ± da ghi ranh manh ben canh.
+     */
+    @Test
+    fun noRawCoordinateFormatSurvivesInTheApp() {
+        val roots = listOf(File("src/main/java"), File("app/src/main/java"))
+        val dir = roots.firstOrNull { it.exists() } ?: error("Khong tim thay src/main/java")
+        val rawFormat = Regex("\"%\\.[45]f, ?%\\.[45]f\"")
+        val offenders = dir.walkTopDown()
+            .filter { it.isFile && it.extension == "kt" && it.name != "FixPrecision.kt" }
+            .flatMap { file ->
+                file.readLines().mapIndexedNotNull { i, line ->
+                    if (rawFormat.containsMatchIn(line)) "${file.name}:${i + 1} ${line.trim()}" else null
+                }
+            }
+            .toList()
+        assertTrue("con noi do gia chinh xac: $offenders", offenders.isEmpty())
+    }
 }

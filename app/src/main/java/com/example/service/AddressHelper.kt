@@ -67,7 +67,11 @@ object AddressHelper {
         if (!resolved.isNullOrBlank()) return resolved
 
         // Không bịa địa chỉ: chỉ trả toạ độ thật và nói thẳng là chưa dịch được.
-        return "Tọa độ GPS (${String.format(Locale.US, "%.4f, %.4f", latitude, longitude)}) — chưa phân giải được địa chỉ"
+        // Khong co sai so o day thi phai tinh la xau nhat (±100 m) — in 4 le la
+        // khang dinh ~11 m ma chuyen den khong he do duoc.
+        return "Tọa độ GPS (${com.example.service.map.FixPrecision.formatCoordinates(
+            latitude, longitude, com.example.service.map.FixPrecision.UNKNOWN_ACCURACY_M
+        )}) — chưa phân giải được địa chỉ"
     }
 
     /**

@@ -284,9 +284,10 @@ fun AiChatScreen(
                     ) {
                         Box(
                             modifier = Modifier
-                                // Cau tra loi dai 15-20 dong. Bon cho 320dp khiem
-                                // khach o goi trai khien no trang mot cot doc
-                                // khong doc duoc; chi bong cua nguoi dung giu ngan.
+                                // Cau tra loi dai 15-20 dong. Ghim bong o 320dp
+                                // khiem khach o goi trai khien no trang mot cot
+                                // doc dai khong doc duoc; chi bong cua nguoi dung
+                                // giu ngan de lech phai.
                                 .then(
                                     if (fromModel) Modifier.fillMaxWidth(0.97f)
                                     else Modifier.widthIn(max = 340.dp)
@@ -413,8 +414,18 @@ fun AiChatScreen(
 @Composable
 private fun AiAnswerBody(text: String, ink: Color, accent: Color) {
     val blocks = remember(text) { AiMarkdown.blocks(text) }
-    Column(verticalArrangement = Arrangement.spacedBy(11.dp)) {
-        blocks.forEach { block ->
+    Column {
+        blocks.forEachIndexed { i, block ->
+            if (i > 0) {
+                val prev = blocks[i - 1]
+                // Nhan don ("**Nguyên nhân:**" khong co noi dung cung dong) phai dinh
+                // vao y ben duoi; tach ra khoang cach lon la nhin nhu mot dong roi.
+                Spacer(
+                    modifier = Modifier.height(
+                        if (prev.label.isNotEmpty() && prev.body.isEmpty()) 5.dp else 11.dp
+                    )
+                )
+            }
             when (block.kind) {
                 AiMarkdown.Kind.STEP -> Row(verticalAlignment = Alignment.Top) {
                     Box(

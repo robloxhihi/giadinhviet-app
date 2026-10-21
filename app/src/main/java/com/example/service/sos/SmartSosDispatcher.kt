@@ -167,8 +167,11 @@ class SmartSosDispatcher(
                     channel = SosChannelUsed.INTERNET_CLOUD,
                     // Báo KHỚP đúng những gì đã ghi xuống Firestore.
                     detailMessage = if (hasFix)
-                        "Đã gửi SOS qua Internet tới gia đình, kèm vị trí GPS %.5f, %.5f.".format(
-                            location.latitude, location.longitude)
+                        "Đã gửi SOS qua Internet tới gia đình, kèm vị trí GPS " +
+                                com.example.service.map.FixPrecision.formatCoordinates(
+                                    location.latitude, location.longitude,
+                                    com.example.service.map.FixPrecision.honestAccuracyMeters(location.accuracy)
+                                ) + "."
                     else
                         "Đã gửi SOS khẩn cấp qua Internet tới gia đình nhưng $gpsDesc — " +
                                 "document lưu tọa độ 0.0, 0.0, KHÔNG có vị trí để đi cứu."
@@ -193,7 +196,10 @@ class SmartSosDispatcher(
      */
     private fun gpsDescription(location: LocationData): String =
         if (location.hasRealFix)
-            "Tọa độ GPS: %.5f, %.5f".format(location.latitude, location.longitude)
+            "Tọa độ GPS: " + com.example.service.map.FixPrecision.formatCoordinates(
+                location.latitude, location.longitude,
+                com.example.service.map.FixPrecision.honestAccuracyMeters(location.accuracy)
+            )
         else
             "KHÔNG XÁC ĐỊNH ĐƯỢC VỊ TRÍ GPS lúc " +
                     SimpleDateFormat("HH:mm dd/MM", Locale.getDefault()).format(Date())
