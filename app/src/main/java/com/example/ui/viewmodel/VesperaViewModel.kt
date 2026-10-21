@@ -344,7 +344,10 @@ class VesperaViewModel(
             extraTimeRequests = emptyList(),
             privacyRequests = emptyList(),
             messages = emptyList(),
-            weeklyUsage = listOf("T2" to 0, "T3" to 0, "T4" to 0, "T5" to 0, "T6" to 0, "T7" to 0, "CN" to 0),
+            // weeklyUsage de nguyen mac dinh 0: bieu do do refreshUsageStats
+            // lap bang so THAT tren IO thread (mot van truy van UsageStats
+            // moi ngay trong tuan), con day la luot khoi tao tren main thread
+            // nen goi luon se lam giat lan dau vao app.
             selectedEmotion = EmotionTag.NORMAL,
             smartAdvice = if (isParent)
                 "Chào mừng Quý phụ huynh. Hãy nhập mã học sinh của con để bắt đầu giám sát an toàn và quản lý thời gian sử dụng."
@@ -1137,7 +1140,8 @@ class VesperaViewModel(
                     UsageSnapshot(
                         hasPerm = hasPerm,
                         categories = if (hasPerm) telemetryHelper.getTodayUsageCategories() else emptyList(),
-                        detailed = if (hasPerm) telemetryHelper.getDetailedAppUsageList() else emptyList()
+                        detailed = if (hasPerm) telemetryHelper.getDetailedAppUsageList() else emptyList(),
+                        weekly = telemetryHelper.getWeeklyUsageMinutes()
                     )
                 }
                 val cur = _uiState.value
@@ -1147,13 +1151,15 @@ class VesperaViewModel(
                 // gia tri) va chi ghi khi thuc su doi.
                 if (cur.hasUsagePermission == snapshot.hasPerm &&
                     cur.usageCategories == snapshot.categories &&
-                    cur.detailedAppUsage == snapshot.detailed
+                    cur.detailedAppUsage == snapshot.detailed &&
+                    cur.weeklyUsage == snapshot.weekly
                 ) return@launch
 
                 _uiState.value = cur.copy(
                     hasUsagePermission = snapshot.hasPerm,
                     usageCategories = snapshot.categories,
                     detailedAppUsage = snapshot.detailed,
+                    weeklyUsage = snapshot.weekly,
                     lastRealtimeSyncAt = System.currentTimeMillis()
                 )
 
@@ -1187,7 +1193,8 @@ class VesperaViewModel(
     private data class UsageSnapshot(
         val hasPerm: Boolean,
         val categories: List<AppCategoryUsage>,
-        val detailed: List<DetailedAppUsage>
+        val detailed: List<DetailedAppUsage>,
+        val weekly: List<Pair<String, Int>>
     )
 
     /**

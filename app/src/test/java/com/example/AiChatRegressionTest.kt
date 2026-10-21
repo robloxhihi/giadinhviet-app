@@ -18,8 +18,9 @@ class AiChatRegressionTest {
 
     private fun source(relative: String): String {
         val candidates = listOf(File(relative), File("app/$relative"))
-        return candidates.firstOrNull { it.exists() }
+        val file = candidates.firstOrNull { it.exists() }
             ?: error("Không tìm thấy tệp nguồn: $relative")
+        return String(file.readBytes(), Charsets.UTF_8)
     }
 
     @Test

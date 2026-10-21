@@ -444,18 +444,11 @@ fun BlockRulesCard(
                 )
             }
 
-            // Canh bao khi da chon app ma van o che do nhac nho — day la cai
-            // "tich app chan bi loi" ma nguoi dung bao: tat ca deu dung, chi
-            // la khong co chan that.
-            if (reminderOnly && selected.isNotEmpty()) {
-                Spacer(Modifier.height(8.dp))
-                StatusBanner(
-                    text = "${selected.size} app đã chọn nhưng “Chặn thật” đang tắt — " +
-                        "máy sẽ chỉ nhắc khi quá giờ, không đẩy app về Home. " +
-                        "Bật công tắc trên rồi gửi đề xuất để chặn thật.",
-                    tone = Tone.Warn
-                )
-            }
+            // Canh bao "chon roi ma chua chan that" dat XUONG DUOI danh sach
+            // o cuoi: o vi tri cu (ngay duoi cong tac) no chen vao truong khi
+            // tick con app dau tien, day ca danh sach tui xuong duoi ngon tay
+            // va nhip tiep theo trung mot app khac — cam giac "tich app chan
+            // bi loi". Noi dung giu nguyen, chi khong con chen vao giua.
 
             Spacer(Modifier.height(12.dp))
 
@@ -504,6 +497,16 @@ fun BlockRulesCard(
                         selected = emptySet()
                         dirty = true
                     }
+                )
+                Spacer(Modifier.height(8.dp))
+            }
+
+            if (reminderOnly && selected.isNotEmpty()) {
+                StatusBanner(
+                    text = "${selected.size} app đã chọn nhưng “Chặn thật” đang tắt — " +
+                        "máy sẽ chỉ nhắc khi quá giờ, không đẩy app về Home. " +
+                        "Bật công tắc trên rồi gửi đề xuất để chặn thật.",
+                    tone = Tone.Warn
                 )
                 Spacer(Modifier.height(8.dp))
             }

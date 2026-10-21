@@ -268,6 +268,66 @@ class TelemetryAndUsageHelper(private val context: Context) {
     }
 
     /**
+     * So phut THAT tung ngay trong tuan (T2 -> CN), lay truc tiep tu
+     * UsageStatsManager.
+     *
+     * Truoc day `weeklyUsage` la hang so 0 nam im trong VesperaUiState, nen
+     * bieu do "SU DUNG TRONG TUẦN" va man "Thấu hiểu thời gian" ve cot 0 du
+     * may da dung 36 phut (loc BlueStacks 2026-10-21). Day la nguon du lieu
+     * that cho hai cho do.
+     */
+    fun getWeeklyUsageMinutes(): List<Pair<String, Int>> {
+        val labels = listOf("T2", "T3", "T4", "T5", "T6", "T7", "CN")
+        val um = context.getSystemService(Context.USAGE_STATS_SERVICE) as? UsageStatsManager
+            ?: return labels.map { it to 0 }
+        if (!hasUsageStatsPermission()) return labels.map { it to 0 }
+
+        val midnightToday = Calendar.getInstance().apply {
+            set(Calendar.HOUR_OF_DAY, 0)
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }
+        // Calendar.DAY_OF_WEEK: CN=1, T2=2 ... T7=7 -> quy ve thu tu T2..CN.
+        val dow = midnightToday.get(Calendar.DAY_OF_WEEK)
+        val todayIndex = if (dow == Calendar.SUNDAY) 6 else dow - Calendar.MONDAY
+
+        return labels.mapIndexed { index, label ->
+            if (index > todayIndex) {
+                label to 0 // ngay chua toi trong tuan
+            } else {
+                val from = (midnightToday.clone() as Calendar)
+                    .apply { add(Calendar.DAY_OF_YEAR, index - todayIndex) }.timeInMillis
+                val to = if (index == todayIndex) {
+                    System.currentTimeMillis()
+                } else {
+                    (midnightToday.clone() as Calendar)
+                        .apply { add(Calendar.DAY_OF_YEAR, index - todayIndex + 1) }.timeInMillis
+                }
+                label to minutesInWindow(um, from, to)
+            }
+        }
+    }
+
+    /**
+     * Cong so phut cua cac bucket khong trung lap nhau trong [from, to).
+     * Bucket cung package co the xuat hien nhieu lan (bucket ngay + bucket
+     * dang chay), nen lay gia tri lon nhat moi package thay vi cong don.
+     */
+    private fun minutesInWindow(um: UsageStatsManager, from: Long, to: Long): Int {
+        val stats = runCatching {
+            um.queryUsageStats(UsageStatsManager.INTERVAL_DAILY, from, to)
+        }.getOrNull() ?: return 0
+        val perPackage = HashMap<String, Long>()
+        for (s in stats) {
+            if (s.lastTimeUsed in from until to) {
+                perPackage[s.packageName] = maxOf(perPackage[s.packageName] ?: 0L, s.totalTimeInForeground)
+            }
+        }
+        return (perPackage.values.sum() / 60_000L).toInt()
+    }
+
+    /**
      * Get current battery percentage & charging status
      */
     fun getBatteryInfo(): Pair<Int, Boolean> {

@@ -398,4 +398,18 @@ class FixRegressionTest {
                 .find(text)
                 ?.groupValues?.get(1)
                 ?.let { !it.contains("REPLACE_ME") } == true
+
+    /**
+     * Bieu do "SU DUNG TRONG TUẦN" va man Thấu hiểu thời gian tung ve cot 0
+     * du may da dung 36 phut, vi `weeklyUsage` la hang so nam im trong
+     * VesperaUiState va khong bao gio duoc ghi lai.
+     */
+    @Test
+    fun weeklyChartReadsRealUsageStats() {
+        val vm = projectFile("src/main/java/com/example/ui/viewmodel/VesperaViewModel.kt").readText()
+        val helper = projectFile("src/main/java/com/example/service/TelemetryAndUsageHelper.kt").readText()
+        assertTrue("ViewModel phai gan so that vao bieu do", vm.contains("weeklyUsage = snapshot.weekly"))
+        assertTrue("Phai co ham tinh phut theo tung ngay", helper.contains("fun getWeeklyUsageMinutes()"))
+        assertTrue("Phai truy van UsageStats tung ngay", helper.contains("minutesInWindow(um, from, to)"))
+    }
 }
