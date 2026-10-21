@@ -210,8 +210,26 @@ class FixRegressionTest {
         val src = projectFile(
             "src/main/java/com/example/ui/components/GoogleMapsStudentLocationCard.kt"
         ).readText()
-        assertTrue("Phải đọc lớp đã lưu thay vì cứng số 0", src.contains("mapPrefs.getInt(\"layer\""))
-        assertTrue("Mặc định phải mở bằng lớp chi tiết nhất", src.contains("MapLayer.SATELLITE.ordinal"))
+        assertTrue("Phải đọc lớp đã lưu thay vì cứng số 0", src.contains("mapPrefs.getInt(\"layer2\""))
+        assertTrue("Mặc định phải mở bằng lớp có ảnh thật + tên đường", src.contains("MapLayer.HYBRID.ordinal"))
         assertTrue("Không được khóa cứng nền đường phố khi tạo MapView", !src.contains("setTileSource(MapLayer.STREET.source)"))
+    }
+
+    /**
+     * Do truc tiep hom 2026-10-21: tile.openstreetmap.org (MAPNIK) khong tra ve
+     * HTTP nao tu mach VN, con Esri World Imagery tra 2521 byte giong het nhau
+     * (o xam) tu z19. Nen phai ngung dung MAPNIK lam nen va ngung yeu cau Esri
+     * z19+; nguoi dung thoang bao "map bi trang" chinh vi the.
+     */
+    @Test
+    fun mapLayersUseOnlyTileHostsWithVerifiedRealImagery() {
+        val src = projectFile(
+            "src/main/java/com/example/ui/components/GoogleMapsStudentLocationCard.kt"
+        ).readText()
+        val enumBlock = src.substringAfter("private enum class MapLayer").substringBefore("private fun layerAt")
+        assertTrue("Lop Duong pho khong duoc con la MAPNIK (host chet)", !enumBlock.contains("MAPNIK"))
+        assertTrue("Phai co lop Google hybrid lam mac dinh", enumBlock.contains("GoogleHybridSource"))
+        assertTrue("Esri phai chep o z18 la muc cuoi co that", enumBlock.contains("EsriWorldImageryTileSource, 18"))
+        assertTrue("Nhom Google duoc phong toi z21 (da do anh that o 10 diem)", enumBlock.contains("21, \"© Google"))
     }
 }

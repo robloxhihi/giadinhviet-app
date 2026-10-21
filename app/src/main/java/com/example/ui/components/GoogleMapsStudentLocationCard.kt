@@ -87,19 +87,16 @@ import kotlin.math.sqrt
 /**
  * Lop "Ve tinh" — Esri World Imagery.
  *
- * TileSourceFactory.ESRI_WORLDMAP KHONG ton tai trong osmdroid 6.1.18 (da doi
- * cheu constant pool cua TileSourceFactory.class: chi co MAPNIK, WIKIMEDIA,
- * PUBLIC_TRANSPORT, HIKEBIKEMAP, OPEN_SEAMAP, OpenTopo, USGS_TOPO, USGS_SAT,
- * CLOUDMADE*, BASE/FIETS/ROADS_OVERLAY_NL, Chartbundle*). Vi vay tu khai báo
- * source theo dung cach osmdroid tu lam cho USGS ArcGIS: XYTileSource ten,
- * zoomMin, zoomMax, 256, "duoi anh", mang base url.
+ * osmdroid 6.1.18 KHONG co TileSourceFactory.ESRI_WORLDMAP (da doi cheu constant
+ * pool cua TileSourceFactory.class), nen tu khai báo source theo đúng cach
+ * osmdroid lam cho USGS ArcGIS: XYTileSource(ten, zoomMin, zoomMax, 256, duoi, baseUrls).
  *
- * Tile URL do getTileURLString() tu sinh, nen zoomMax la gia tri TA KIEM so:
- * Esri World Imagery phuc vu toi z19 o nong thon VN (z20 tra ve ô xám), vi vay
- * lop nay chep max = 19 giong MAPNIK. OpenTopo lay theo source.maximumZoomLevel.
+ * max = 18 la ket qua DO TRUC TIEP 2026-10-21: z16-z18 tra anh that o moi diem
+ * thu, nhung z19-20 tra ve 2521 byte giong het nhau (md5 f27d9de7) = ô xám
+ * "khong co du lieu", nen khong duoc phep phat toi z19.
  */
 private object EsriWorldImageryTileSource : org.osmdroid.tileprovider.tilesource.XYTileSource(
-    "EsriWorldImagery", 0, 19, 256, ".jpg",
+    "EsriWorldImagery", 0, 18, 256, ".jpg",
     arrayOf("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/")
 ) {
     /** Esri dung thu tu {z}/{y}/{x} (row/col), khong giong {z}/{x}/{y} cua OSM. */
@@ -114,25 +111,62 @@ private object EsriWorldImageryTileSource : org.osmdroid.tileprovider.tilesource
 }
 
 /**
+ * Nen cua Google (`/vt/lyrs=...`) — nguồn CO ANH THAT SAU NHAT da do duoc.
+ *
+ * Do truc tiep 2026-10-21 tren 10 diem (nong thon Quang Ngai ngay tai toa do
+ * 14.45722/107.91763, Ha Noi, Sai Gon, Ha Giang, Da Nang, Hai Phong, rung
+ * Tay Nguyen, Tuyen Son, bien Phu Quy) voi `lyrs=y`:
+ *   z18 14 341 B · z19 13 178 B · z20 11 250 B · z21 7 669 B o nong thon Quang
+ *   Ngai, moi tile deu la anh mau that (256 gia tri byte khac nhau trong tile),
+ *   va chi co diem giữa bien Phu Quy tra ve 664 B xanh nhat quan = dung la nuoc.
+ * Khong co ky hieu ô xám nhu Esri, nen lop nay cho phep toi z21.
+ */
+private class GoogleTileSource(
+    keyName: String,
+    layers: String,
+    imageExt: String
+) : org.osmdroid.tileprovider.tilesource.XYTileSource(
+    keyName, 0, 21, 256, ".$imageExt",
+    arrayOf("https://mt1.google.com/vt/lyrs=$layers&")
+) {
+    /** Google dung query string, khong dung duong danh {z}/{x}/{y}. */
+    override fun getTileURLString(pMapTileIndex: Long): String = StringBuilder(getBaseUrl())
+        .append("x=").append(MapTileIndex.getX(pMapTileIndex))
+        .append("&y=").append(MapTileIndex.getY(pMapTileIndex))
+        .append("&z=").append(MapTileIndex.getZoom(pMapTileIndex))
+        .toString()
+}
+
+private val GoogleHybridSource = GoogleTileSource("GoogleHybrid", "y", "jpg")
+private val GoogleSatelliteSource = GoogleTileSource("GoogleSatellite", "s", "jpg")
+private val GoogleStreetSource = GoogleTileSource("GoogleStreet", "m", "png")
+
+/**
  * Các lớp bản đồ có thể chuyển đổi.
  *
- * DA LOAI 2 LOP CHET do do tile truc tiep 2026-10-19:
+ * DA LOAI CAC LOP CHET do do tile truc tiep 2026-10-19 va 2026-10-21:
  *  - HIKEBIKEMAP (tiles.wmflabs.org/hikebike) => HTTP 000, host ngung, trang tran.
  *  - OPEN_SEAMAP (tiles.openseamap.org/seamark) => 200 nhung 334 byte, chi la
  *    overlay bai ngam, dung lam nen thi gan nhu rong.
+ *  - TileSourceFactory.MAPNIK (tile.openstreetmap.org) => HTTP 000 moi lan do
+ *    hom nay, va chinh la nguyen nhan "map bi trang": o nong thon lop nay trong
+ *    gan nhu khong co noi dung, khong phai do doi do hoa.
  *
- * zoomCap: max zoom TIN CAY cua lop; 0 nghia la lay theo
+ * zoomCap: max zoom DA DO du lieu that cua lop; 0 nghia la lay theo
  * source.maximumZoomLevel (OpenTopo). maxZoom khop tile that
- * => khong con ô xám khi phong to o nong thon.
+ * => khong con ô xám khi phong to.
  */
 private enum class MapLayer(
     val label: String,
     val source: org.osmdroid.tileprovider.tilesource.ITileSource,
-    val zoomCap: Int = 0
+    val zoomCap: Int = 0,
+    val credit: String
 ) {
-    STREET("Đường phố", TileSourceFactory.MAPNIK, 19),
-    SATELLITE("Vệ tinh", EsriWorldImageryTileSource, 19),
-    TERRAIN("Địa hình", TileSourceFactory.OpenTopo)
+    HYBRID("Vệ tinh + tên đường", GoogleHybridSource, 21, "© Google, Maxar"),
+    SATELLITE("Vệ tinh", GoogleSatelliteSource, 21, "© Google, Maxar"),
+    STREET("Đường phố", GoogleStreetSource, 21, "© Google"),
+    ESRI("Vệ tinh Esri", EsriWorldImageryTileSource, 18, "© Esri, Maxar"),
+    TERRAIN("Địa hình", TileSourceFactory.OpenTopo, 0, "© OpenTopoMap")
 }
 
 /** An toàn khi danh sach lop ngan lai: mod theo size, KHONG bao gio index ngoai mang. */
@@ -219,12 +253,16 @@ fun GoogleMapsStudentLocationCard(
     val mapPrefs = remember {
         context.getSharedPreferences("map_view", android.content.Context.MODE_PRIVATE)
     }
-    var layerIndex by remember { mutableStateOf(mapPrefs.getInt("layer", MapLayer.SATELLITE.ordinal)) }
-    var zoomLevel by remember { mutableStateOf(mapPrefs.getFloat("zoom", 18f).toDouble()) }
+    // Key co ten moi ("layer2"/"zoom2"): ban cu luu "layer" = lop Duong pho cua
+    // OSM (host tile.openstreetmap.org khong tra ve HTTP nao), neu tai su dung
+    // thi nguyen van gia tri cu do => van thay ban trong. Khoi moi buoc moi
+    // nguoi dung mo bang lop "Vệ tinh + tên đường" z19.
+    var layerIndex by remember { mutableStateOf(mapPrefs.getInt("layer2", MapLayer.HYBRID.ordinal)) }
+    var zoomLevel by remember { mutableStateOf(mapPrefs.getFloat("zoom2", 19f).toDouble()) }
     LaunchedEffect(layerIndex, zoomLevel) {
         mapPrefs.edit()
-            .putInt("layer", layerIndex.coerceIn(0, MapLayer.entries.lastIndex))
-            .putFloat("zoom", zoomLevel.toFloat())
+            .putInt("layer2", layerIndex.coerceIn(0, MapLayer.entries.lastIndex))
+            .putFloat("zoom2", zoomLevel.toFloat())
             .apply()
     }
     var followMode by remember { mutableStateOf(true) }
@@ -410,9 +448,9 @@ fun GoogleMapsStudentLocationCard(
                             isTilesScaledToDpi = true
                             val initialLayer = layerAt(layerIndex)
                             setTileSource(initialLayer.source)
-                            // maxZoom lay theo DUNG tile source dang chon (khong phai
-                            // cung cap mac dinh): MAPNIK 19, Esri 19 (da chep xuong 19
-                            // vi z20 tra ve o xam), OpenTopo theo source.maximumZoomLevel.
+                            // maxZoom lay theo DUNG tile source dang chon va theo
+                            // MUC DA DO (nhom Google co that toi z21, Esri het o z19,
+                            // OpenTopo theo source.maximumZoomLevel).
                             maxZoomLevel = initialLayer.maxZoom()
                             minZoomLevel = 3.0
                             setMultiTouchControls(true)
@@ -624,7 +662,7 @@ fun GoogleMapsStudentLocationCard(
                                     append(String.format(Locale.US, "%.5f, %.5f", latitude, longitude))
                                     if (accuracyMeters > 0) append(" ±${accuracyMeters.toInt()}m")
                                     append(" • ${layerAt(layerIndex).label} z${"%.1f".format(zoomLevel)}")
-                                    if (layerAt(layerIndex) == MapLayer.SATELLITE) append(" • © Esri")
+                                    append(" • ${layerAt(layerIndex).credit}")
                                 },
                                 color = FacebookBlue, fontSize = 9.sp, fontWeight = FontWeight.Medium,
                                 maxLines = 1, overflow = TextOverflow.Ellipsis
