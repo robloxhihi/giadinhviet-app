@@ -104,8 +104,11 @@ fun LocationScreen(
         .filter { isValidFix(it.latitude, it.longitude) }
         .map { it.latitude to it.longitude }
 
+    // "Da o day" cua the ban do = thoi gian diem dung gan nhat, tinh ca phan
+    // duration da cong don trong luc ghi — neu khong no luon bat dau tu 0 sau
+    // moi lan ping du tre o nguyen cho do hang gio.
     val selfStayMillis = uiState.locationHistory.firstOrNull()?.let {
-        (System.currentTimeMillis() - it.timestamp).coerceAtLeast(0L)
+        (System.currentTimeMillis() - it.timestamp).coerceAtLeast(0L) + it.duration.coerceAtLeast(0L)
     } ?: -1L
 
     Column(
@@ -313,8 +316,10 @@ fun LocationScreen(
                     .sortedBy { it.timestamp }
                     .filter { isValidFix(it.latitude, it.longitude) }
                     .map { it.latitude to it.longitude }
-                val partnerStayMillis = partnerHistory.maxOfOrNull { it.timestamp }
-                    ?.let { (System.currentTimeMillis() - it).coerceAtLeast(0L) } ?: -1L
+                val partnerStayMillis = partnerHistory.maxByOrNull { it.timestamp }?.let { newest ->
+                    (System.currentTimeMillis() - newest.timestamp).coerceAtLeast(0L) +
+                        newest.duration.coerceAtLeast(0L)
+                } ?: -1L
 
                 GoogleMapsStudentLocationCard(
                     studentName = partnerName,
@@ -528,24 +533,34 @@ fun LocationScreen(
                 verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 uiState.locationHistory.forEachIndexed { index, entry ->
-                    // Danh sach cua pairing tron ping ca hai may: "thoi gian o day"
-                    // phai tinh den lan di chuyen tiep theo CUNG MOT MAY, khong phai
-                    // ping cua nguoi kia — neu khong so phut ao tang len dot bien.
-                    val prevSameOwner = uiState.locationHistory.take(index)
-                        .firstOrNull { it.userId == entry.userId }
-                    val endTimeMillis = prevSameOwner?.timestamp ?: currentEpochMillis
+                    // `timestamp` = ping CUOI CUNG cua diem dung, `duration` = tong
+                    // thoi gian o do da duoc cong don luc ghi, `timeStr` = gio ping
+                    // DAU TIEN. Lay (now - timestamp) lam "da o day" la hai so mau
+                    // thuan nhau tren cung mot dong ("Tu 21:33 den 23:14" di kem
+                    // "2p 13s"). Tinh dung ban chat cua diem dung.
+                    val newerSameOwner = uiState.locationHistory.take(index)
+                        .any { it.userId == entry.userId }
+                    val ongoing = !newerSameOwner
+                    val endTimeMillis = if (ongoing) currentEpochMillis else entry.timestamp
+                    val stayMillis = entry.duration.coerceAtLeast(0L) +
+                        if (ongoing) (currentEpochMillis - entry.timestamp).coerceAtLeast(0L) else 0L
 
-                    val elapsedSeconds = ((endTimeMillis - entry.timestamp) / 1000L).coerceAtLeast(0L)
+                    val elapsedSeconds = (stayMillis / 1000L).coerceAtLeast(0L)
                     val durationMins = elapsedSeconds / 60L
                     val durationSecs = elapsedSeconds % 60L
-                    val durationStr = if (durationMins > 0) "${durationMins}p ${durationSecs}s" else "${durationSecs}s"
+                    val durationHours = durationMins / 60L
+                    val durationStr = when {
+                        durationHours > 0 -> "${durationHours}g ${durationMins % 60}p"
+                        durationMins > 0 -> "${durationMins}p ${durationSecs}s"
+                        else -> "${durationSecs}s"
+                    }
 
                     vnCalendar.timeInMillis = endTimeMillis
                     val endH = vnCalendar.get(java.util.Calendar.HOUR_OF_DAY)
                     val endM = vnCalendar.get(java.util.Calendar.MINUTE)
                     val endS = vnCalendar.get(java.util.Calendar.SECOND)
-                    val endFormattedTime = prevSameOwner?.timeStr?.ifEmpty { null }
-                        ?: String.format(Locale.getDefault(), "%02d:%02d:%02d", endH, endM, endS)
+                    val endFormattedTime =
+                        String.format(Locale.getDefault(), "%02d:%02d:%02d", endH, endM, endS)
 
                     // Siêu nhỏ gọn (gấp 5 lần so với trước)
                     Card(
