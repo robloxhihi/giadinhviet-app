@@ -164,7 +164,8 @@ fun MainAppScreen(
                             onSelectEmotion = { emotion -> viewModel.setSelectedEmotion(emotion) },
                             onSendZenlyBump = { viewModel.sendZenlyBump(context) },
                             onClearMessages = { viewModel.clearMessages() },
-                            onOpenLocationHistory = { overlayScreen = "history" }
+                            onOpenLocationHistory = { overlayScreen = "history" },
+                            onOpenAiChat = { overlayScreen = "ai" }
                         )
                     }
                     1 -> LocationScreen(
@@ -258,6 +259,7 @@ fun MainAppScreen(
                         onBack = close,
                         onToggleLocationHistory = { enabled -> viewModel.toggleLocationHistory(enabled) }
                     )
+                    "ai" -> AiChatScreen(onBack = close)
                 }
             }
         }

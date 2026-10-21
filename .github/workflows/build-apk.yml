@@ -47,6 +47,30 @@ jobs:
         echo "sdk.dir=$ANDROID_HOME" > local.properties
         cat local.properties
 
+    # Khoa Gemini KHONG nam trong repo. Doi chiem cho ben duoi thanh chuoi that
+    # ngay tren may build, ghi vao `.env` — file nay da co trong .gitignore nen
+    # khong bao gio bi commit. Secrets plugin (app/build.gradle.kts) doc `.env`
+    # va sinh BuildConfig.GEMINI_API_KEY.
+    #
+    # Quy trinh cho nguoi dung: them Repository Secret ten `GEMINI_API_KEY`
+    # (Settings -> Secrets and variables -> Actions) thi APK build tu day co
+    # san khoa, mo tro ly AI len chat ngay. Khong co secret thi build van
+    # xanh: man hinh AI hoi khoa lan dau tien va luu rieng tren may.
+    #
+    # Step nay KHONG duoc in gia tri: chi dem do dai va so dong.
+    - name: Inject Gemini key from repo secret
+      env:
+        GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      run: |
+        if [ -z "$GEMINI_API_KEY" ]; then
+          echo "GEMINI_API_KEY=REPLACE_ME_WITH_YOUR_GEMINI_API_KEY" > .env
+          echo "::notice::Chua co repo secret GEMINI_API_KEY - APK se hoi khoa khi mo tro ly AI."
+        else
+          echo "GEMINI_API_KEY=$GEMINI_API_KEY" > .env
+          echo "::notice::Da bom khoa Gemini tu repo secret (do dai ${#GEMINI_API_KEY} ky tu)."
+        fi
+        echo "So dong trong .env: $(wc -l < .env)"
+
     - name: Setup Gradle
       uses: gradle/actions/setup-gradle@v3
 
@@ -106,4 +130,4 @@ jobs:
           Ban nay CO bo chan ung dung (AccessibilityService). Nguoi dung phai tu bat:
           Cai dat -> Tro nang tiep can -> Gia Dinh Viet.
 
-          Trang gioi thieu: https://robloxhihi.github.io/giadinhviet-web/
+          Trang gioi thieu: https://giadinhviet-9eud03puq7u.qoder.website

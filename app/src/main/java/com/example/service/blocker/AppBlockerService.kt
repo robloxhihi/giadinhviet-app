@@ -139,6 +139,11 @@ class AppBlockerService : AccessibilityService() {
         lastBlockedPackage = pkg
         lastBlockedAt = now
 
+        // Dem SANG TAI LAN that su bi chan, khong dem danh sach app bi chan.
+        // Bo dem nay la dau vao cua bang dieu tra gui cho tro ly AI, noi
+        // "hom nay con 3 lan mo app bi chan" phai la so that.
+        runCatching { com.example.data.ai.DailyUsageStore(applicationContext).recordBlockedAttempt(pkg) }
+
         // Ve Home truoc, sau do moi noi ly do.
         val wentHome = performGlobalAction(GLOBAL_ACTION_HOME)
         Log.i(TAG, "Chan $pkg (ve Home = $wentHome) — $reason")

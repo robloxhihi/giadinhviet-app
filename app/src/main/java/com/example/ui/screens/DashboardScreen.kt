@@ -23,6 +23,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.BatteryChargingFull
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.FamilyRestroom
@@ -71,6 +72,8 @@ import com.example.data.model.UserRole
 import com.example.ui.components.BentoCard
 import com.example.ui.components.BentoProgressBar
 import com.example.ui.components.BentoStatCard
+import com.example.ui.components.GlassCard
+import com.example.ui.components.GradientButton
 import com.example.ui.theme.FacebookBlue
 import com.example.ui.theme.NeonAmber
 import com.example.ui.theme.NeonCyan
@@ -101,7 +104,8 @@ fun DashboardScreen(
     onSelectEmotion: (EmotionTag) -> Unit,
     onSendZenlyBump: () -> Unit,
     onClearMessages: () -> Unit,
-    onOpenLocationHistory: () -> Unit = {}
+    onOpenLocationHistory: () -> Unit = {},
+    onOpenAiChat: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val scrollState = rememberScrollState()
@@ -306,6 +310,47 @@ fun DashboardScreen(
         // "Premium quick actions" da bi cat theo yeu cau bo tinh nang Lien ket
         // gia dinh: tile HANH HINH mo Location History van con duong di rieng
         // o tab Vi tri, nen man nay khong can dai ly nua.
+
+        // Cho dat tro ly AI o VUNG CHET cua bang dieu tra: no doc dung so lieu
+        // app do tren may nay, nen chi huu ich voi nguoi nam noi quy.
+        if (!isChild) {
+            GlassCard(
+                modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
+                glow = NeonViolet
+            ) {
+                Column {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Default.AutoAwesome,
+                            contentDescription = null,
+                            tint = NeonViolet,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Trợ lý gia đình",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = TextPrimary,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        text = "Số liệu dùng máy hôm nay được lưu trên máy này và gửi kèm mỗi câu hỏi, " +
+                                "nên AI trả lời theo con số thật chứ không phải lời khuyên chung.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = TextSecondary
+                    )
+                    Spacer(modifier = Modifier.height(10.dp))
+                    GradientButton(
+                        text = "Mở chat với trợ lý AI",
+                        icon = Icons.Default.AutoAwesome,
+                        onClick = onOpenAiChat,
+                        modifier = Modifier.fillMaxWidth().testTag("open_ai_chat_button")
+                    )
+                }
+            }
+        }
 
         // UNPAIRED STATE: Concise pairing cards (No mock demo data!)
         if (!isPaired) {

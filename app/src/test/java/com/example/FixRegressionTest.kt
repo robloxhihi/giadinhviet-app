@@ -248,4 +248,109 @@ class FixRegressionTest {
         assertTrue("Tran Esri da do la z18", shared.contains("val ESRI_MAX_ZOOM = 18"))
         assertTrue("Tran Google da do la z21", shared.contains("val GOOGLE_MAX_ZOOM = 21"))
     }
+
+    // ── Trợ lý AI + dữ liệu dùng máy hằng ngày (bản 22.0) ─────────────────
+
+    /**
+     * Key that cua Gemini do nguoi dung cung cap. APK tai tu GitHub Release la
+     * cong khai, nen mot chuoi trong classes.dex la mot no loi du dung thanh
+     * than. Bat cu chuoi nao trong repo (ma khong phai cua .env.example) deu
+     * vi pham quy tac "khong dang api token len repo".
+     */
+    @Test
+    fun noGeminiKeyIsEverCommitted() {
+        // Unit test chay voi working dir = app/, nen cay thu muc goc cua repo la
+        // cha no. Bo build va `.env` (cho chua key cua MAY duoc phep) khong tinh.
+        val repoRoot = File(".").absoluteFile.parentFile ?: error("Khong tim thay goc repo")
+        val scanned = repoRoot.walkTopDown()
+            .filter { it.isFile }
+            .filter { !it.invariantSeparatorsPath.contains("/build/") }
+            .filter { it.name != ".env" }
+            .filter { it.extension in setOf("kt", "kts", "yml", "yaml", "json", "xml", "gradle", "properties", "example") }
+            .toList()
+        val offenders = scanned.filter { file ->
+            val text = file.readText()
+            text.contains("AQ.Ab8RN6JI") ||
+                Regex("""GEMINI_API_KEY\s*=\s*([A-Za-z0-9_.\-]{25,})""")
+                    .find(text)
+                    ?.groupValues?.get(1)
+                    ?.let { !it.contains("REPLACE_ME") } == true
+        }
+        assertTrue("File co duong nhu chua key that: ${offenders.map { it.name } }", offenders.isEmpty())
+
+        val example = File(repoRoot, ".env.example")
+        assertTrue("Phai co .env.example de BuildConfig luoan sinh ra truong key", example.exists())
+        assertTrue(".env.example phai chi la chuoi chiem cho", example.readText().contains("REPLACE_ME"))
+        assertTrue(".env phai bi .gitignore", File(repoRoot, ".gitignore").readLines().map { it.trim() }.contains(".env"))
+    }
+
+    /** Build luon phai co truong BuildConfig, ke ca khi CI khong co repo secret. */
+    @Test
+    fun geminiKeyFallsBackToOnDeviceEntry() {
+        val repoRoot = File(".").absoluteFile.parentFile ?: error("Khong tim thay goc repo")
+        val key = projectFile("src/main/java/com/example/service/ai/AiKey.kt").readText()
+        assertTrue("Phai lay key tu BuildConfig khi nguoi dung chua nhap", key.contains("BuildConfig.GEMINI_API_KEY"))
+        assertTrue("Key nhap tay phai duoc uu tien", key.contains("entered(context).ifBlank"))
+        assertTrue("Phai tu choi chuoi chiem cho cua .env.example", key.contains("REPLACE_ME"))
+        assertTrue("Key luu trong SharedPreferences cua app, khong phai file cong khai",
+            key.contains("getSharedPreferences(PREFS, Context.MODE_PRIVATE)"))
+
+        val workflow = File(repoRoot, ".github/workflows/build-apk.yml").readText()
+        assertTrue("CI phai lay key tu repo secret", workflow.contains("secrets.GEMINI_API_KEY"))
+        assertTrue("CI phai ghi vao .env da bi ignore", workflow.contains("> .env"))
+        // `$` phai thoat: trong chuoi Kotlin "$GEMINI_API_KEY" la bieu thuc
+        // dai, se khong bien dich chu khong phai loi cua workflow.
+        assertTrue("CI khong duoc in gia tri key ra log", !workflow.contains("echo \"\$GEMINI_API_KEY\""))
+    }
+
+    /** Key trong URL de bi luu vao log mang; API cua Google nhan header. */
+    @Test
+    fun geminiClientSendsKeyInHeaderAndSurvivesOverload() {
+        val src = projectFile("src/main/java/com/example/service/ai/GeminiClient.kt").readText()
+        assertTrue("Phai dung header x-goog-api-key", src.contains("x-goog-api-key"))
+        assertTrue("Cam dua key vao query string", !src.contains("&key="))
+        assertTrue("Phai co model phong khi model chinh 503", src.contains("gemini-3.1-flash-lite"))
+        assertTrue("Model the he 3 an token nghi ngam, phai chan ngan sach", src.contains("\"thinkingBudget\" to 0"))
+        assertTrue("Phai chay tren IO thread", src.contains("withContext(Dispatchers.IO)"))
+    }
+
+    /**
+     * AI chi co gia tri khi no doc so lieu THAT. Bo dem phai cuoi theo epochDay
+     * (dem don cua StudyProgressStore) va phai cat lich su, neu khong thi sau
+     * mot thang prompt phung phit va so lieu cu ghi de so lieu moi.
+     */
+    @Test
+    fun dailyUsageRecordRollsByDayAndStaysBounded() {
+        val src = projectFile("src/main/java/com/example/data/ai/DailyUsageStore.kt").readText()
+        assertTrue("Phai quy ve theo ngay", src.contains("timeInMillis / 86_400_000L"))
+        assertTrue("Phai cat lich su qua cu", src.contains("MAX_HISTORY_DAYS"))
+        assertTrue("Phai luu so lan bi chan that", src.contains("recordBlockedAttempt"))
+        assertTrue("Bang dieu tra phai gui kem han muc phut", src.contains("han muc"))
+        assertTrue("Du lieu cua tre luu tren may, khong len Firestore",
+            !src.contains("FirebaseFirestore") && !src.contains("repository"))
+    }
+
+    /** Bo chan la noi duy nhat biet chac chan mot lan ve Home da xay ra. */
+    @Test
+    fun blockerCountsRealBlocksForTheDailyReport() {
+        val src = projectFile("src/main/java/com/example/service/blocker/AppBlockerService.kt").readText()
+        val block = src.substringAfter("lastBlockedPackage = pkg")
+        assertTrue("Phai dem dung luc chan that", block.contains("DailyUsageStore(applicationContext).recordBlockedAttempt(pkg)"))
+    }
+
+    /** Tro ly AI phai la man hinh that, co duong vao va co nguon so lieu. */
+    @Test
+    fun aiAssistantIsARealScreenWiredToRealData() {
+        val shell = projectFile("src/main/java/com/example/ui/screens/MainAppScreen.kt").readText()
+        assertTrue("Phai co overlay mo man hinh AI", shell.contains("\"ai\" -> AiChatScreen"))
+        assertTrue("Bang dieu tra phai day len ViewModel",
+            projectFile("src/main/java/com/example/ui/viewmodel/VesperaViewModel.kt")
+                .readText().contains("writeTodaySnapshot"))
+        val dashboard = projectFile("src/main/java/com/example/ui/screens/DashboardScreen.kt").readText()
+        assertTrue("Tab Tong quan phai co nut mo chat AI", dashboard.contains("onOpenAiChat"))
+        val chat = projectFile("src/main/java/com/example/ui/screens/AiChatScreen.kt").readText()
+        assertTrue("Man hinh AI phai gui kem so lieu cua may", chat.contains("summaryForAi()"))
+        assertTrue("Man hinh AI phai tu goi khi chua co key", chat.contains("AiKey.isUsable(key)"))
+        assertTrue("Lich su chat phai luu tren may", chat.contains("ChatHistoryStore(context)"))
+    }
 }

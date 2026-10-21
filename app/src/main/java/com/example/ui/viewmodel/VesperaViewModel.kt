@@ -26,7 +26,9 @@ import com.example.data.model.RuleAuditEntry
 import com.example.data.model.UsageSchedule
 import com.example.data.model.UserProfile
 import com.example.data.model.UserRole
+import com.example.data.ai.DailyUsageStore
 import com.example.data.model.hasRealFix
+import com.example.data.model.todayUsedMinutes
 import com.example.data.repository.VesperaRepository
 import com.example.service.blocker.BlockPolicy
 import com.example.service.blocker.ConsentPolicy
@@ -1154,6 +1156,28 @@ class VesperaViewModel(
                     detailedAppUsage = snapshot.detailed,
                     lastRealtimeSyncAt = System.currentTimeMillis()
                 )
+
+                // Luu bang dieu tra cua ngay hom nay. Chi ghi khi so lieu THUC
+                // SU doi (nhung dong o tren da chan truong hop khong doi),
+                // dung dem 10 giay mot lan xuong bo nho. Day la nguon duy nhat
+                // de tro ly AI tra loi dua tren so that.
+                val ctx = context ?: return@launch
+                val todayCal = java.util.Calendar.getInstance()
+                val pingsToday = cur.locationHistory.count { e ->
+                    val c = java.util.Calendar.getInstance().apply { timeInMillis = e.timestamp }
+                    c.get(java.util.Calendar.YEAR) == todayCal.get(java.util.Calendar.YEAR) &&
+                        c.get(java.util.Calendar.DAY_OF_YEAR) == todayCal.get(java.util.Calendar.DAY_OF_YEAR)
+                }
+                withContext(Dispatchers.IO) {
+                    DailyUsageStore(ctx).writeTodaySnapshot(
+                        usedMinutes = todayUsedMinutes(snapshot.detailed, snapshot.categories.sumOf { it.minutes }),
+                        quotaMinutes = _uiState.value.usageSchedule?.dailyTargetMinutes ?: 120,
+                        categories = snapshot.categories,
+                        detailed = snapshot.detailed,
+                        locationPings = pingsToday,
+                        emotion = _uiState.value.selectedEmotion?.label.orEmpty()
+                    )
+                }
             } finally {
                 usageRefreshInFlight = false
             }
