@@ -90,6 +90,9 @@ fun ChatScreen(
 ) {
     var messageText by remember { mutableStateOf("") }
     var filterStarredOnly by remember { mutableStateOf(false) }
+    // Loi khi bam "Gọi" luc chua ghep noi: hien tai cho, KHONG mo man "dang do
+    // chuong" nua — xem `canCall` ben duoi.
+    var showCallHint by remember { mutableStateOf(false) }
     val listState = rememberLazyListState()
     val context = LocalContext.current
 
@@ -167,6 +170,10 @@ fun ChatScreen(
     } else {
         uiState.activePairing?.childName.orEmpty().ifEmpty { "Học sinh" }
     }
+    // Goi WebRTC can mot phia ben kia that. Truoc day nut Goi van mo ca khi
+    // chua ghep noi (roomId tu che "room_<id cua minh>"), nen may tu hien "Dang
+    // do chuong" goi mot nguoi khong ton tai — dung kieu app hen ma lam that.
+    val canCall = uiState.activePairing != null
 
     val displayMessages = if (filterStarredOnly) {
         uiState.messages.filter { it.isStarred }
@@ -212,19 +219,29 @@ fun ChatScreen(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
+                // Nhat kiem tra duoc bang chung that, khong phai bang ten du lieu
+                // mac dinh. `uiState.isOnline` chi la ket luan cua NetworkMonitor
+                // (may co mang), chu chua bao gio xac nhan Firestore tra ve du
+                // lieu — vay nen cu ghi "Cloud Firestore" la noi ngan ho dang
+                // dong bo trong luc khong co gi duoc doc ca.
+                val statusColor = if (uiState.isOnline && canCall) NeonEmerald else NeonAmber
+                val statusText = when {
+                    !uiState.isOnline -> "Ngoại tuyến · tin nhắn chỉ gửi được khi có mạng"
+                    !canCall -> "Trực tuyến · chưa ghép nối thiết bị nào"
+                    else -> "Trực tuyến · đã ghép nối với $partnerName"
+                }
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(
                         modifier = Modifier
                             .size(8.dp)
                             .clip(CircleShape)
-                            .background(if (uiState.isOnline) NeonEmerald else NeonAmber)
+                            .background(statusColor)
                     )
                     Spacer(modifier = Modifier.width(6.dp))
                     Text(
-                        text = if (uiState.isOnline) "Đang hoạt động • Cloud Firestore"
-                        else "Ngoại tuyến (P2P Mesh / SMS)",
+                        text = statusText,
                         style = MaterialTheme.typography.labelSmall,
-                        color = if (uiState.isOnline) NeonEmerald else NeonAmber,
+                        color = statusColor,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
@@ -244,15 +261,18 @@ fun ChatScreen(
                         .background(SpaceCardElevated)
                         .border(1.dp, SpaceCardBorder, CircleShape)
                         .clickable {
-                            val roomId = uiState.activePairing?.id.orEmpty().ifEmpty { "room_${uiState.userProfile?.id}" }
-                            CallActivity.startCall(
-                                context = context,
-                                roomId = roomId,
-                                targetName = partnerName,
-                                isCaller = true,
-                                isVideo = false,
-                                isSos = false
-                            )
+                            if (canCall) {
+                                CallActivity.startCall(
+                                    context = context,
+                                    roomId = uiState.activePairing?.id.orEmpty(),
+                                    targetName = partnerName,
+                                    isCaller = true,
+                                    isVideo = false,
+                                    isSos = false
+                                )
+                            } else {
+                                showCallHint = true
+                            }
                         }
                         .testTag("voice_call_btn"),
                     contentAlignment = Alignment.Center
@@ -260,7 +280,7 @@ fun ChatScreen(
                     Icon(
                         imageVector = Icons.Default.Call,
                         contentDescription = "Gọi thoại",
-                        tint = NeonEmerald,
+                        tint = if (canCall) NeonEmerald else TextMuted,
                         modifier = Modifier.size(19.dp)
                     )
                 }
@@ -273,15 +293,18 @@ fun ChatScreen(
                         .background(SpaceCardElevated)
                         .border(1.dp, SpaceCardBorder, CircleShape)
                         .clickable {
-                            val roomId = uiState.activePairing?.id.orEmpty().ifEmpty { "room_${uiState.userProfile?.id}" }
-                            CallActivity.startCall(
-                                context = context,
-                                roomId = roomId,
-                                targetName = partnerName,
-                                isCaller = true,
-                                isVideo = true,
-                                isSos = false
-                            )
+                            if (canCall) {
+                                CallActivity.startCall(
+                                    context = context,
+                                    roomId = uiState.activePairing?.id.orEmpty(),
+                                    targetName = partnerName,
+                                    isCaller = true,
+                                    isVideo = true,
+                                    isSos = false
+                                )
+                            } else {
+                                showCallHint = true
+                            }
                         }
                         .testTag("video_call_btn"),
                     contentAlignment = Alignment.Center
@@ -289,7 +312,7 @@ fun ChatScreen(
                     Icon(
                         imageVector = Icons.Default.Videocam,
                         contentDescription = "Gọi video",
-                        tint = NeonCyan,
+                        tint = if (canCall) NeonCyan else TextMuted,
                         modifier = Modifier.size(20.dp)
                     )
                 }
@@ -312,6 +335,19 @@ fun ChatScreen(
                     )
                 }
             }
+        }
+
+        // Van de thu thong tin chu khong mo man "dang do chuong" gia.
+        if (showCallHint && !canCall) {
+            Text(
+                text = "Chưa ghép nối thiết bị nào nên chưa có ai để gọi. " +
+                    "Vào tab Tổng quan và nhập mã học sinh của máy con trước.",
+                style = MaterialTheme.typography.labelMedium,
+                color = NeonAmber,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp)
+            )
         }
 
         // BĂNG THÔNG BÁO MẠNG & KÊNH NGOẠI TUYẾN THÔNG MINH

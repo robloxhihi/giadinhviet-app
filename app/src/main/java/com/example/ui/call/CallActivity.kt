@@ -106,6 +106,18 @@ class CallActivity : ComponentActivity() {
     private var callStatusText by mutableStateOf("Đang kết nối...")
     private var isCallConnected by mutableStateOf(false)
     private var hasAnswered by mutableStateOf(false)
+
+    // "Đang đổ chuông…" vô hạn là một lời hứa khống: người bấm gọi không có
+    // cách nào phân biệt máy kia đang bận với tín hiệu chưa bao giờ đi tới
+    // (Firebase chưa có database, đối tác chưa mở app). Hết 30 giây thì nói
+    // thẳng nguyên nhân thay vì để màn hình giả vờ gọi mãi.
+    private val noAnswerHandler = Handler(Looper.getMainLooper())
+    private val noAnswerRunnable = Runnable {
+        if (!isCallConnected && !hasAnswered) {
+            callStatusText = "Không có máy nào trả lời sau 30 giây.\n" +
+                "Cuộc gọi chỉ nối được khi máy kia đã ghép nối và đang mở app."
+        }
+    }
     private var incomingOfferSdp: String? = null
 
     private val permissionLauncher = registerForActivityResult(
@@ -255,6 +267,7 @@ class CallActivity : ComponentActivity() {
 
         if (isCaller) {
             callStatusText = if (isSos) "🚨 Đang gọi SOS khẩn cấp..." else "Đang đổ chuông..."
+            noAnswerHandler.postDelayed(noAnswerRunnable, 30_000L)
             webRtcManager?.createOffer { offerDesc ->
                 signalingClient?.sendOffer(
                     description = offerDesc,
@@ -296,6 +309,7 @@ class CallActivity : ComponentActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
+        noAnswerHandler.removeCallbacks(noAnswerRunnable)
         webRtcManager?.cleanup()
         signalingClient?.cleanup()
         localRenderer?.release()

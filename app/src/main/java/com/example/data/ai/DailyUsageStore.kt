@@ -7,6 +7,7 @@ import com.squareup.moshi.Moshi
 import com.squareup.moshi.Types
 import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
 import java.util.Calendar
+import kotlin.math.roundToInt
 
 /**
  * Mot ngay ding lieu su dung may cua tre, luu trên MAY (SharedPreferences),
@@ -89,9 +90,13 @@ class DailyUsageStore(context: Context) {
                 .ifEmpty { "chưa ghi nhận ứng dụng nào" },
             categories = categories
                 .sortedByDescending { it.minutes }
+                .filter { it.minutes > 0 }
                 .take(5)
-                .joinToString(", ") { "${it.categoryName} ${it.percentage}%" }
-                .ifEmpty { "chưa có số phép (thiếu quyền truy cập sử dụng)" },
+                // `percentage` la ti le 0..1 (xem getTodayUsageCategories), chu
+                // khong phai 0..100 — loc that: bang so lieu gui cho AI tung ghi
+                // "Khac 1.0%" cho mot nhom dung 100% thoi gian.
+                .joinToString(", ") { "${it.categoryName} ${(it.percentage * 100f).roundToInt()}%" }
+                .ifEmpty { "chưa nhóm nào quá 1 phút" },
             locationPings = locationPings,
             emotion = emotion
         )

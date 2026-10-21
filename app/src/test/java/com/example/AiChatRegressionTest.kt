@@ -88,4 +88,62 @@ class AiChatRegressionTest {
         assertTrue("isCharging phai gan ten khoa tuyet doi", models.contains("@get:PropertyName(\"isCharging\")"))
         assertTrue("serverTimestamp phai co truong doc lai", models.contains("@get:ServerTimestamp"))
     }
+
+    /**
+     * Loc BlueStacks ban 25.0: cung man "Giờ dùng", the "Đã dùng hôm nay" doi
+     * 88 phut trong khi cot T4 cua bieu do bao 53. Nguyen nhan la bucket ngay
+     * cua UsageStatsManager chong len bucket "dang chay" — noi thi max moi
+     * package, noi thi cong don tung dong.
+     */
+    @Test
+    fun allMinuteCountersShareOneAggregation() {
+        val helper = source("src/main/java/com/example/service/TelemetryAndUsageHelper.kt")
+        assertTrue(
+            "chi mot lan truy van USAGE_STATS roi moi cho dung lai",
+            helper.split("UsageStatsManager.INTERVAL_DAILY,").size - 1 == 1
+        )
+        assertTrue("phai gop dong trung package", helper.contains("private fun usageRowsPerPackage"))
+        assertEquals(
+            "ca 3 cho dem phut cung phai qua usageRowsPerPackage",
+            4,
+            helper.split("usageRowsPerPackage(").size - 1
+        )
+    }
+
+    /** Nut Goi mo ca khi chua ghep noi: may tu bao "dang do chuong" goi mot nguoi khong ton tai. */
+    @Test
+    fun callButtonsRequireRealPairing() {
+        val chat = source("src/main/java/com/example/ui/screens/ChatScreen.kt")
+        assertTrue("phai kiem tra ghep noi that", chat.contains("val canCall = uiState.activePairing != null"))
+        assertFalse("khong duoc tu che roomId", chat.contains("room_\${uiState.userProfile?.id}"))
+        assertFalse(
+            "nhat kiem khong duoc doan Firestore dang chay khi chi co mang",
+            chat.contains("\"Đang hoạt động • Cloud Firestore\"")
+        )
+    }
+
+    /** Man hinh gọi phải tự nói hết giả sau 30 giây, không đổ chuông vô hạn. */
+    @Test
+    fun callScreenStopsPretendingToRing() {
+        val call = source("src/main/java/com/example/ui/call/CallActivity.kt")
+        assertTrue("phai hen gio cho phia goi", call.contains("postDelayed(noAnswerRunnable"))
+        assertTrue("phai huy hen khi man hinh dong", call.contains("removeCallbacks(noAnswerRunnable"))
+        assertTrue("phai noi ly do khong noi duoc", call.contains("Không có máy nào trả lời"))
+    }
+
+    /**
+     * `AppCategoryUsage.percentage` la ti le 0..1. Loc BlueStacks ban 25.0:
+     * bang so lieu ghi "Khac 1.0%" cho nhom dung 100% thoi gian, va man "Thấu
+     * hiểu thời gian" in "1%" kem muyen dai 1% — cung mot con so doc theo hai
+     * quy uoc khac nhau.
+     */
+    @Test
+    fun categoryRatioIsScaledBeforeBeingCalledPercent() {
+        val insights = source("src/main/java/com/example/ui/screens/InsightsScreen.kt")
+        val store = source("src/main/java/com/example/data/ai/DailyUsageStore.kt")
+        assertFalse("khong duoc in ti le 0..1 roi keu %", insights.contains("category.percentage.toInt()}%"))
+        assertTrue("phai nhan 100 truoc khi in", insights.contains("(category.percentage * 100f).roundToInt()"))
+        assertTrue("muyen phai di thang ti le 0..1", insights.contains("progress = category.percentage"))
+        assertTrue("bang so lieu cho AI cung phai nhan 100", store.contains("(it.percentage * 100f).roundToInt()"))
+    }
 }

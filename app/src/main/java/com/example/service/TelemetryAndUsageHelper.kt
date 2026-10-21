@@ -134,20 +134,7 @@ class TelemetryAndUsageHelper(private val context: Context) {
         val usageStatsManager = context.getSystemService(Context.USAGE_STATS_SERVICE) as? UsageStatsManager
             ?: return emptyList()
 
-        val calendar = Calendar.getInstance().apply {
-            set(Calendar.HOUR_OF_DAY, 0)
-            set(Calendar.MINUTE, 0)
-            set(Calendar.SECOND, 0)
-            set(Calendar.MILLISECOND, 0)
-        }
-        val startTime = calendar.timeInMillis
-        val endTime = System.currentTimeMillis()
-
-        val stats: List<UsageStats> = usageStatsManager.queryUsageStats(
-            UsageStatsManager.INTERVAL_DAILY,
-            startTime,
-            endTime
-        ) ?: emptyList()
+        val stats = usageRowsPerPackage(usageStatsManager, todayStartMillis(), System.currentTimeMillis())
 
         var socialMinutes = 0
         var studyMinutes = 0
@@ -204,20 +191,7 @@ class TelemetryAndUsageHelper(private val context: Context) {
         val usageStatsManager = context.getSystemService(Context.USAGE_STATS_SERVICE) as? UsageStatsManager
             ?: return emptyList()
 
-        val calendar = Calendar.getInstance().apply {
-            set(Calendar.HOUR_OF_DAY, 0)
-            set(Calendar.MINUTE, 0)
-            set(Calendar.SECOND, 0)
-            set(Calendar.MILLISECOND, 0)
-        }
-        val startTime = calendar.timeInMillis
-        val endTime = System.currentTimeMillis()
-
-        val stats: List<UsageStats> = usageStatsManager.queryUsageStats(
-            UsageStatsManager.INTERVAL_DAILY,
-            startTime,
-            endTime
-        ) ?: emptyList()
+        val stats = usageRowsPerPackage(usageStatsManager, todayStartMillis(), System.currentTimeMillis())
 
         val pm = context.packageManager
         val list = mutableListOf<com.example.data.model.DetailedAppUsage>()
@@ -309,23 +283,47 @@ class TelemetryAndUsageHelper(private val context: Context) {
         }
     }
 
+    /** Nửa đêm hôm nay — mốc chung cho mọi con số "hom nay" trong app. */
+    private fun todayStartMillis(): Long = Calendar.getInstance().apply {
+        set(Calendar.HOUR_OF_DAY, 0)
+        set(Calendar.MINUTE, 0)
+        set(Calendar.SECOND, 0)
+        set(Calendar.MILLISECOND, 0)
+    }.timeInMillis
+
     /**
-     * Cong so phut cua cac bucket khong trung lap nhau trong [from, to).
-     * Bucket cung package co the xuat hien nhieu lan (bucket ngay + bucket
-     * dang chay), nen lay gia tri lon nhat moi package thay vi cong don.
+     * Dung mot dong DUY NHAT cho moi package trong [from, to).
+     *
+     * `queryUsageStats(INTERVAL_DAILY)` tra ve bucket ngay CHONG LEN bucket
+     * "dang chay" cua cung mot app; cong don moi dong la tinh hai lan. Loc
+     * that tren BlueStacks 2026-10-21: the "Da dung hom nay" doi 88 phut trong
+     * khi bieu do tuan cung ngay bao 53 — hai con số cung mot thuc te vi chung
+     * di qua hai phep tinh khac nhau. Gio ca hai nguon deu goi qua ham nay.
      */
-    private fun minutesInWindow(um: UsageStatsManager, from: Long, to: Long): Int {
+    private fun usageRowsPerPackage(um: UsageStatsManager, from: Long, to: Long): List<UsageStats> {
         val stats = runCatching {
             um.queryUsageStats(UsageStatsManager.INTERVAL_DAILY, from, to)
-        }.getOrNull() ?: return 0
-        val perPackage = HashMap<String, Long>()
+        }.getOrNull() ?: return emptyList()
+        val bestByPackage = HashMap<String, UsageStats>()
         for (s in stats) {
-            if (s.lastTimeUsed in from until to) {
-                perPackage[s.packageName] = maxOf(perPackage[s.packageName] ?: 0L, s.totalTimeInForeground)
+            if (s.lastTimeUsed !in from until to) continue
+            val kept = bestByPackage[s.packageName]
+            if (kept == null || s.totalTimeInForeground > kept.totalTimeInForeground) {
+                bestByPackage[s.packageName] = s
             }
         }
-        return (perPackage.values.sum() / 60_000L).toInt()
+        return bestByPackage.values.toList()
     }
+
+    /**
+     * So phut dung may trong [from, to). Cat le tung app va bo app duoi 1 phut
+     * — DUNG phep tinh cua `getDetailedAppUsageList()` de the "Da dung hom
+     * nay" va cot T4 tren bieu do khong bao hai so khac nhau cung mot ngay.
+     */
+    private fun minutesInWindow(um: UsageStatsManager, from: Long, to: Long): Int =
+        usageRowsPerPackage(um, from, to)
+            .filter { it.totalTimeInForeground >= 60_000L }
+            .sumOf { (it.totalTimeInForeground / 60_000L).toInt() }
 
     /**
      * Get current battery percentage & charging status

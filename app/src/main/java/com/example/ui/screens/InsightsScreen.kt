@@ -56,6 +56,7 @@ import com.example.ui.theme.TextMuted
 import com.example.ui.theme.TextPrimary
 import com.example.ui.theme.TextSecondary
 import com.example.ui.viewmodel.VesperaUiState
+import kotlin.math.roundToInt
 
 /**
  * "Thấu hiểu thời gian" — screen-time intelligence.
@@ -271,14 +272,16 @@ fun InsightsScreen(
                             )
                             Spacer(modifier = Modifier.width(10.dp))
                             Text(
-                                text = "${category.percentage.toInt()}%",
+                                // `percentage` la ti le 0..1 — truoc day in thang
+                                // ra keu "%" nen nhom dung 100% thi may ghi "1%".
+                                text = "${(category.percentage * 100f).roundToInt()}%",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = tint,
                                 fontWeight = FontWeight.Bold
                             )
                         }
                         GradientProgressBar(
-                            progress = (category.percentage / 100f),
+                            progress = category.percentage,
                             colors = listOf(tint, tint.copy(alpha = 0.55f)),
                             height = 6.dp
                         )
