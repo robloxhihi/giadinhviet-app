@@ -146,4 +146,122 @@ class AiChatRegressionTest {
         assertTrue("muyen phai di thang ti le 0..1", insights.contains("progress = category.percentage"))
         assertTrue("bang so lieu cho AI cung phai nhan 100", store.contains("(it.percentage * 100f).roundToInt()"))
     }
+
+    /**
+     * Van that ghi lai tu BlueStacks ban 26.0. Model khong dam dong nhu hen,
+     * nen neu khong tach theo dau `:` thi nguoi dung thay mot dam chu cung
+     * mau trong bong 320dp — "noi dung duoc ma bo cuc khong muon doc".
+     */
+    private val realAnswer = """
+        Dựa trên số liệu hôm nay, có thể thấy con chưa bị vượt hạn mức.
+
+        **Nguyên nhân:**
+        - Bộ chặn chưa được kích hoạt với ứng dụng nào.
+        - Chưa có dữ liệu về nhóm Học tập.
+
+        **Giải pháp:**
+        1. **Điều chỉnh hạn mức:** Giữ nguyên hạn mức 120 phút.
+        2. Kiểm tra ứng dụng: Mở ứng dụng Gia Đình Việt trên máy con.
+        3. Thống nhất lịch dùng máy: Cùng con nhìn lại hạn mức 120 phút/ngày.
+        4. Theo dõi đối chiếu: Quan sát thêm số liệu 2-3 ngày tới.
+
+        **Lời khuyên cho cha mẹ:** Nên khen ngợi khi con tuân thủ.
+    """.trimIndent()
+
+    @Test
+    fun numberedAnswerBecomesReadableBlocks() {
+        val blocks = AiMarkdown.blocks(realAnswer)
+        val steps = blocks.filter { it.kind == AiMarkdown.Kind.STEP }
+        assertEquals("bon buoc phai bon khoai rieng", 4, steps.size)
+        assertEquals(listOf("1", "2", "3", "4"), steps.map { it.marker })
+        assertEquals(
+            "nhan phai tach khoi noi dung, ca khi model khong dam",
+            listOf("Điều chỉnh hạn mức", "Kiểm tra ứng dụng", "Thống nhất lịch dùng máy", "Theo dõi đối chiếu"),
+            steps.map { it.label }
+        )
+        assertTrue(
+            "noi dung khong duoc con dem theo nhan",
+            steps.all { it.body.isNotEmpty() && !it.body.contains(it.label) }
+        )
+        assertEquals(
+            "gach dau dong cung phai la khoai rieng",
+            2,
+            blocks.count { it.kind == AiMarkdown.Kind.BULLET }
+        )
+        assertTrue(
+            "nhan don doc lap (Nguyên nhân:) van duoc nhan ra",
+            blocks.any { it.label == "Nguyên nhân" && it.body.isEmpty() }
+        )
+    }
+
+    /** Doan van thuong khong duoc bi cat doi o dau `:` — chi danh sach moi split. */
+    @Test
+    fun plainProseIsNotSplitOnItsColon() {
+        val only = AiMarkdown.blocks("Lưu ý: hôm nay con học muộn nên dùng máy trễ.")
+        assertEquals(1, only.size)
+        assertEquals("", only[0].label)
+        assertEquals("Lưu ý: hôm nay con học muộn nên dùng máy trễ.", only[0].body)
+    }
+
+    /**
+     * Do tren BlueStacks ban 26.0: the dinh vi ghi "14.45722, 107.91763 ±1m"
+     * va ke map z19 trong khi chua ghep noi voi may nao. Dien thoai khong do
+     * duoc ±1 m; so thap phan in ra khong duoc mong hon sai so cua no.
+     */
+    @Test
+    fun gpsPrecisionIsCappedByReportedAccuracy() {
+        assertEquals("±1m khong phai do dien thoai", 3f, com.example.service.map.FixPrecision.honestAccuracyMeters(1f))
+        assertEquals("khong ro sai so thi dung ±100m", 100f, com.example.service.map.FixPrecision.honestAccuracyMeters(0f))
+        assertEquals("sai so that thi giu nguyen", 42f, com.example.service.map.FixPrecision.honestAccuracyMeters(42f))
+
+        assertEquals(5, com.example.service.map.FixPrecision.decimalsForAccuracy(1f))
+        assertEquals(3, com.example.service.map.FixPrecision.decimalsForAccuracy(100f))
+        assertEquals(2, com.example.service.map.FixPrecision.decimalsForAccuracy(1000f))
+        assertEquals(
+            "±100m thi khong duoc in 5 chu so thap phan",
+            "14.457, 107.918",
+            com.example.service.map.FixPrecision.formatCoordinates(14.45722, 107.91763, 100f)
+        )
+
+        assertTrue(
+            "sai so ±100m khong duoc phep ngi z19",
+            com.example.service.map.FixPrecision.maxZoomForAccuracy(100f) <= 16.0
+        )
+        assertTrue(
+            "zoom phai giam dan khi sai so tang",
+            com.example.service.map.FixPrecision.maxZoomForAccuracy(5f) >
+                com.example.service.map.FixPrecision.maxZoomForAccuracy(500f)
+        )
+
+        val label = com.example.service.map.FixPrecision.accuracyLabel(1f)
+        assertFalse("khong duoc in ro rang '±1 m' nhu mot khang dinh", label == "±1 m")
+        assertTrue("phai noi vi sao con so bi doi", label.contains("dưới ngưỡng"))
+    }
+
+    /** Map card phai an theo FixPrecision, khong in toa do/ sai so tho nua. */
+    @Test
+    fun mapCardStopsQuotingRawSensorPrecision() {
+        val card = source("src/main/java/com/example/ui/components/GoogleMapsStudentLocationCard.kt")
+        assertTrue("toa do phai qua FixPrecision", card.contains("FixPrecision.formatCoordinates("))
+        assertTrue("sai so phai qua FixPrecision", card.contains("FixPrecision.accuracyLabel("))
+        assertTrue("vong tron dung sai so trung thuc", card.contains("honestAcc.toDouble()"))
+        assertTrue("maxZoom phai bi chan theo sai so", card.contains("coerceAtMost(zoomCeiling)"))
+        assertFalse(
+            "khong duoc con day `±<so tho>m` ra man hinh",
+            card.contains("±${'$'}{accuracyMeters.toInt()}m")
+        )
+        assertFalse(
+            "khong duoc in dinh toa do 5 chu so co dinh",
+            card.contains("\"%.5f, %.5f\"")
+        )
+    }
+
+    /** cau lenh he phai noi ro khuon trinh bay, neu khong model lai tra 1 khoai. */
+    @Test
+    fun aiIsToldToAnswerInShortLabelledLines() {
+        val client = source("src/main/java/com/example/service/ai/GeminiClient.kt")
+        assertTrue("phai yeu cau 3 khoi co nhan", client.contains("**Nguyên nhân:**"))
+        assertTrue("moi y mot dong", client.contains("Mỗi ý nằm trọn trong MỘT dòng"))
+        assertTrue("cam emoji vi bong chat khong co cho", client.contains("không emoji"))
+    }
 }

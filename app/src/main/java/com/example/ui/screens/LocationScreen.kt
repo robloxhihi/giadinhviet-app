@@ -129,7 +129,7 @@ fun LocationScreen(
                     fontWeight = FontWeight.Bold
                 )
                 Text(
-                    text = if (isPaired) "Bản đồ thời gian thực • Vệ tinh" else "Vị trí cảm biến GPS thực tế",
+                    text = if (isPaired) "Theo dõi máy đã ghép nối" else "Chưa ghép nối — đây là vị trí của CHÍNH máy bạn",
                     style = MaterialTheme.typography.bodySmall,
                     color = TextSecondary
                 )
@@ -239,7 +239,7 @@ fun LocationScreen(
             val displayChg = activeLoc?.isCharging ?: false
 
             Text(
-                text = "Vị trí & địa chỉ thực tế (thiết bị này)",
+                text = "Vị trí máy này — chưa có máy nào đang được theo dõi",
                 style = MaterialTheme.typography.labelSmall,
                 color = FacebookBlue,
                 fontWeight = FontWeight.Bold,

@@ -1,6 +1,7 @@
 package com.example.ui.screens
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -11,9 +12,11 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -36,6 +39,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
@@ -221,12 +225,9 @@ fun AiChatScreen(
                 )
                 if (showStats) {
                     Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = stats,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = TextSecondary,
-                        lineHeight = 18.sp
-                    )
+                    // Cung mot kieu danh cho nhu cau tra loi: gach dau dong thang
+                    // phan loai, nhan dem mau de phat hien ngay thieu du lieu.
+                    AiAnswerBody(text = stats, ink = TextSecondary, accent = Premium.cyan)
                 }
             }
         }
@@ -283,7 +284,13 @@ fun AiChatScreen(
                     ) {
                         Box(
                             modifier = Modifier
-                                .widthIn(max = 320.dp)
+                                // Cau tra loi dai 15-20 dong. Bon cho 320dp khiem
+                                // khach o goi trai khien no trang mot cot doc
+                                // khong doc duoc; chi bong cua nguoi dung giu ngan.
+                                .then(
+                                    if (fromModel) Modifier.fillMaxWidth(0.97f)
+                                    else Modifier.widthIn(max = 340.dp)
+                                )
                                 // CA hai bong deu OPAQUE. nen trong suot de len
                                 // anh trang dem se tao cam giac "chong nen" ma
                                 // nguoi dung da phe phan o cac ban truoc.
@@ -296,12 +303,21 @@ fun AiChatScreen(
                                         bottomEnd = 20.dp
                                     )
                                 )
-                                .padding(12.dp)
+                                .padding(horizontal = 14.dp, vertical = 12.dp)
                         ) {
-                            AiBubbleText(
-                                text = turn.text,
-                                color = if (fromModel) TextPrimary else Color.White
-                            )
+                            if (fromModel) {
+                                AiAnswerBody(
+                                    text = turn.text,
+                                    ink = TextPrimary,
+                                    accent = Premium.cyan
+                                )
+                            } else {
+                                AiInlineText(
+                                    text = turn.text,
+                                    color = Color.White,
+                                    boldColor = Color.White
+                                )
+                            }
                         }
                     }
                 }
@@ -386,18 +402,94 @@ fun AiChatScreen(
 }
 
 /**
- * Mot bong bong chat: `**...**` cua Gemini in thanh chu dam, gach dau dong
- * `-` thanh `• `. Khong dung WebView hay thu vien markdown — doan van bang
- * chuoi ngan va kiem soat duoc font la dieu nguoi dung yeu cau.
+ * Mot bong bong chat cua tro ly, tach thanh tung khoai co nhan rieng.
+ *
+ * Model tra ve `1. **Kiểm tra ứng dụng:** Mở app…` — nem thang chuoi vao `Text`
+ * thi ra mot dam chu cung mau, cung chen chuc, khong diem nao de mat dua vao
+ * (nguoi dung ban 26.0: "noi dung duoc ma bo cuc khong muon doc"). O day moi
+ * buoc co so tron danh o, nhan dam mau accent nam tren, noi dung nam duoi va
+ * cac khoai cach nhau that.
  */
 @Composable
-private fun AiBubbleText(text: String, color: Color) {
+private fun AiAnswerBody(text: String, ink: Color, accent: Color) {
+    val blocks = remember(text) { AiMarkdown.blocks(text) }
+    Column(verticalArrangement = Arrangement.spacedBy(11.dp)) {
+        blocks.forEach { block ->
+            when (block.kind) {
+                AiMarkdown.Kind.STEP -> Row(verticalAlignment = Alignment.Top) {
+                    Box(
+                        modifier = Modifier
+                            .size(22.dp)
+                            .clip(CircleShape)
+                            .background(accent.copy(alpha = 0.16f))
+                            .border(1.dp, accent, CircleShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = block.marker,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = accent
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(10.dp))
+                    AiBlockCopy(block, ink, accent, Modifier.weight(1f))
+                }
+                AiMarkdown.Kind.BULLET -> Row(verticalAlignment = Alignment.Top) {
+                    Text(
+                        text = "•",
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = accent,
+                        modifier = Modifier.width(16.dp)
+                    )
+                    AiBlockCopy(block, ink, accent, Modifier.weight(1f))
+                }
+                AiMarkdown.Kind.PARAGRAPH -> AiBlockCopy(block, ink, accent, Modifier.fillMaxWidth())
+            }
+        }
+    }
+}
+
+@Composable
+private fun AiBlockCopy(
+    block: AiMarkdown.Block,
+    ink: Color,
+    accent: Color,
+    modifier: Modifier = Modifier
+) {
+    Column(modifier = modifier) {
+        if (block.label.isNotEmpty()) {
+            Text(
+                text = block.label,
+                fontSize = 13.5.sp,
+                fontWeight = FontWeight.Bold,
+                color = accent,
+                lineHeight = 18.sp
+            )
+            if (block.body.isNotEmpty()) Spacer(modifier = Modifier.height(2.dp))
+        }
+        if (block.body.isNotEmpty()) {
+            AiInlineText(
+                text = block.body,
+                color = if (block.label.isEmpty()) ink else TextSecondary,
+                boldColor = ink
+            )
+        }
+    }
+}
+
+/** Doan van ngan, giu `**...` cua model thanh chu dam thay vi hien nguyen van. */
+@Composable
+private fun AiInlineText(text: String, color: Color, boldColor: Color) {
     val body = remember(text) {
         val parsed = AiMarkdown.segments(AiMarkdown.normalize(text))
         buildAnnotatedString {
             parsed.forEach { seg ->
                 if (seg.bold) {
-                    withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(seg.text) }
+                    withStyle(SpanStyle(fontWeight = FontWeight.Bold, color = boldColor)) {
+                        append(seg.text)
+                    }
                 } else {
                     append(seg.text)
                 }
@@ -408,6 +500,6 @@ private fun AiBubbleText(text: String, color: Color) {
         text = body,
         style = MaterialTheme.typography.bodyMedium,
         color = color,
-        lineHeight = 20.sp
+        lineHeight = 21.sp
     )
 }

@@ -63,6 +63,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.example.service.AddressHelper
+import com.example.service.map.FixPrecision
 import com.example.service.map.MapTileSources
 import com.example.ui.theme.FacebookBlue
 import com.example.ui.theme.NeonAmber
@@ -208,6 +209,17 @@ fun GoogleMapsStudentLocationCard(
             .putFloat("zoom2", zoomLevel.toFloat())
             .apply()
     }
+
+    // ============ DO CHINH XAC THAT DUOC PHEP NOI ============
+    // Sai so camera bao co duoi 3 m thi khong tin; toa do in ra va vong tron
+    // ve deu lay theo `honestAcc`, khong lay theo con so tho. Zoom bi chan o
+    // muc ma mot pixel con mang noi dung — phong to hon nua chi phong to anh
+    // nen, khong them chi tiet that (luc 26.0 map nguyen z19 "±1m" tren may
+    // gia lap chua ghep noi voi ai).
+    val honestAcc = FixPrecision.honestAccuracyMeters(accuracyMeters)
+    val zoomCeiling = FixPrecision.maxZoomForAccuracy(honestAcc)
+    val usableZoom = zoomLevel.coerceAtMost(zoomCeiling)
+    val zoomWasCapped = zoomLevel > zoomCeiling + 0.01
     var followMode by remember { mutableStateOf(true) }
     var mapViewRef by remember { mutableStateOf<org.osmdroid.views.MapView?>(null) }
 
@@ -394,11 +406,11 @@ fun GoogleMapsStudentLocationCard(
                             // maxZoom lay theo DUNG tile source dang chon va theo
                             // MUC DA DO (nhom Google co that toi z21, Esri het o z19,
                             // OpenTopo theo source.maximumZoomLevel).
-                            maxZoomLevel = initialLayer.maxZoom()
+                            maxZoomLevel = initialLayer.maxZoom().coerceAtMost(zoomCeiling)
                             minZoomLevel = 3.0
                             setMultiTouchControls(true)
                             setBuiltInZoomControls(false)
-                            controller.setZoom(zoomLevel.coerceAtMost(initialLayer.maxZoom()))
+                            controller.setZoom(usableZoom.coerceAtMost(initialLayer.maxZoom()))
                             controller.setCenter(org.osmdroid.util.GeoPoint(latitude, longitude))
 
                             overlays.add(
@@ -446,7 +458,10 @@ fun GoogleMapsStudentLocationCard(
                         val targetSource = layer.source
                         if (map.tileProvider.tileSource != targetSource) map.setTileSource(targetSource)
 
-                        val sourceMax = layer.maxZoom()
+                        // sourceMax PHAI di qua chan tuong sai so, neu khong vong
+                        // update nay se dat lai maxZoomLevel = 21 sau moi lan
+                        // recomposition va pha net che do cua o tren.
+                        val sourceMax = layer.maxZoom().coerceAtMost(zoomCeiling)
                         if (map.maxZoomLevel != sourceMax) map.maxZoomLevel = sourceMax
                         var currentZoom = map.zoomLevelDouble
                         if (currentZoom > sourceMax) {
@@ -471,9 +486,9 @@ fun GoogleMapsStudentLocationCard(
                         val dotRadius = (10.0 * metersPerPixel).coerceIn(3.0, 60.0)
                         val haloRadius = (22.0 * metersPerPixel).coerceIn(8.0, 150.0)
 
-                        // Vòng độ chính xác
-                        val accRadius = (if (accuracyMeters > 3f) accuracyMeters else 25f)
-                            .toDouble().coerceAtLeast(haloRadius)
+                        // Vòng độ chính xác — ve theo sai so DA duoc do lai o
+                        // FixPrecision, khong theo con so tho cua nha cung cap.
+                        val accRadius = honestAcc.toDouble().coerceAtLeast(haloRadius)
                         map.overlays.add(org.osmdroid.views.overlay.Polygon(map).apply {
                             points = org.osmdroid.views.overlay.Polygon.pointsAsCircle(point, accRadius)
                             fillPaint.color = android.graphics.Color.argb(38, 0, 132, 255)
@@ -601,15 +616,26 @@ fun GoogleMapsStudentLocationCard(
                         }
                         if (showMap) {
                             Text(
-                                text = buildString {
-                                    append(String.format(Locale.US, "%.5f, %.5f", latitude, longitude))
-                                    if (accuracyMeters > 0) append(" ±${accuracyMeters.toInt()}m")
-                                    append(" • ${layerAt(layerIndex).label} z${"%.1f".format(zoomLevel)}")
-                                    append(" • ${layerAt(layerIndex).credit}")
-                                },
+                                text = "${FixPrecision.formatCoordinates(latitude, longitude, honestAcc)}" +
+                                    " • ${FixPrecision.accuracyLabel(accuracyMeters)}",
                                 color = FacebookBlue, fontSize = 9.sp, fontWeight = FontWeight.Medium,
                                 maxLines = 1, overflow = TextOverflow.Ellipsis
                             )
+                            Text(
+                                text = "${layerAt(layerIndex).label} " +
+                                    "z${String.format(Locale.US, "%.1f", usableZoom)}" +
+                                    " • ${layerAt(layerIndex).credit}",
+                                color = TextMuted, fontSize = 9.sp,
+                                maxLines = 1, overflow = TextOverflow.Ellipsis
+                            )
+                            if (zoomWasCapped) {
+                                Text(
+                                    "⚠️ Đã hạ zoom từ z${String.format(Locale.US, "%.0f", zoomLevel)}" +
+                                        " xuống z${String.format(Locale.US, "%.1f", zoomCeiling)}" +
+                                        " vì sai số ±${honestAcc.toInt()} m: phóng to hơn chỉ nở ảnh, không thêm chi tiết thật.",
+                                    color = NeonAmber, fontSize = 9.sp, fontWeight = FontWeight.SemiBold
+                                )
+                            }
                             if (headingDegrees != null) {
                                 Text(
                                     "🧭 Hướng ${compassLabel(headingDegrees)} (${headingDegrees.toInt()}°)",
@@ -665,7 +691,7 @@ fun GoogleMapsStudentLocationCard(
                 mapViewRef?.let { m ->
                     val layer = layerAt(next)
                     m.setTileSource(layer.source)
-                    val mx = layer.maxZoom()
+                    val mx = layer.maxZoom().coerceAtMost(zoomCeiling)
                     m.maxZoomLevel = mx
                     if (m.zoomLevelDouble > mx) {
                         m.controller.setZoom(mx)
@@ -695,9 +721,10 @@ fun GoogleMapsStudentLocationCard(
                 MapControlButton(Icons.Default.MyLocation, "Căn giữa", FacebookBlue) {
                     val p = org.osmdroid.util.GeoPoint(latitude, longitude)
                     mapViewRef?.let { m ->
+                        val target = 18.0.coerceAtMost(zoomCeiling).coerceAtMost(layerAt(layerIndex).maxZoom())
+                        m.controller.setZoom(target)
                         m.controller.animateTo(p)
-                        m.controller.setZoom(18.0)
-                        zoomLevel = 18.0
+                        zoomLevel = target
                     }
                     followAnchor[0] = latitude to longitude
                     followMode = true
