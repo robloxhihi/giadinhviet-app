@@ -83,7 +83,7 @@ class DailyUsageStore(context: Context) {
             categories = categories
                 .sortedByDescending { it.minutes }
                 .take(5)
-                .joinToString(", ") { "${it.name} ${it.percentage}%" }
+                .joinToString(", ") { "${it.categoryName} ${it.percentage}%" }
                 .ifEmpty { "chua co so phep (thieu quyen truy cap su dung)" },
             locationPings = locationPings,
             emotion = emotion
