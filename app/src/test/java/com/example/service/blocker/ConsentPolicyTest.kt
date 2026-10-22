@@ -245,7 +245,10 @@ class ConsentPolicyTest {
             agreed(blocked = listOf(tiktok, game), reminderOnly = true)
         )
         assertTrue("Noi 'chan that' trong khi may chi nhac: $text", text.contains("chưa chặn thật"))
-        assertFalse("Van ghi la chan that: $text", text.contains("chặn thật"))
+        assertFalse(
+            "Vẫn mở đầu bằng 'chặn thật': $text",
+            text.startsWith("chặn thật")
+        )
     }
 
     @Test
