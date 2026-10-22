@@ -493,4 +493,19 @@ class FixRegressionTest {
         assertTrue("Phai co ham tinh phut theo tung ngay", helper.contains("fun getWeeklyUsageMinutes()"))
         assertTrue("Phai truy van UsageStats tung ngay", helper.contains("minutesInWindow(um, from, to)"))
     }
+
+    /**
+     * tren BlueStacks 1920x1080/240dpi: hang soan tin cua Chat nam 95..139 dp
+     * tu day man hinh, qua cau SOS noi (padding 104 dp) nam 104..154 dp — hai
+     * choong de len nhau. Cham nut "Gui" la mo bang cuu nan va tin nhan khong
+     * bao gio di. Tab Chat phai nhac qua cau len cao hon hang soan tin.
+     */
+    @Test
+    fun sosOrbDoesNotCoverTheChatComposer() {
+        val shell = projectFile("src/main/java/com/example/ui/screens/MainAppScreen.kt").readText()
+        assertTrue(
+            "Tab Chat (3) phai dat qua cau SOS cao hon o soan tin nhan",
+            shell.contains("bottom = if (selectedTab == 3) 152.dp else 104.dp")
+        )
+    }
 }

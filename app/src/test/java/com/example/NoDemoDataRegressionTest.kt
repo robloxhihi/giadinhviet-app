@@ -513,7 +513,8 @@ class NoDemoDataRegressionTest {
     @Test
     fun usernameEmailSuffixIsNeverDoubled() {
         val vm = stripComments(readUtf8(projectFile("src/main/java/com/example/ui/viewmodel/VesperaViewModel.kt")))
-        val joined = Regex("val email = \"\\$username@giadinhviet\\.vn\"").findAll(vm).count()
+        val bad = Regex.escape("val email = \"\$username@giadinhviet.vn\"")
+        val joined = Regex(bad).findAll(vm).count()
         assertTrue("Còn chỗ tự nối đuôi email mà không kiểm tra: $joined", joined == 0)
         val shared = Regex("val email = emailForUsername\\(username\\)").findAll(vm).count()
         assertTrue("Cả đăng nhập lẫn đăng ký phải dùng chung một hàm ghép", shared == 2)

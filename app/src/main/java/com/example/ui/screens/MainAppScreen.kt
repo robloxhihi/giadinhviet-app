@@ -288,7 +288,10 @@ fun MainAppScreen(
             onSendSosToRescue = { hotline -> viewModel.sendSmartSosToRescue(hotline) },
             modifier = Modifier
                 .align(Alignment.BottomEnd)
-                .padding(end = 16.dp, bottom = 104.dp)
+                // O Chat, hàng soạn tin nằm sát thanh điều hướng, đúng chỗ quả
+                // cầu SOS đang đứng: chạm "Gửi" là mở bảng cứu nạn, tin nhắn
+                // không bao giờ đi. Tab 3 nhấc quả cầu lên khỏi ô soạn tin.
+                .padding(end = 16.dp, bottom = if (selectedTab == 3) 152.dp else 104.dp)
         )
     }
 
