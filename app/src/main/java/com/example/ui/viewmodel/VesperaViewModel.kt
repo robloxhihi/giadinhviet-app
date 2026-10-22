@@ -93,6 +93,13 @@ data class VesperaUiState(
     val hasOverlayPermission: Boolean = false,
     val hasBackgroundLocationPermission: Boolean = false,
     val hasCallPermission: Boolean = false,
+    /**
+     * null = chưa kiểm tra. Đây là dịch vụ định vị CỦA MÁY, khác với quyền của
+     * app: cấp đủ quyền mà máy tắt GPS thì vẫn không có fix nào để vẽ.
+     */
+    val isLocationServicesEnabled: Boolean? = null,
+    /** null = chưa kiểm tra; true = máy đang ra Internet qua VPN. */
+    val isVpnActive: Boolean? = null,
     val permissionSnapshot: List<com.example.service.PermissionManager.PermissionItem> = emptyList(),
     val lastRealtimeSyncAt: Long = 0L,
     val extraTimeRequests: List<ExtraTimeRequest> = emptyList(),
@@ -169,6 +176,12 @@ class VesperaViewModel(
 
     private var profileJob: Job? = null
     private var pairingJob: Job? = null
+
+    /** vong lap "tu gan minh vao document ghep noi" — chi mot vong dung mot luc. */
+    private var pairingAdoptJob: Job? = null
+
+    /** pairingId da tu xoa lien ket o may nay — de khong ghi lap lai. */
+    private var unlinkedPairingId: String? = null
     private var requestsJob: Job? = null
     private var locationJob: Job? = null
     private var historyJob: Job? = null
@@ -222,6 +235,11 @@ class VesperaViewModel(
             viewModelScope.launch {
                 dispatcher.networkMonitor.isOnline.collect { online ->
                     _uiState.value = _uiState.value.copy(isOnline = online)
+                }
+            }
+            viewModelScope.launch {
+                dispatcher.networkMonitor.isVpnActive.collect { vpn ->
+                    _uiState.value = _uiState.value.copy(isVpnActive = vpn)
                 }
             }
             viewModelScope.launch {
@@ -291,9 +309,11 @@ class VesperaViewModel(
         privacyJob?.cancel()
         agreementJob?.cancel()
         messagesJob?.cancel()
+        pairingAdoptJob?.cancel()
         // Đăng xuất / đổi cặp: không còn snapshot nào được xác nhận, nên
         // việc lưu nội quy phải chờ listener của pairing mới.
         scheduleSnapshotPairingId = null
+        unlinkedPairingId = null
     }
 
     /**
@@ -503,6 +523,7 @@ class VesperaViewModel(
                         observeActivePairing(profile.activePairingId, profile)
                     } else {
                         observeLocationHistoryForUser(userId)
+                        watchPairingArrival(profile)
                     }
                     if (profile.role == UserRole.CHILD) {
                         observeIncomingRequests(profile.id)
@@ -513,6 +534,43 @@ class VesperaViewModel(
 
         refreshUsageStats()
         broadcastSelfTelemetry()
+    }
+
+    /**
+     * May nay chua co `activePairingId` trong ho so — nhung khong co nghia la
+     * chua duoc ghep. Phia ben kia ghi ho so cua minh bang cach nao:
+     * `firestore.rules` chi cho `isOwner` sua `users/{uid}`, nen loi "phu huynh
+     * gan con vao ho so cua no" tung lam toan bo phep ghep chi chay mot chieu
+     * (may me bao "Đã kết nối", may con van "chưa ghép nối"). Day la buoc con
+     * thieu: tu tim document ghep noi mang ten minh va tu ghi lay.
+     *
+     * vong lap 20 giay: bam "Ghep noi" phia phu huynh thi may con dang mo app
+     * phai nhan ra ngay, khong buoc mo lai. That bai (chua ai ghep) la trang
+     * thai binh thuong nen chi kiem tra toi da ~30 phut roi dung, de khong
+     * dot luot doc Firestore vo han.
+     */
+    private fun watchPairingArrival(profile: UserProfile) {
+        if (pairingAdoptJob?.isActive == true) return
+        pairingAdoptJob = viewModelScope.launch {
+            var attempts = 0
+            while (attempts < 90) {
+                val found = repository.findPairingFor(profile)
+                if (found != null) {
+                    val partnerId =
+                        if (profile.role == UserRole.PARENT) found.childId else found.parentId
+                    runCatching {
+                        repository.linkSelfToPairing(profile.id, found.id, partnerId)
+                        // Ma hoc sinh dung de ghep da bi su dung: doi ma de phu
+                        // huynh khac khong nhap lai duoc no. Chi may con moi
+                        // doi duoc ma cua no.
+                        if (profile.role == UserRole.CHILD) repository.rotateStudentCode(profile.id)
+                    }.onFailure { Log.w(TAG, "Không tự ghi được liên kết ghép nối", it) }
+                    return@launch
+                }
+                attempts++
+                delay(20_000)
+            }
+        }
     }
 
     private fun observeActivePairing(pairingId: String, currentProfile: UserProfile) {
@@ -540,6 +598,14 @@ class VesperaViewModel(
                     observeAgreements(pairingId)
                     observeRuleAudit(pairingId)
                     observeChatMessages(pairingId)
+                } else if (pairing != null && unlinkedPairingId != pairingId) {
+                    // Ben kia da huy ghep noi tren document chung. May nay tu
+                    // xoa lien ket cua minh — khong the cho ben kia xoa ho so
+                    // cua minh (rules tu choi), va cung khong duoc giu mai mot
+                    // cap da ngung chay.
+                    unlinkedPairingId = pairingId
+                    runCatching { repository.unlinkSelf(currentProfile.id) }
+                        .onFailure { Log.w(TAG, "Không tự gỡ liên kết ghép nối được", it) }
                 }
             }
         }
@@ -1035,7 +1101,9 @@ class VesperaViewModel(
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,
                     activePairing = pairing,
-                    successMessage = "Ghép nối thành công với học sinh!"
+                    successMessage = "Đã ghép nối với ${pairing.childName}. Máy của con sẽ tự " +
+                        "nhận liên kết này ngay lần mở app tiếp theo — app không ghi được hồ sơ " +
+                        "của máy khác."
                 )
             } catch (e: Exception) {
                 Log.e(TAG, "Pairing error", e)
@@ -1073,9 +1141,10 @@ class VesperaViewModel(
 
     fun unpairConnection() {
         val pairing = _uiState.value.activePairing ?: return
+        val myId = _uiState.value.userProfile?.id.orEmpty()
         viewModelScope.launch {
             try {
-                repository.unpair(pairing.id, pairing.parentId, pairing.childId)
+                repository.unpair(pairing.id, myId)
                 _uiState.value = _uiState.value.copy(
                     activePairing = null,
                     partnerLocation = null,
@@ -1186,7 +1255,9 @@ class VesperaViewModel(
             hasBackgroundLocationPermission = com.example.service.PermissionManager.hasBackgroundLocation(ctx),
             hasCallPermission = com.example.service.PermissionManager.isGranted(
                 ctx, android.Manifest.permission.CALL_PHONE
-            )
+            ),
+            isLocationServicesEnabled = com.example.service.PermissionManager
+                .isLocationServicesEnabled(ctx)
         )
     }
 

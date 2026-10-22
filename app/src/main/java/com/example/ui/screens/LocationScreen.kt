@@ -54,7 +54,9 @@ import androidx.compose.ui.unit.sp
 import com.example.data.model.PairingStatus
 import com.example.data.model.UserRole
 import com.example.data.model.hasRealFix
+import com.example.service.PermissionManager
 import com.example.service.blocker.ConsentPolicy
+import com.example.service.map.FixPrecision
 import com.example.ui.components.BentoCard
 import com.example.ui.components.BentoStatCard
 import com.example.ui.components.GoogleMapsStudentLocationCard
@@ -83,10 +85,21 @@ fun LocationScreen(
     onRequestPrivacyClick: () -> Unit,
     onSendZenlyBump: () -> Unit,
     onToggleLocationHistory: (Boolean) -> Unit,
-    onOpenLocationHistory: () -> Unit = {}
+    onOpenLocationHistory: () -> Unit = {},
+    onRecheckPermissions: () -> Unit = {}
 ) {
     val scrollState = rememberScrollState()
     val context = androidx.compose.ui.platform.LocalContext.current
+    val locationPermissionNames = PermissionManager.runtimePermissionsFor("location")
+    val locationPermissionLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+        contract = androidx.activity.result.contract.ActivityResultContracts.RequestMultiplePermissions()
+    ) { result ->
+        // Ket qua tra ve LECH thoi diem cap nhat quyen, nen phai doc lai tu
+        // Android roi moi do GPS: neu khong thi man hinh van bao "chưa cấp
+        // quyền" ngay sau khi nguoi dung vua bam "Cho phép".
+        onRecheckPermissions()
+        if (result.values.any { it }) onRefreshLocation()
+    }
     val isChild = uiState.userProfile?.role == UserRole.CHILD
     val isPaired = uiState.activePairing != null && uiState.activePairing.status == PairingStatus.PAIRED
     val partnerLoc = uiState.partnerLocation
@@ -195,7 +208,32 @@ fun LocationScreen(
 
         Spacer(modifier = Modifier.height(16.dp))
 
+        LocationScanCard(
+            hasPermission = uiState.hasLocationPermission,
+            servicesEnabled = uiState.isLocationServicesEnabled,
+            vpnActive = uiState.isVpnActive,
+            hasFix = myLoc != null && myLoc.hasRealFix,
+            accuracyMeters = myLoc?.accuracy ?: 0f,
+            lastUpdatedAt = myLoc?.updatedAt ?: 0L,
+            onGrant = { locationPermissionLauncher.launch(locationPermissionNames) },
+            onOpenLocationSettings = {
+                runCatching { context.startActivity(PermissionManager.locationServicesIntent()) }
+            },
+            onOpenAppSettings = {
+                runCatching {
+                    context.startActivity(PermissionManager.backgroundLocationSettingsIntent(context))
+                }
+            },
+            onRescan = {
+                onRecheckPermissions()
+                onRefreshLocation()
+            }
+        )
+
+        Spacer(modifier = Modifier.height(16.dp))
+
         // UNPAIRED STATE: Concise, professional status card (NO fake demo data!)
+
         if (!isPaired) {
             BentoCard(
                 modifier = Modifier.fillMaxWidth(),
@@ -836,3 +874,142 @@ internal fun bumpStateLabel(at: Long, byName: String, nowMillis: Long): String {
     return "$who: $ago"
 }
 
+/**
+ * Trạng thái thật của việc dò vị trí trên CHÍNH máy này.
+ *
+ * Man Vi tri tung chi in "Chưa dò được GPS" khi nguoi dung tu chot quyen, nen
+ * khong con duong nao de mo dung ra: thieu quyen, tat dich vu dinh vi cua may
+ * va chua co fix la ba chuyen khac nhau, phai noi tung cai va co nut xu ly
+ * tung cai. Toa do mau thi tuyet doi khong co — thieu fix la in trang thai
+ * "dang do", khong dat marker.
+ */
+@Composable
+private fun LocationScanCard(
+    hasPermission: Boolean,
+    servicesEnabled: Boolean?,
+    vpnActive: Boolean?,
+    hasFix: Boolean,
+    accuracyMeters: Float,
+    lastUpdatedAt: Long,
+    onGrant: () -> Unit,
+    onOpenLocationSettings: () -> Unit,
+    onOpenAppSettings: () -> Unit,
+    onRescan: () -> Unit
+) {
+    val state = when {
+        !hasPermission -> ScanState(
+            tint = NeonAmber,
+            title = "Chưa cấp quyền vị trí cho app",
+            detail = "Máy chưa cho phép đọc GPS nên không có tọa độ nào cả. App không vẽ điểm mẫu " +
+                "và không suy vị trí từ địa chỉ IP."
+        )
+
+        servicesEnabled == false -> ScanState(
+            tint = NeonAmber,
+            title = "Quyền đã cấp, nhưng máy đang tắt dịch vụ định vị",
+            detail = "Bật Định vị (Location) trong Cài đặt của máy thì app mới dò được GPS."
+        )
+
+        servicesEnabled == null -> ScanState(
+            tint = TextMuted,
+            title = "Chưa kiểm tra được dịch vụ định vị của máy",
+            detail = "Bấm Kiểm tra lại để đọc trạng thái thật từ Android."
+        )
+
+        !hasFix -> ScanState(
+            tint = NeonCyan,
+            title = "Đang dò vị trí thật…",
+            detail = "Lần đầu có thể mất 30–60 giây; đứng gần cửa sổ hoặc ngoài trời thì nhanh hơn. " +
+                "Chưa dò được thì bản đồ chưa hiện điểm nào."
+        )
+
+        else -> ScanState(
+            tint = NeonEmerald,
+            title = "Định vị thật đang chạy",
+            detail = "Độ chính xác ${FixPrecision.accuracyShortLabel(accuracyMeters)}" +
+                (if (lastUpdatedAt > 0L)
+                    " • cập nhật ${SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date(lastUpdatedAt))}"
+                else "")
+        )
+    }
+
+    BentoCard(modifier = Modifier.fillMaxWidth(), borderColor = state.tint.copy(alpha = 0.6f)) {
+        Column {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    modifier = Modifier
+                        .size(38.dp)
+                        .clip(CircleShape)
+                        .background(state.tint.copy(alpha = 0.2f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = if (hasFix) Icons.Default.GpsFixed else Icons.Default.MyLocation,
+                        contentDescription = null,
+                        tint = state.tint,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+                Spacer(modifier = Modifier.width(12.dp))
+                Column {
+                    Text(
+                        text = state.title,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = state.tint,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = state.detail,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = TextSecondary
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                when {
+                    !hasPermission -> {
+                        ScanActionButton("Cấp quyền vị trí", onGrant)
+                        ScanActionButton("Mở Cài đặt app", onOpenAppSettings)
+                    }
+
+                    servicesEnabled == false -> ScanActionButton("Mở Cài đặt định vị", onOpenLocationSettings)
+                    else -> ScanActionButton("Kiểm tra lại", onRescan)
+                }
+            }
+
+            if (vpnActive == true) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = "Máy đang vào mạng qua VPN. Vị trí lấy từ GPS của máy, không suy từ địa chỉ IP, " +
+                        "nên VPN không làm sai tọa độ — số liệu vẫn gửi lên bình thường.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = TextMuted
+                )
+            }
+        }
+    }
+}
+
+private data class ScanState(
+    val tint: Color,
+    val title: String,
+    val detail: String
+)
+
+@Composable
+private fun ScanActionButton(label: String, onClick: () -> Unit) {
+    Button(
+        onClick = onClick,
+        shape = RoundedCornerShape(10.dp),
+        colors = ButtonDefaults.buttonColors(
+            containerColor = SpaceCardElevated,
+            contentColor = FacebookBlue
+        ),
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+    ) {
+        Text(text = label, style = MaterialTheme.typography.labelMedium)
+    }
+}

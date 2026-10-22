@@ -25,6 +25,14 @@ class NetworkMonitor(private val context: Context) {
     private val _isOnline = MutableStateFlow(checkInitialConnectivity())
     val isOnline: StateFlow<Boolean> = _isOnline.asStateFlow()
 
+    /**
+     * Mang dang hoat dong co phai VPN khong. Noi ra de app noi that voi nguoi
+     * dung ("may dang bat VPN") thay vi de ho doan; vi tri van lay tu GPS cua
+     * may nen VPN khong lam sai toa do.
+     */
+    private val _isVpnActive = MutableStateFlow(checkVpnActive())
+    val isVpnActive: StateFlow<Boolean> = _isVpnActive.asStateFlow()
+
     private var networkCallback: ConnectivityManager.NetworkCallback? = null
 
     init {
@@ -39,26 +47,38 @@ class NetworkMonitor(private val context: Context) {
                 capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
     }
 
+    private fun checkVpnActive(): Boolean {
+        val cm = connectivityManager ?: return false
+        val capabilities = cm.activeNetwork?.let { cm.getNetworkCapabilities(it) } ?: return false
+        return capabilities.hasTransport(NetworkCapabilities.TRANSPORT_VPN)
+    }
+
     fun startMonitoring() {
         if (networkCallback != null) return
         val cm = connectivityManager ?: return
 
+        // Them TRANSPORT_VPN: may bat VPN thi activeNetwork la mang VPN, thieu
+        // no thi callback khong bao gio chay va app bao "Ngoại tuyến" trong khi
+        // Internet van dung — SOS bi day sang kenh SMS khong can thiet.
         val request = NetworkRequest.Builder()
             .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
             .addTransportType(NetworkCapabilities.TRANSPORT_WIFI)
             .addTransportType(NetworkCapabilities.TRANSPORT_CELLULAR)
             .addTransportType(NetworkCapabilities.TRANSPORT_ETHERNET)
+            .addTransportType(NetworkCapabilities.TRANSPORT_VPN)
             .build()
 
         val callback = object : ConnectivityManager.NetworkCallback() {
             override fun onAvailable(network: Network) {
                 Log.d(TAG, "Mạng Internet đã kết nối (Online)")
                 _isOnline.value = true
+                _isVpnActive.value = checkVpnActive()
             }
 
             override fun onLost(network: Network) {
                 Log.d(TAG, "Mất kết nối Internet (Offline)")
-                _isOnline.value = false
+                _isOnline.value = checkInitialConnectivity()
+                _isVpnActive.value = checkVpnActive()
             }
 
             override fun onCapabilitiesChanged(
@@ -67,6 +87,7 @@ class NetworkMonitor(private val context: Context) {
             ) {
                 val hasInternet = networkCapabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
                 _isOnline.value = hasInternet
+                _isVpnActive.value = checkVpnActive()
             }
         }
 
@@ -76,6 +97,7 @@ class NetworkMonitor(private val context: Context) {
         } catch (e: Exception) {
             Log.e(TAG, "Không thể đăng ký NetworkCallback: ${e.message}")
             _isOnline.value = checkInitialConnectivity()
+            _isVpnActive.value = checkVpnActive()
         }
     }
 

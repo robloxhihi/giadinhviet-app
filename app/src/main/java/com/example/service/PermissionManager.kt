@@ -86,6 +86,24 @@ object PermissionManager {
             isGranted(context, Manifest.permission.ACCESS_BACKGROUND_LOCATION)
         } else true
 
+    /**
+     * Dịch vụ định vị CỦA MÁY có đang bật không — khác hẳn quyền của app.
+     *
+     * Cấp đủ quyền mà máy tắt GPS thì không fix nào tồn tại; trước đây màn
+     * Vị trí chỉ in "Chưa dò được GPS" nên người dùng không biết phải bật gì.
+     */
+    @Suppress("DEPRECATION")
+    fun isLocationServicesEnabled(context: Context): Boolean {
+        val lm = context.getSystemService(Context.LOCATION_SERVICE)
+            as? android.location.LocationManager ?: return false
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            lm.isLocationEnabled
+        } else {
+            lm.isProviderEnabled(android.location.LocationManager.GPS_PROVIDER) ||
+                lm.isProviderEnabled(android.location.LocationManager.NETWORK_PROVIDER)
+        }
+    }
+
     fun isIgnoringBatteryOptimizations(context: Context): Boolean {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return true
         val pm = context.getSystemService(Context.POWER_SERVICE) as? android.os.PowerManager ?: return false
@@ -112,6 +130,12 @@ object PermissionManager {
             Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
             Uri.parse("package:${context.packageName}")
         ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+
+    /** Màn hình bật/tắt dịch vụ định vị của máy (không phải quyền của app). */
+    @Suppress("DEPRECATION")
+    fun locationServicesIntent(): Intent =
+        Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
 
     @Suppress("BatteryLife")
     fun batteryOptimizationIntent(context: Context): Intent =

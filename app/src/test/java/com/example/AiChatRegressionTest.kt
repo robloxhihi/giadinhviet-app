@@ -268,13 +268,25 @@ class AiChatRegressionTest {
         )
     }
 
-    /** cau lenh he phai noi ro khuon trinh bay, neu khong model lai tra 1 khoai. */
+    /**
+     * cau lenh he phai noi ro khuon trinh bay, neu khong model lai tra 1 khoai.
+     * Nam rieng trong `AiPrompt` vi tu khi co bo chon model, lenh dat trong
+     * `GeminiClient` chi ap cho Gemini — DeepSeek/GLM se im lang tra ve mot
+     * dam van ban khong theo khuon nao ca.
+     */
     @Test
     fun aiIsToldToAnswerInShortLabelledLines() {
-        val client = source("src/main/java/com/example/service/ai/GeminiClient.kt")
-        assertTrue("phai yeu cau 3 khoi co nhan", client.contains("**Nguyên nhân:**"))
-        assertTrue("moi y mot dong", client.contains("Mỗi ý nằm trọn trong MỘT dòng"))
-        assertTrue("cam emoji vi bong chat khong co cho", client.contains("không emoji"))
+        val prompt = source("src/main/java/com/example/service/ai/AiPrompt.kt")
+        assertTrue("phai yeu cau 3 khoi co nhan", prompt.contains("**Nguyên nhân:**"))
+        assertTrue("moi y mot dong", prompt.contains("Mỗi ý nằm trọn trong MỘT dòng"))
+        assertTrue("cam emoji vi bong chat khong co cho", prompt.contains("không emoji"))
+        assertTrue("thieu so lieu thi phai noi chua co, khong duoc bịa",
+            prompt.contains("không bịa"))
+
+        val gemini = source("src/main/java/com/example/service/ai/GeminiClient.kt")
+        val router = source("src/main/java/com/example/service/ai/OpenRouterClient.kt")
+        assertTrue("Gemini phai dung khuon chung", gemini.contains("AiPrompt.system(stats)"))
+        assertTrue("OpenRouter phai dung khuon chung", router.contains("AiPrompt.system(stats)"))
     }
 
     /**

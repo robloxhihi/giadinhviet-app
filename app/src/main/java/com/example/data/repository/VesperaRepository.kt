@@ -215,7 +215,7 @@ class VesperaRepository(private val db: FirebaseFirestore, private val auth: Fir
      * Accept pairing request and create permanent Pairing
      */
     /**
-     * Chap nhan ghep noi. Khong an loi nua: `parent`/`child` phai biet neu
+     * Chap nhan ghep noi. Khong an loi nua: `parent`/`child` phai biet rang
      * ghi that bai, vi truoc day du toan bo khoi ghi bi `Log.w` nuot va man
      * hinh van bao "Ghép nối thành công".
      *
@@ -223,6 +223,12 @@ class VesperaRepository(private val db: FirebaseFirestore, private val auth: Fir
      * luat bi bia ra cho mot gia dinh chua tung chon gi. Noi quy chi ton tai
      * sau khi co nguoi thao va luu o man BlockRules (`saveSchedule` dung
      * `set()` nen lan luu dau tien tu tao document).
+     *
+     * Ben de xuat KHONG ghi vao ho so cua ben kia: `firestore.rules` chi
+     * `allow update: if isOwner(userId)`, nen mot lan ghi "ho ho" la mot lan
+     * PERMISSION_DENIED an lang — ben con lai vinh vien khong biet minh da
+     * duoc ghep. Moi may tu gan lay minh vao document ghep noi mang ten minh
+     * (xem [findPairingFor]).
      */
     suspend fun acceptPairingRequest(request: PairingRequest, childProfile: UserProfile) {
         val pairingId = "pair_${request.parentId}_${request.childId}"
@@ -248,31 +254,9 @@ class VesperaRepository(private val db: FirebaseFirestore, private val auth: Fir
                 "activePairingId" to pairingId
             )
         ).await()
-        db.collection("users").document(request.parentId).update(
-            mapOf(
-                "pairedWith" to request.childId,
-                "activePairingId" to pairingId
-            )
-        ).await()
 
         // Rotate child code to invalidate old one
         rotateStudentCode(request.childId)
-    }
-
-    suspend fun savePairing(pairing: Pairing) {
-        db.collection("pairings").document(pairing.id).set(pairing).await()
-        db.collection("users").document(pairing.childId).update(
-            mapOf(
-                "pairedWith" to pairing.parentId,
-                "activePairingId" to pairing.id
-            )
-        ).await()
-        db.collection("users").document(pairing.parentId).update(
-            mapOf(
-                "pairedWith" to pairing.childId,
-                "activePairingId" to pairing.id
-            )
-        ).await()
     }
 
     suspend fun rejectPairingRequest(requestId: String) {
@@ -285,19 +269,75 @@ class VesperaRepository(private val db: FirebaseFirestore, private val auth: Fir
      * Huy ghep noi tren may chu TRUOC, roi moi xoa trang thai local. Neu ghi
      * that bai thi hai ben van con noi voi nhau, hon la mot ben nghi "đã hủy"
      * trong khi ben kia con thay "đã ghép nối".
+     *
+     * Chi document ghep noi va ho so CUA MINH bi dong: ben kia se tu thay
+     * `status = UNPAIRED` qua listener cua no va tu xoa lien ket cua no
+     * ([findPairingFor] chi tra ve cap dang PAIRED).
      */
-    suspend fun unpair(pairingId: String, parentId: String, childId: String) {
+    suspend fun unpair(pairingId: String, myUserId: String) {
         db.collection("pairings").document(pairingId).update(
             "status", PairingStatus.UNPAIRED.name,
             "updatedAt", System.currentTimeMillis()
         ).await()
-        db.collection("users").document(parentId).update(
+        db.collection("users").document(myUserId).update(
             "activePairingId", "",
             "pairedWith", ""
         ).await()
-        db.collection("users").document(childId).update(
-            "activePairingId", "",
-            "pairedWith", ""
+    }
+
+    /**
+     * Tim document ghep noi ma tai khoan nay la mot ben, dung cho lan hien
+     * dau tien: may con ghi `activePairingId` rong vi phu huynh khong co quyen
+     * ghi ho so cua no. Tra ve null khi may nay that su chua duoc ghep voi ai.
+     */
+    suspend fun findPairingFor(profile: UserProfile): Pairing? {
+        if (profile.id.isEmpty()) return null
+        val roleField = if (profile.role == UserRole.PARENT) "parentId" else "childId"
+        return try {
+            // Khong `orderBy`: loc bang `parentId` + sap theo `createdAt` la mot
+            // cau truy van composite, can thiet biFirestore tao chi muc phu —
+            // khong co no thi query loi va may con im lang "chua ghep noi".
+            // Hai bang can don muc do du, nen lay ve roi chuc lan cuoi cung.
+            db.collection("pairings")
+                .whereEqualTo(roleField, profile.id)
+                .whereEqualTo("status", PairingStatus.PAIRED.name)
+                .get()
+                .await()
+                .documents
+                .mapNotNull { it.toObject(Pairing::class.java) }
+                .maxByOrNull { it.createdAt }
+        } catch (e: Exception) {
+            Log.w(TAG, "findPairingFor error", e)
+            null
+        }
+    }
+
+    /**
+     * May nay tu ghi ho so cua chinh no: "toi dang ghep voi ai, theo document
+     * nao". Day la buoc ma truoc day app tuong la ben kia lam ho duoc.
+     */
+    suspend fun linkSelfToPairing(
+        userId: String,
+        pairingId: String,
+        partnerId: String
+    ) {
+        if (userId.isEmpty()) return
+        db.collection("users").document(userId).update(
+            mapOf(
+                "pairedWith" to partnerId,
+                "activePairingId" to pairingId
+            )
+        ).await()
+    }
+
+    /** Xoa lien ket cua may nay khi document ghep noi khong con PAIRED nua. */
+    suspend fun unlinkSelf(userId: String) {
+        if (userId.isEmpty()) return
+        db.collection("users").document(userId).update(
+            mapOf(
+                "pairedWith" to "",
+                "activePairingId" to ""
+            )
         ).await()
     }
 
@@ -321,15 +361,21 @@ class VesperaRepository(private val db: FirebaseFirestore, private val auth: Fir
         awaitClose { listener.remove() }
     }
 
+    /**
+     * May co duong ra Internet khong?
+     *
+     * Xet theo KHA NANG cua mang dang hoat dong, khong liet ke kieu ket noi.
+     * Ban cu chi nhan WIFI/CELLULAR/ETHERNET nen may bat VPN (activeNetwork la
+     * mang VPN) bi ket luan "offline" -> `updateLocation` am tham cat vi tri
+     * vao bo nho may va phu huynh khong bao gio thay con o dau. Con bat VPN de
+     * lot luoi la tinh huong that, khong phai canh bien.
+     */
     fun isWifiOrInternetConnected(): Boolean {
         val ctx = context ?: return true
         return try {
             val cm = ctx.getSystemService(Context.CONNECTIVITY_SERVICE) as? android.net.ConnectivityManager ?: return true
-            val network = cm.activeNetwork ?: return false
-            val capabilities = cm.getNetworkCapabilities(network) ?: return false
-            capabilities.hasTransport(android.net.NetworkCapabilities.TRANSPORT_WIFI) ||
-                capabilities.hasTransport(android.net.NetworkCapabilities.TRANSPORT_CELLULAR) ||
-                capabilities.hasTransport(android.net.NetworkCapabilities.TRANSPORT_ETHERNET)
+            val capabilities = cm.activeNetwork?.let { cm.getNetworkCapabilities(it) } ?: return false
+            capabilities.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_INTERNET)
         } catch (e: Exception) {
             true
         }
@@ -911,9 +957,20 @@ class VesperaRepository(private val db: FirebaseFirestore, private val auth: Fir
             }
         awaitClose { listener.remove() }
     }
+    /**
+     * Ghep noi tuc thi tu phia phu huynh. Chi ghi duoc hai thu: document ghep
+     * noi (moi tai khoan da dang nhap duoc tao) va ho so CUA MINH. Ho so cua
+     * con van nguyen ven vi `firestore.rules` chi cho chinh no ghi — may con
+     * se tu thay document mang `childId` cua no va tu gan lay
+     * ([findPairingFor]), nen "Ghép nối thành công" khong con la mot loi bao
+     * mot chieu.
+     */
     suspend fun pairDirectly(studentCode: String, parentProfile: UserProfile): Pairing {
         val student = findStudentByCode(studentCode)
             ?: throw IllegalArgumentException("Không tìm thấy học sinh với mã $studentCode")
+        if (student.id == parentProfile.id) {
+            throw IllegalArgumentException("Mã này chính là máy đang đăng nhập — không thể tự ghép với mình.")
+        }
 
         val pairingId = "pair_${parentProfile.id}_${student.id}"
         val pairing = Pairing(
@@ -932,12 +989,6 @@ class VesperaRepository(private val db: FirebaseFirestore, private val auth: Fir
         db.collection("users").document(parentProfile.id).update(
             mapOf(
                 "pairedWith" to student.id,
-                "activePairingId" to pairingId
-            )
-        ).await()
-        db.collection("users").document(student.id).update(
-            mapOf(
-                "pairedWith" to parentProfile.id,
                 "activePairingId" to pairingId
             )
         ).await()

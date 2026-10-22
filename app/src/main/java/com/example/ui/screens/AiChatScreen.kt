@@ -2,6 +2,7 @@ package com.example.ui.screens
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -15,6 +16,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -51,9 +53,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.ai.DailyUsageStore
 import com.example.service.ai.AiKey
+import com.example.service.ai.AiModel
+import com.example.service.ai.AiModels
 import com.example.service.ai.ChatHistoryStore
 import com.example.service.ai.ChatTurn
-import com.example.service.ai.GeminiClient
 import com.example.ui.components.GlassButton
 import com.example.ui.components.GlassCard
 import com.example.ui.components.GradientButton
@@ -62,13 +65,14 @@ import com.example.ui.components.SectionHeader
 import com.example.ui.theme.NeonCyan
 import com.example.ui.theme.Premium
 import com.example.ui.theme.SpaceCardBorder
+import com.example.ui.theme.SpaceCardElevated
 import com.example.ui.theme.TextMuted
 import com.example.ui.theme.TextPrimary
 import com.example.ui.theme.TextSecondary
 import kotlinx.coroutines.launch
 
 /**
- * "Trợ lý gia đình" — man hinh chat RIENG voi Gemini, mo tu the Tong quan.
+ * "Trợ lý gia đình" — man hinh chat RIENG voi AI, mo tu the Tong quan.
  *
  * Khong dung `ChatScreen` (tab Chat): cho do noi voi Firestore va phai ghep
  * noi moi chay, con o day chi co may cua ba me va mot loi goi HTTP. Tam
@@ -76,9 +80,9 @@ import kotlinx.coroutines.launch
  * may, nen cau tra loi Khong the la mot loi khuyen chung chung ap cho moi
  * nha. Do la ly do nguoi dung yeu cau "khong demo".
  *
- * Khoa Gemini lay theo `AiKey`: nhap tay tren may (uu tien) hoac tiem luc
- * build tu CI secret. Man hinh tu hoi khoa khi chua co, khong gui request
- * vo nghia.
+ * Khoa AI lay theo `AiKey` va theo tung provider: Gemini can khoa AI Studio,
+ * ba model DeepSeek/GLM can khoa OpenRouter. Chon model o day quyet luon khoa
+ * va client duoc dung; man hinh tu hoi khi chua co, khong gui request vo nghia.
  */
 @Composable
 fun AiChatScreen(
@@ -94,7 +98,9 @@ fun AiChatScreen(
     var draft by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
-    var key by remember { mutableStateOf(AiKey.effective(context)) }
+    var modelId by remember { mutableStateOf(AiModels.selectedId(context)) }
+    val model = AiModels.find(modelId)
+    var key by remember(modelId) { mutableStateOf(AiModels.keyFor(context, model)) }
     var keyDraft by remember { mutableStateOf("") }
     var showStats by remember { mutableStateOf(false) }
 
@@ -114,7 +120,8 @@ fun AiChatScreen(
         busy = true
         error = null
         scope.launch {
-            val answer = GeminiClient.chat(
+            val answer = AiModels.chat(
+                model = model,
                 apiKey = key,
                 history = next.dropLast(1),
                 question = q,
@@ -138,7 +145,8 @@ fun AiChatScreen(
     ) {
         PremiumTopBar(
             title = "Trợ lý gia đình",
-            subtitle = if (hasKey) "Hỏi về số liệu hôm nay của con" else "Cần nhập khoá Gemini để bắt đầu",
+            subtitle = if (hasKey) "Đang dùng ${model.label} · hỏi về số liệu hôm nay của máy"
+            else "Cần nhập ${AiModels.keyLabel(model)} để bắt đầu",
             onBack = onBack,
             trailing = {
                 if (turns.isNotEmpty()) {
@@ -159,11 +167,68 @@ fun AiChatScreen(
 
         Spacer(modifier = Modifier.height(14.dp))
 
+        // ── Chon model ─────────────────────────────────────────────────────
+        // Moi model mot kieu: Gemini can khoa AI Studio, ba model DeepSeek/GLM
+        // goi qua OpenRouter can khoa OpenRouter. Chon o day quyet luon khung
+        // nhap khoa ben duoi, de nguoi dung khong phai doan tai sao "luu khoa
+        // roi van hoi".
+        Text(
+            text = "Model trả lời",
+            style = MaterialTheme.typography.labelMedium,
+            color = TextSecondary
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState())
+                .testTag("ai_model_row"),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            AiModels.all.forEach { candidate ->
+                val selected = candidate.id == modelId
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(
+                            if (selected) NeonCyan.copy(alpha = 0.18f) else SpaceCardElevated
+                        )
+                        .border(
+                            1.2.dp,
+                            if (selected) NeonCyan else SpaceCardBorder,
+                            RoundedCornerShape(14.dp)
+                        )
+                        .clickable(enabled = !busy) {
+                            modelId = candidate.id
+                            AiModels.saveSelected(context, candidate.id)
+                            key = AiModels.keyFor(context, candidate)
+                            keyDraft = ""
+                            error = null
+                        }
+                        .padding(horizontal = 12.dp, vertical = 8.dp)
+                ) {
+                    Text(
+                        text = candidate.label,
+                        style = MaterialTheme.typography.labelMedium,
+                        color = if (selected) NeonCyan else TextSecondary,
+                        fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal
+                    )
+                }
+            }
+        }
+        Spacer(modifier = Modifier.height(6.dp))
+        Text(
+            text = model.note,
+            style = MaterialTheme.typography.bodySmall,
+            color = TextMuted
+        )
+        Spacer(modifier = Modifier.height(14.dp))
+
         if (!hasKey) {
             GlassCard(modifier = Modifier.fillMaxWidth(), glow = Premium.amber) {
                 Column {
                     SectionHeader(
-                        title = "Nhập khoá Gemini",
+                        title = "Nhập ${AiModels.keyLabel(model)}",
                         subtitle = "Khoá lưu riêng trên máy này, không đi lên mạng và không nằm trong file cài đặt.",
                         icon = Icons.Default.AutoAwesome,
                         tint = Premium.amber
@@ -172,7 +237,13 @@ fun AiChatScreen(
                     OutlinedTextField(
                         value = keyDraft,
                         onValueChange = { keyDraft = it },
-                        placeholder = { Text("Dán khoá AI Studio vào đây", color = TextMuted, fontSize = 13.sp) },
+                        placeholder = {
+                            Text(
+                                if (model.provider == AiModel.Provider.OPENROUTER)
+                                    "Dán khoá openrouter.ai vào đây" else "Dán khoá AI Studio vào đây",
+                                color = TextMuted, fontSize = 13.sp
+                            )
+                        },
                         modifier = Modifier.fillMaxWidth().testTag("ai_key_field"),
                         singleLine = true,
                         shape = RoundedCornerShape(18.dp),
@@ -190,9 +261,11 @@ fun AiChatScreen(
                         icon = Icons.Default.AutoAwesome,
                         onClick = {
                             if (keyDraft.isNotBlank()) {
-                                AiKey.save(context, keyDraft)
-                                key = AiKey.effective(context)
+                                if (model.provider == AiModel.Provider.OPENROUTER)
+                                    AiKey.saveOpenRouter(context, keyDraft)
+                                else AiKey.save(context, keyDraft)
                                 keyDraft = ""
+                                key = AiModels.keyFor(context, model)
                             }
                         },
                         modifier = Modifier.fillMaxWidth()

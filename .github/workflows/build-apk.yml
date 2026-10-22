@@ -60,9 +60,10 @@ jobs:
     # xanh: man hinh AI hoi khoa lan dau tien va luu rieng tren may.
     #
     # Step nay KHONG duoc in gia tri: chi dem do dai va so dong.
-    - name: Inject Gemini key from repo secret
+    - name: Inject AI keys from repo secrets
       env:
         GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
       run: |
         if [ -z "$GEMINI_API_KEY" ]; then
           echo "GEMINI_API_KEY=REPLACE_ME_WITH_YOUR_GEMINI_API_KEY" > .env
@@ -70,6 +71,13 @@ jobs:
         else
           echo "GEMINI_API_KEY=$GEMINI_API_KEY" > .env
           echo "::notice::Da bom khoa Gemini tu repo secret (do dai ${#GEMINI_API_KEY} ky tu)."
+        fi
+        if [ -z "$OPENROUTER_API_KEY" ]; then
+          echo "OPENROUTER_API_KEY=REPLACE_ME_WITH_YOUR_OPENROUTER_API_KEY" >> .env
+          echo "::notice::Chua co repo secret OPENROUTER_API_KEY - model DeepSeek/GLM se hoi khoa trong app."
+        else
+          echo "OPENROUTER_API_KEY=$OPENROUTER_API_KEY" >> .env
+          echo "::notice::Da bom khoa OpenRouter tu repo secret (do dai ${#OPENROUTER_API_KEY} ky tu)."
         fi
         echo "So dong trong .env: $(wc -l < .env)"
 

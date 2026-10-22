@@ -291,6 +291,75 @@ class FixRegressionTest {
         assertTrue("CI khong duoc in gia tri key ra log", !workflow.contains("echo \"\$GEMINI_API_KEY\""))
     }
 
+    /**
+     * Khoa OpenRouter la cua nguoi dung, khong phai cua repo: cung luat voi
+     * Gemini. BuildConfig chi la nguon du phong, key nhap tren may duoc uu
+     * tien, va khong co dong echo nao in gia tri ra log CI.
+     */
+    @Test
+    fun openRouterKeyUsesSameNoCommitRuleAsGemini() {
+        val key = projectFile("src/main/java/com/example/service/ai/AiKey.kt").readText()
+        assertTrue("Phai lay key OpenRouter tu BuildConfig", key.contains("BuildConfig.OPENROUTER_API_KEY"))
+        assertTrue("Key OpenRouter nhap tay phai duoc uu tien",
+            key.contains("enteredOpenRouter(context).ifBlank"))
+        assertTrue("Key OpenRouter luu cung SharedPreferences voi key AI khac nhan",
+            key.contains("openrouter_key_manual"))
+        assertTrue("Khong duoc dung chung ham luu cua Gemini (deo key sai loai)",
+            key.contains("saveOpenRouter(context: Context, key: String)"))
+
+        val repoRoot = findRepoRoot()
+        val example = File(repoRoot, ".env.example").readText()
+        assertTrue(".env.example phai co cho cho OpenRouter de BuildConfig sinh truong",
+            example.contains("OPENROUTER_API_KEY=REPLACE_ME"))
+
+        val workflow = File(repoRoot, ".github/workflows/build-apk.yml").readText()
+        assertTrue("CI phai lay key OpenRouter tu repo secret",
+            workflow.contains("secrets.OPENROUTER_API_KEY"))
+        assertTrue("CI khong duoc in gia tri key OpenRouter ra log",
+            !workflow.contains("echo \"\$OPENROUTER_API_KEY\""))
+
+        val gradle = projectFile("build.gradle.kts").readText()
+        assertTrue("Key OpenRouter phai di qua secrets plugin, khong hardcode",
+            gradle.contains("propertiesFileName = \".env\""))
+    }
+
+    /**
+     * Nguoi dung chon model thi phai nhan duoc dung model do: khong duoc
+     * lat nguoc sang Gemini khi OpenRouter 503 (ban 35.0 chi co mot model nen
+     * chuyen nay chua dat len), va payload phai dung cung `AiPrompt` de moi
+     * model tra loi theo dung mot khuon trinh bay.
+     */
+    @Test
+    fun modelPickerSendsToTheModelUserChose() {
+        val models = projectFile("src/main/java/com/example/service/ai/AiModels.kt").readText()
+        listOf(
+            "deepseek/deepseek-v4.1-flash-free",
+            "deepseek/deepseek-v4-flash-free",
+            "z-ai/glm-5.3-flash-free"
+        ).forEach { id ->
+            assertTrue("Bo chon model phai co $id", models.contains("\"$id\""))
+        }
+        assertTrue("Gemini van phai o trong bo chon", models.contains("AiModel.Provider.GEMINI"))
+        assertTrue("Chon model phai luu lai tren may", models.contains("FIELD_SELECTED"))
+        assertTrue("Goi dung model duoc chon, khong thu lan luot",
+            models.contains("OpenRouterClient.chat(apiKey, model.id"))
+
+        val chat = projectFile("src/main/java/com/example/service/ai/OpenRouterClient.kt").readText()
+        assertTrue("Key OpenRouter phai di bang header Bearer",
+            chat.contains("setRequestProperty(\"Authorization\", \"Bearer \$apiKey\")"))
+        assertTrue("Cam dua key vao URL", !chat.contains("openrouter.ai/api/v1/chat/completions?"))
+        assertTrue("Phai chay tren IO thread", chat.contains("withContext(Dispatchers.IO)"))
+        assertTrue("Cung mot khuon trinh bay cho moi model", chat.contains("AiPrompt.system(stats)"))
+        assertTrue("Lich su Gemini phai doi sang ngon ngu OpenRouter",
+            chat.contains("\"assistant\" else \"user\"") || chat.contains("to \"assistant\""))
+
+        val screen = projectFile("src/main/java/com/example/ui/screens/AiChatScreen.kt").readText()
+        assertTrue("Man hinh phai ve hang chon model", screen.contains("AiModels.all.forEach"))
+        assertTrue("Man hinh phai goi dung model da chon", screen.contains("AiModels.chat("))
+        assertTrue("Khuon nhap key phai doi theo provider cua model",
+            screen.contains("AiModel.Provider.OPENROUTER"))
+    }
+
     /** Key trong URL de bi luu vao log mang; API cua Google nhan header. */
     @Test
     fun geminiClientSendsKeyInHeaderAndSurvivesOverload() {
@@ -392,14 +461,20 @@ class FixRegressionTest {
     private fun readUtf8(file: File): String =
         String(file.readBytes(), Charsets.UTF_8)
 
-    /** `AQ.` + 25 ky tu lien ke la dang khoa Google API moi; GEMINI_API_KEY=
-     *  theo sau la chuoi dai khong phai cho cho cua `.env.example`. */
-    private fun looksLikeRealKey(text: String): Boolean =
-        Regex("""AQ\.[A-Za-z0-9_\-]{25,}""").containsMatchIn(text) ||
-            Regex("""GEMINI_API_KEY\s*=\s*([A-Za-z0-9_.\-]{25,})""")
-                .find(text)
-                ?.groupValues?.get(1)
-                ?.let { !it.contains("REPLACE_ME") } == true
+    /**
+     * `AQ.` + 25 ky tu lien ke la dang khoa Google API moi. Moi dong
+     * `..._API_KEY=<25+ ky tu>` deu bi soi, ke ca `OPENROUTER_API_KEY`: bat
+     * theo TEN truong thi khong the dinh mot dang key moi, con bat theo chuoi
+     * dau (`AIza`, `sk-or`) thi them mot loai la them mot loi de lu.
+     * Chuoi chua `REPLACE_ME` la cho cho cua `.env.example`, khong phai key.
+     */
+    private fun looksLikeRealKey(text: String): Boolean {
+        if (Regex("""AQ\.[A-Za-z0-9_\-]{25,}""").containsMatchIn(text)) return true
+        return Regex("""[A-Z0-9_]*API_KEY\s*=\s*"?([A-Za-z0-9_.\-]{25,})""")
+            .findAll(text)
+            .map { it.groupValues[1] }
+            .any { !it.contains("REPLACE_ME") }
+    }
 
     /**
      * Bieu do "SU DUNG TRONG TUẦN" va man Thấu hiểu thời gian tung ve cot 0

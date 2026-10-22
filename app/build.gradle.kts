@@ -20,8 +20,8 @@ android {
     // nguoi dung cai xong khong kiem tra duoc may dang chay ban nao (man hinh
     // "Thong tin ung dung" cua Android hien chinh chuoi nay). Giu thang bang
     // so tag phat hanh; versionCode tang thi cai de chim ban cu, khong phai go.
-    versionCode = 35
-    versionName = "35.0"
+    versionCode = 36
+    versionName = "36.0"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }

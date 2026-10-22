@@ -25,6 +25,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.BatteryChargingFull
+import androidx.compose.material.icons.filled.BatteryUnknown
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.FamilyRestroom
 import androidx.compose.material.icons.filled.GpsFixed
@@ -678,8 +679,8 @@ fun DashboardScreen(
 
                             BentoStatCard(
                                 modifier = Modifier.weight(1f),
-                                icon = Icons.Default.BatteryChargingFull,
-                                iconTint = NeonEmerald,
+                                icon = Icons.Default.BatteryUnknown,
+                                iconTint = TextMuted,
                                 title = "PIN THIẾT BỊ CON",
                                 value = "—",
                                 subtitle = "Chưa liên kết",
@@ -978,18 +979,33 @@ fun DashboardScreen(
                                 color = TextPrimary,
                                 fontWeight = FontWeight.Bold
                             )
+                            // May con CHUA gui diem dinh vi nao thi khong duoc
+                            // phep in ra "Đang trực tuyến": do la mot trang thai
+                            // khong co bang chung. Truoc day dong nay cung chinh
+                            // la ly do man hinh bao ket noi trong khi may con chua
+                            // tung gui du lieu ve.
                             Text(
-                                text = partnerLoc?.currentSafeZone?.ifEmpty { "Khu vực an toàn" } ?: "Đang trực tuyến",
+                                text = when {
+                                    partnerLoc == null ->
+                                        if (isChild) "Chưa nhận được vị trí từ máy phụ huynh"
+                                        else "Chưa nhận được vị trí từ máy con"
+
+                                    partnerLoc.currentSafeZone.isEmpty() ->
+                                        "Chỉ có tọa độ — chưa dịch được tên khu vực"
+
+                                    else -> partnerLoc.currentSafeZone
+                                },
                                 style = MaterialTheme.typography.bodySmall,
-                                color = NeonCyan
+                                color = if (partnerLoc == null) TextMuted else NeonCyan
                             )
                         }
 
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(
-                                imageVector = Icons.Default.BatteryChargingFull,
+                                imageVector = if (partnerLoc == null) Icons.Default.BatteryUnknown
+                                    else Icons.Default.BatteryChargingFull,
                                 contentDescription = null,
-                                tint = NeonEmerald,
+                                tint = if (partnerLoc == null) TextMuted else NeonEmerald,
                                 modifier = Modifier.size(18.dp)
                             )
                             Spacer(modifier = Modifier.width(4.dp))

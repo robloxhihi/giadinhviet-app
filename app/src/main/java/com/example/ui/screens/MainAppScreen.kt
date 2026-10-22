@@ -18,6 +18,7 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import kotlinx.coroutines.delay
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -87,6 +88,18 @@ fun MainAppScreen(
         uiState.successMessage?.let {
             snackbarHostState.showSnackbar(it)
             viewModel.clearMessages()
+        }
+    }
+
+    // Mo tab Vi tri thi do GPS cua MAY NAY ngay tuc thoi va do lai moi 15 giay.
+    // Truoc day diem chi xuat hien sau khi nguoi dung bam "lam moi", nen nguoi
+    // mo app luc chua ghep noi thay ban do trong khi may van do duoc.
+    LaunchedEffect(selectedTab) {
+        if (selectedTab != 1) return@LaunchedEffect
+        viewModel.broadcastSelfTelemetry()
+        while (true) {
+            delay(15_000)
+            viewModel.broadcastSelfTelemetry()
         }
     }
 
@@ -174,7 +187,8 @@ fun MainAppScreen(
                         onRequestPrivacyClick = { showPrivacyDialog = true },
                         onSendZenlyBump = { viewModel.sendZenlyBump(context) },
                         onToggleLocationHistory = { enabled -> viewModel.toggleLocationHistory(enabled) },
-                        onOpenLocationHistory = { overlayScreen = "history" }
+                        onOpenLocationHistory = { overlayScreen = "history" },
+                        onRecheckPermissions = { viewModel.refreshPermissions() }
                     )
                     2 -> ScreenTimeScreen(
                         uiState = uiState,
