@@ -1,12 +1,7 @@
 package com.example.ui.theme
 
-import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.tween
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -15,8 +10,11 @@ import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -24,11 +22,15 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathOperation
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.platform.LocalContext
 import com.example.R
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlin.math.sin
 
 /**
@@ -188,13 +190,11 @@ fun PremiumBackground(
     content: @Composable BoxScope.() -> Unit
 ) {
     val palette = LocalPremiumPalette.current
-    val transition = rememberInfiniteTransition(label = "premium-bg")
-    val twinkle by transition.animateFloat(
-        initialValue = 0f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(tween(3400, easing = FastOutSlowInEasing), RepeatMode.Reverse),
-        label = "twinkle"
-    )
+    // Truoc day nen dong nay co `rememberInfiniteTransition`: mot gia tri Float
+    // doi moi 60 lan/giay khien Canvas full-man-hinh ve lai lien tuc, ke ca khi
+    // khong ai nhin. Do tren may thap la toan bo app rung khi cuon. Sao gio
+    // tinh: chi so sang theo `phase` co dinh, khong con animation.
+    val wallpaper = asyncWallpaper(if (palette.isDark) R.drawable.bg_night else R.drawable.bg_nature)
 
     val stars = remember {
         val rnd = kotlin.random.Random(20261016)
@@ -215,7 +215,6 @@ fun PremiumBackground(
     // de hoa lan chi la mot lop sach ben duoi: app doc len la DEN, khong phai
     // "mau xanh cua rung", va mot man cover duoi tuyet doi khong boi xuyen
     // qua man tren (lau nay chinh la cam giac "chong nen").
-    val wallpaper = if (palette.isDark) R.drawable.bg_night else R.drawable.bg_nature
     // Scrim: giup chu tren the thuy tinh dat du tong am 4.5:1 tren anh.
     val scrim = if (palette.isDark) {
         Brush.verticalGradient(listOf(Color(0xF2010207), Color(0xD9010207), Color(0xF5000000)))
@@ -228,28 +227,54 @@ fun PremiumBackground(
             .fillMaxSize()
             .background(palette.backgroundBrush)
     ) {
-        Image(
-            painter = painterResource(id = wallpaper),
-            contentDescription = null,
-            modifier = Modifier.fillMaxSize(),
-            contentScale = ContentScale.Crop
-        )
+        // `wallpaper` null trong vai chuc ms dau: nen luc do la gradient cua
+        // `backgroundBrush` — man hinh co noi dung ngay thay vi trang den.
+        wallpaper?.let {
+            Image(
+                bitmap = it,
+                contentDescription = null,
+                modifier = Modifier.fillMaxSize(),
+                contentScale = ContentScale.Crop
+            )
+        }
         Box(modifier = Modifier.fillMaxSize().background(scrim))
         // Chim di qua anh: dai sao mo (toi) — khong ve trang/nhiem sang o che
         // do sang, vi hoa lan cong + mat nuoc trong anh da la "chup rong".
         if (palette.isDark) {
             Canvas(modifier = Modifier.fillMaxSize()) {
-                drawSpaceNight(palette, stars, twinkle, showMoon)
+                drawSpaceNight(palette, stars, showMoon)
             }
         }
         content()
     }
 }
 
+/**
+ * Giai ma anh nen 1024x1792 OFF the main thread.
+ *
+ * `painterResource` giai ma ngay trong frame dau tien: do tren may thap la
+ * mot frame 1,1 giay va 54 frame bi bo (log Choreographer hom 2026-10-22),
+ * tuc la cam giac "app mo rat cham" truoc khi kip nhin thay gi. RGB_565 giam
+ * nua bo nho va thoi gian giai ma so voi ARGB_8888 mac dinh.
+ */
+@Composable
+private fun asyncWallpaper(resId: Int): ImageBitmap? {
+    var bitmap by remember(resId) { mutableStateOf<ImageBitmap?>(null) }
+    val resources = LocalContext.current.resources
+    LaunchedEffect(resId) {
+        bitmap = withContext(Dispatchers.IO) {
+            runCatching {
+                val opts = BitmapFactory.Options().apply { inPreferredConfig = Bitmap.Config.RGB_565 }
+                BitmapFactory.decodeResource(resources, resId, opts)?.asImageBitmap()
+            }.getOrNull()
+        }
+    }
+    return bitmap
+}
+
 private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawSpaceNight(
     palette: PremiumPalette,
     stars: List<Star>,
-    twinkle: Float,
     showMoon: Boolean
 ) {
     val w = size.width
@@ -290,7 +315,7 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawSpaceNight(
 
     // Starfield — only in the top band, so no dot ever lands behind a card.
     stars.forEach { star ->
-        val a = 0.20f + 0.80f * ((sin((star.phase + twinkle) * 6.2831853f) + 1f) / 2f)
+        val a = 0.20f + 0.80f * ((sin(star.phase * 6.2831853f) + 1f) / 2f)
         drawCircle(
             color = palette.starColor.copy(alpha = a * 0.32f),
             radius = star.radius,

@@ -67,4 +67,30 @@ class ThemeRegressionTest {
         assertFalse("Con alias EmotionStudyStress", tokens.contains("EmotionStudyStress"))
         assertFalse("Con token OceanAzure khong ai dung", tokens.contains("OceanAzure"))
     }
+
+    /**
+     * Do hom 2026-10-22 tren BlueStacks: `am start -W` bao 3,3 giay de mo app,
+     * Choreographer bo 54 frame va mot frame ke 1,15 giay. Hai nguyen nhan nam
+     * ngay trong nen: anh 1024x1792 giai ma trong frame dau, va mot
+     * `rememberInfiniteTransition` ve lai Canvas full-man-hinh 60 lan/giay.
+     */
+    @Test
+    fun nenKhongConVeLaiMoiFrame() {
+        assertFalse(
+            "Nen van con rememberInfiniteTransition — app rung khi cuon",
+            palettes.contains("rememberInfiniteTransition")
+        )
+        assertFalse("Nen van con animateFloat", palettes.contains("animateFloat"))
+    }
+
+    @Test
+    fun anhNenDuocGiaiMaNgoaiMainTo() {
+        assertFalse(
+            "painterResource giai ma anh lon ngay trong frame dau",
+            palettes.contains("painterResource")
+        )
+        assertTrue("Phai co ham giai ma bat dong bo", palettes.contains("fun asyncWallpaper("))
+        assertTrue("Phai giai ma tren Dispatchers.IO", palettes.contains("withContext(Dispatchers.IO)"))
+        assertTrue("Phai dung RGB_565 de giam nua bo nho", palettes.contains("Bitmap.Config.RGB_565"))
+    }
 }
