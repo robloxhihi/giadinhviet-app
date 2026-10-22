@@ -45,6 +45,15 @@ object SosPlan {
     /** Khi may khong co ung dung nao xu ly tel:/sms: (may tre em, may gia dinh khong cai dung cu). */
     const val NO_DIALER_APP = "Máy này không có ứng dụng quay số để mở. Hãy gọi trực tiếp từ một điện thoại khác."
 
+    /**
+     * May khong co app quay so mac dinh (BlueStacks, ROM khong dien thoai): thoi
+     * thay de mot app nhan tin dom linh ket `tel:`. Do tren BlueStacks
+     * 2026-10-22: bam "Hotline 113" lai mo man dang nhap Zalo, vi Zalo dang ky
+     * la noi xu ly lien ket dien thoai va may khong co dialer mac dinh.
+     */
+    fun noDialerHint(number: String): String =
+        "Máy này không có ứng dụng quay số. Hãy tự gọi $number từ một điện thoại khác."
+
     /** Khi so nguoi than chua duoc luu — loi dan, khong phai loi he thong. */
     const val NO_SAVED_NUMBER = "Chưa lưu số người thân. Vào Cài đặt → Số khẩn cấp để lưu."
 

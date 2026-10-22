@@ -71,6 +71,11 @@ object SosRescueIntents {
      *     dung khong thay gi xay ra ca.
      *  3. May khong co dung cu quay so -> `ActivityNotFoundException` -> noi
      *     ro, khong nem exception len Compose.
+     *  4. MOI intent phai duoc gim vao app quay so mac dinh cua he thong.
+     *     Do tren BlueStacks ngay 2026-10-22: bam "Hotline 113" lai mo man
+     *     dang nhap ZALO, vi Zalo dang ky la noi xu ly lien ket `tel:` va may
+     *     khong co dialer mac dinh.Nguoi dang cuu nan ma bam ra Zalo la loi
+     *     khong the chap nhan duoc.
      */
     fun call(
         context: Context,
@@ -82,24 +87,54 @@ object SosRescueIntents {
         if (clean.isBlank()) return SosIntentOutcome(false, SosPlan.NO_SAVED_NUMBER)
 
         val data = Uri.parse(SosPlan.dialUri(clean))
+        val dialPkg = systemDialerPackage(context)
+        if (dialPkg == null && !acceptsNonDialer(context, data)) {
+            return SosIntentOutcome(false, SosPlan.noDialerHint(clean))
+        }
         if (hasCallPermission) {
-            if (launch(context, Intent(Intent.ACTION_CALL, data)) == LaunchResult.STARTED) {
+            if (launch(context, callIntent(data, dialPkg)) == LaunchResult.STARTED) {
                 return SosIntentOutcome(true, "$redirectingMessage — ${SosPlan.CALL_STARTED}")
             }
             // ACTION_CALL bi tu choi (quyen bi thu hoi, ROM chan): rut ve ban
             // quay so. Day la loi cu — ham cu tra false lang, khong mo gi ca.
-            val retry = launch(context, Intent(Intent.ACTION_DIAL, data))
+            val retry = launch(context, dialIntent(data, dialPkg))
             return SosIntentOutcome(
                 ok = retry == LaunchResult.STARTED,
                 note = dialerNote(retry, redirectingMessage),
                 usedFallback = true
             )
         }
-        val opened = launch(context, Intent(Intent.ACTION_DIAL, data))
+        val opened = launch(context, dialIntent(data, dialPkg))
         return SosIntentOutcome(
             ok = opened == LaunchResult.STARTED,
             note = dialerNote(opened, redirectingMessage)
         )
+    }
+
+    /** App quay so mac dinh cua may; null khi ROM chua chon cai nao (BlueStacks). */
+    private fun systemDialerPackage(context: Context): String? = try {
+        (context.getSystemService(Context.TELECOM_SERVICE) as? android.telecom.TelecomManager)
+            ?.defaultDialerPackage?.takeIf { it.isNotBlank() }
+    } catch (e: Exception) {
+        null
+    }
+
+    private fun dialIntent(data: Uri, pkg: String?): Intent =
+        Intent(Intent.ACTION_DIAL, data).apply { pkg?.let { setPackage(it) } }
+
+    private fun callIntent(data: Uri, pkg: String?): Intent =
+        Intent(Intent.ACTION_CALL, data).apply { pkg?.let { setPackage(it) } }
+
+    /**
+     * Khi may khong co dialer mac dinh, chi cho dung intent khi noi xu ly KHONG
+     * phai mot app nhan tin (Zalo). `resolveActivity` chi tin duoc sau khi
+     * AndroidManifest khai `<queries>` cho hanh dong DIAL + scheme `tel:`.
+     */
+    private fun acceptsNonDialer(context: Context, data: Uri): Boolean {
+        val hit = runCatching {
+            Intent(Intent.ACTION_DIAL, data).resolveActivity(context.packageManager)
+        }.getOrNull()?.packageName ?: return false
+        return hit != SosPlan.ZALO_PACKAGE
     }
 
     private fun dialerNote(result: LaunchResult, redirecting: String): String = when (result) {
