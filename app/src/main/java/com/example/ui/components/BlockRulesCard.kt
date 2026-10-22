@@ -575,7 +575,7 @@ fun BlockRulesCard(
             }
             Text(
                 "30–360 phút. Kéo thanh này KHÔNG gửi gì cả — phải bấm nút bên dưới, " +
-                    "và thay đổi chỉ chạy khi bên kia đồng ý.",
+                    "và máy con chạy theo ngay khi lưu.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
