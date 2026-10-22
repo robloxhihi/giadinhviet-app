@@ -6,7 +6,6 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.PackageManager
-import android.net.Uri
 import android.os.Build
 import android.provider.Settings
 import android.telephony.SmsManager
@@ -176,7 +175,10 @@ class FallbackSmsManager(private val context: Context) {
                 errorMessage = "Chưa cài đặt số điện thoại người thân khẩn cấp để gửi SMS chat."
             )
         }
-        return dispatchSms(targetPhone, "[VESPERA_CHAT] $senderName: $messageText")
+        // Nhan tin nhan trong SMS den. Chuoi cu dung ten thuong mai cua ben
+        // khac, hien thang ra man hinh khoa cua nguoi nhan. May cu van con gui
+        // nhan chuoi cu, nen dau nhan o `SmsBridgeReceiver` giu ca hai.
+        return dispatchSms(targetPhone, "[GĐ VIỆT CHAT] $senderName: $messageText")
     }
 
     suspend fun sendEmergencySmsToRescue(
@@ -203,26 +205,38 @@ class FallbackSmsManager(private val context: Context) {
     }
 
     /**
-     * Gọi khẩn cấp thật: dùng ACTION_CALL (đàm thoại trực tiếp) nếu đã được cấp
-     * quyền CALL_PHONE, ngược lại mở bàn phím gọi (ACTION_DIAL).
-     * Trả về true nếu đã thực sự bắt đầu một cuộc gọi trực tiếp.
+     * Gọi khẩn cấp: `ACTION_CALL` khi quyen CALL_PHONE DA duoc cap that luc bam,
+     * nguoc lai `ACTION_DIAL`.
+     *
+     * Ban cu bat moi exception roi tra ve false: quyen bi thu hoi giua luc doc
+     * va luc bam thi `SecurityException` bi an, khong mo ban quay so thay the,
+     * nguoi dung bam tong dai 113 va KHONG THAY GI XAY RA. Toan bo quyet dinh
+     * + rut lui nam trong [SosRescueIntents.call].
+     *
+     * @return true khi cuoc goi duoc bat dau truc tiep (khong phai mo ban quay so).
      */
     fun makeDirectEmergencyCall(hotline: String): Boolean {
         val canCall = ContextCompat.checkSelfPermission(
             context, Manifest.permission.CALL_PHONE
         ) == PackageManager.PERMISSION_GRANTED
-        return try {
-            val action = if (canCall) Intent.ACTION_CALL else Intent.ACTION_DIAL
-            val intent = Intent(action).apply {
-                data = Uri.parse("tel:$hotline")
-                flags = Intent.FLAG_ACTIVITY_NEW_TASK
-            }
-            context.startActivity(intent)
-            canCall
-        } catch (e: Exception) {
-            Log.e(TAG, "Không thể mở trình gọi điện thoại: ${e.message}")
-            false
+        return SosRescueIntents.call(context, hotline, canCall).let { outcome ->
+            Log.d(TAG, "Goi $hotline: ok=${outcome.ok}, fallback=${outcome.usedFallback}, ${outcome.note}")
+            outcome.ok && !outcome.usedFallback && canCall
         }
+    }
+
+    /**
+     * Mo o SOAN TIN nhan cuu nan (khong phai gui lang). `ACTION_SENDTO` +
+     * `sms:<so>` + thuc the "sms_body": dung cu tin nhan cua may se mo voi noi
+     * dung da dien san, KHONG can quyen SEND_SMS.
+     */
+    fun openFamilySmsDraft(latitude: Double, longitude: Double, senderName: String): SosIntentOutcome {
+        val target = getEmergencyPhoneNumber()
+        val body = buildString {
+            append("[CỨU NẠN KHẨN CẤP] ${senderName.ifBlank { "Người thân trong nhà" }} cần giúp đỡ.\n")
+            append(locationBlock(latitude, longitude, 0f, 0L))
+        }
+        return SosRescueIntents.composeFamilySms(context, target, body)
     }
 
     // ─────────────────────────────────────────────────────────────────────

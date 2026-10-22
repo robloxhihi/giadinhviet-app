@@ -44,6 +44,20 @@
             <action android:name="android.intent.action.VIEW" />
             <data android:scheme="https" />
         </intent>
+        <!-- Nut "Goi qua Zalo" chi hien khi packageManager doc duoc com.zing.zalo.
+             Thieu dong nay thi tren Android 11+ luon ra "khong co Zalo" va nganh
+             goi Zalo bien mat lang, khong loi - day la loi thuc te cua ban cu. -->
+        <package android:name="com.zing.zalo" />
+        <!-- Dung cu quay so va dung cu tin nhan cua may: can cho nut " Goi
+             dien thoai thuong" va o soan tin nhan cuu nan soan san. -->
+        <intent>
+            <action android:name="android.intent.action.DIAL" />
+            <data android:scheme="tel" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.SENDTO" />
+            <data android:scheme="smsto" />
+        </intent>
     </queries>
 
     <application

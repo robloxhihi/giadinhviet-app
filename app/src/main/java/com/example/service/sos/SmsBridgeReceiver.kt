@@ -30,7 +30,12 @@ class SmsBridgeReceiver : BroadcastReceiver() {
 
                     Log.d(TAG, "Nhận SMS từ $senderNumber: $messageBody")
 
-                    if (messageBody.contains("[VESPERA_CHAT]") || messageBody.contains("[SOS]") || messageBody.contains("GIA ĐÌNH VIỆT")) {
+                    if (messageBody.contains("[GĐ VIỆT CHAT]") ||
+                        messageBody.contains("[VESPERA_CHAT]") ||
+                        messageBody.contains("[SOS]") ||
+                        messageBody.contains("GIA ĐÌNH VIỆT") ||
+                        messageBody.contains("CỨU NẠN")
+                    ) {
                         showSmsBridgeNotification(context, senderNumber, messageBody)
                     }
                 }
@@ -79,7 +84,7 @@ class SmsBridgeReceiver : BroadcastReceiver() {
 
             val channel = NotificationChannel(
                 CHANNEL_ID,
-                "Cầu nối SMS & Khẩn cấp Vespera",
+                "Cầu nối SMS & Khẩn cấp Gia Đình Việt",
                 NotificationManager.IMPORTANCE_HIGH
             ).apply {
                 description = "Nhận thông điệp chat và SOS qua SMS dự phòng khi mất kết nối"

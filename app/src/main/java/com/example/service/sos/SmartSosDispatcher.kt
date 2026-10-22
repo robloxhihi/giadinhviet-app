@@ -271,12 +271,25 @@ class SmartSosDispatcher(
 
     /**
      * Gửi SOS tới Lực lượng Cứu hộ (112, 115, 114, 113) — kèm mở cuộc gọi khẩn cấp.
+     *
+     * THU TU CO NHAT: MO CUOC GOI TRUOC, roi mới gửi SMS. Ban cu gui SMS truoc:
+     * `dispatchSms` cho nha mang xac nhan toi 20 giay, nen bam 113 tren may co
+     * quyen SMS nhung tong dai khong bao gio tra loi SEND_SMS la NGAY DIEN 20
+     * GIAY roi ban quay so moi mo — khong phai "mo cuoc goi khuan cap" ma la
+     * may treo. Cuu nan thi cuoc goi phai di truong.
      */
     suspend fun sendSosToRescueForce(
         hotline: String,
         location: LocationData,
-        senderName: String
+        senderName: String,
+        /**
+         * false khi ben goi DA tu mo ban quay so truoc do (ViewModel mo ngay
+         * tuc thi khi bam 113) — dung mo lan hai, kha nua la chen len cuoc goi
+         * dang ket noi.
+         */
+        startCall: Boolean = true
     ): SosDispatchResult {
+        val startedRealCall = if (startCall) smsManager.makeDirectEmergencyCall(hotline) else false
         val result = smsManager.sendEmergencySmsToRescue(
             hotline = hotline,
             latitude = location.latitude,
@@ -285,9 +298,11 @@ class SmartSosDispatcher(
             accuracyMeters = if (location.hasRealFix) location.accuracy else 0f,
             fixTimeMillis = if (location.hasRealFix) location.updatedAt else 0L
         )
-        val startedRealCall = smsManager.makeDirectEmergencyCall(hotline)
 
-        val callNote = if (startedRealCall) "Đang gọi trực tiếp $hotline…" else "Đã mở bàn phím gọi $hotline (bấm gọi để kết nối)."
+        val callNote = if (startedRealCall)
+            "${SosPlan.REDIRECTING_TO_RESCUE} — đang gọi trực tiếp $hotline…"
+        else
+            "${SosPlan.REDIRECTING_TO_RESCUE} — đã mở bàn phím gọi $hotline (bấm gọi để kết nối)."
         // Báo đúng nội dung đã gửi cho tổng đài: chỉ nói "kèm tọa độ" khi SMS thật có tọa độ hợp lệ.
         val locNote = if (result.locationIncluded) "tọa độ cứu nạn" else "SMS cứu nạn KHÔNG kèm vị trí GPS (ghi rõ không xác định được vị trí)"
 
