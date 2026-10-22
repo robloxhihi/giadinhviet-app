@@ -141,6 +141,16 @@ data class VesperaUiState(
     val currentSosChannel: SosChannelUsed = SosChannelUsed.INTERNET_CLOUD,
     val isSosAlertActive: Boolean = false,
     val activeSosMessage: String = "",
+    /**
+     * null = chua kip kiem tra; true = may cai Zalo. Quyet dinh nut "Gọi qua
+     * Zalo" co hien hay khong. Android 11+ chi doc duoc package nay khi
+     * Manifest co `<queries>` cho `com.zing.zalo`.
+     */
+    val zaloInstalled: Boolean? = null,
+    /** Trang thai ngan cua luu cuu nan: "Đang chuyển hướng đến cứu hộ"… */
+    val sosStatusMessage: String = "",
+    /** Vĩ độ / kinh độ / địa điểm hien trong bang cuu nan va loi doc sau 2 giay. */
+    val sosPosition: com.example.service.sos.SosPlan.Position? = null,
     val isLocationHistoryEnabled: Boolean = true,
     /** Trang thai luu luat chan app — de the hien tich xanh that. */
     val blockRulesSaveState: BlockRulesSaveState = BlockRulesSaveState.Idle,
@@ -1870,7 +1880,142 @@ class VesperaViewModel(
     }
 
     fun dismissSosAlert() {
-        _uiState.value = _uiState.value.copy(isSosAlertActive = false)
+        _uiState.value = _uiState.value.copy(isSosAlertActive = false, sosStatusMessage = "")
+    }
+
+    // ── Bảng cứu nạn: môi trường thật của máy + vị trí đang cầu cứu ──────
+
+    /**
+     * Đọc lại TỪ MÁY: Zalo có cài không, quyền gọi còn không.
+     *
+     * `isZaloInstalled` chi thay duoc Zalo tu Android 11 neu Manifest co
+     * `<package android:name="com.zing.zalo"/>` trong `<queries>`. Thieu dong
+     * do thi nut "Gọi qua Zalo" khong bao gio hien — khong loi, khong bao cao.
+     */
+    fun refreshSosEnvironment() {
+        val ctx = context ?: return
+        _uiState.value = _uiState.value.copy(
+            zaloInstalled = com.example.service.sos.SosRescueIntents.isZaloInstalled(ctx),
+            hasCallPermission = com.example.service.PermissionManager.isGranted(
+                ctx, android.Manifest.permission.CALL_PHONE
+            )
+        )
+    }
+
+    /**
+     * Vi tri + dia chi THAT cho bang cuu nan. Khong dung diem cu trong UiState
+     * lam "vi tri hien tai": luc cuu nan thi mot diem hom qua la tin sai lech.
+     */
+    private suspend fun resolveSosPosition(userName: String): Pair<LocationData, com.example.service.sos.SosPlan.Position> {
+        val (loc, hasFix) = resolveSosLocation(userName)
+        val address = if (hasFix) {
+            context?.let { AddressHelper.getReadableAddress(it, loc.latitude, loc.longitude) }.orEmpty()
+        } else ""
+        val position = com.example.service.sos.SosPlan.Position(
+            latitude = loc.latitude,
+            longitude = loc.longitude,
+            accuracyMeters = if (hasFix) loc.accuracy else 0f,
+            address = address,
+            fixTimeMillis = if (hasFix) loc.updatedAt else 0L,
+            senderName = userName
+        )
+        return loc to position
+    }
+
+    /** Goi khi mo bang SOS: lay vi tri + dia chi va kiem tra Zalo/quyen goi. */
+    fun prepareSosConsole() {
+        refreshSosEnvironment()
+        _uiState.value = _uiState.value.copy(sosStatusMessage = "Đang lấy vị trí hiện tại của máy…")
+        viewModelScope.launch {
+            val name = sosSenderName()
+            val (loc, position) = resolveSosPosition(name)
+            _uiState.value = _uiState.value.copy(
+                myLocation = if (loc.hasRealFix) loc else _uiState.value.myLocation,
+                sosPosition = position,
+                sosStatusMessage = ""
+            )
+        }
+    }
+
+    private fun sosSenderName(): String =
+        _uiState.value.userProfile?.displayName.orEmpty().ifEmpty { "Thành viên gia đình" }
+
+    /**
+     * Goi nguoi than theo kenh nguoi dung chon: Zalo (neu may cai Zalo) hoac
+     * dien thoai thuong voi so da luu trong danh ba cua app.
+     */
+    fun callFamilyForSos(channel: com.example.service.sos.SosPlan.CallChannel) {
+        val ctx = context
+        val number = _uiState.value.emergencyPhoneNumber.trim()
+        if (ctx == null) {
+            _uiState.value = _uiState.value.copy(
+                errorMessage = com.example.service.sos.SosPlan.NO_CALL_CHANNEL
+            )
+            return
+        }
+        if (number.isBlank()) {
+            _uiState.value = _uiState.value.copy(
+                errorMessage = com.example.service.sos.SosPlan.NO_SAVED_NUMBER
+            )
+            return
+        }
+        refreshSosEnvironment()
+        val canCall = _uiState.value.hasCallPermission
+        _uiState.value = _uiState.value.copy(
+            sosStatusMessage = com.example.service.sos.SosPlan.REDIRECTING_TO_RESCUE,
+            isSosAlertActive = true,
+            activeSosMessage = com.example.service.sos.SosPlan.REDIRECTING_TO_RESCUE
+        )
+        viewModelScope.launch {
+            val outcome = when (channel) {
+                com.example.service.sos.SosPlan.CallChannel.ZALO ->
+                    com.example.service.sos.SosRescueIntents.openZaloChat(ctx!!, number)
+                else ->
+                    com.example.service.sos.SosRescueIntents.call(ctx!!, number, canCall)
+            }
+            _uiState.value = _uiState.value.copy(
+                sosStatusMessage = if (outcome.ok)
+                    com.example.service.sos.SosPlan.REDIRECTING_TO_RESCUE else "",
+                isSosAlertActive = true,
+                activeSosMessage = outcome.note,
+                successMessage = if (outcome.ok) outcome.note else null,
+                errorMessage = if (outcome.ok) null else outcome.note
+            )
+        }
+    }
+
+    /**
+     * Mo o SOAN TIN cuu nan da dien san toa do (vĩ độ / kinh độ / địa điểm).
+     * `ACTION_SENDTO` + `sms:<so>` + "sms_body" — khong can quyen SEND_SMS nen
+     * duong nay van chay tren may chua cap quyen SMS.
+     */
+    fun openFamilySmsDraft() {
+        val ctx = context
+        val number = _uiState.value.emergencyPhoneNumber.trim()
+        if (number.isBlank() || ctx == null) {
+            _uiState.value = _uiState.value.copy(
+                errorMessage = com.example.service.sos.SosPlan.NO_SAVED_NUMBER
+            )
+            return
+        }
+        _uiState.value = _uiState.value.copy(isLoading = true)
+        viewModelScope.launch {
+            val (loc, position) = resolveSosPosition(sosSenderName())
+            val outcome = com.example.service.sos.SosRescueIntents.composeFamilySms(
+                ctx, number, com.example.service.sos.SosPlan.familySmsBody(position)
+            )
+            _uiState.value = _uiState.value.copy(
+                isLoading = false,
+                myLocation = if (loc.hasRealFix) loc else _uiState.value.myLocation,
+                sosPosition = position,
+                sosStatusMessage = if (outcome.ok)
+                    com.example.service.sos.SosPlan.REDIRECTING_TO_RESCUE else "",
+                isSosAlertActive = true,
+                activeSosMessage = outcome.note,
+                successMessage = if (outcome.ok) outcome.note else null,
+                errorMessage = if (outcome.ok) null else outcome.note
+            )
+        }
     }
 
     fun sendSosAlert() {
@@ -1892,7 +2037,10 @@ class VesperaViewModel(
         _uiState.value = _uiState.value.copy(isLoading = true)
 
         viewModelScope.launch {
-            val (loc, hasLocation) = resolveSosLocation(name)
+            // Ke ca dia chi dich duoc: hop thu bao sau khi gui cho gia dinh phai
+            // in vi do / kinh do / dia diem va doc ra sau 2 giay.
+            val (loc, position) = resolveSosPosition(name)
+            val hasLocation = position.hasFix
             val timeText = java.text.SimpleDateFormat("HH:mm", java.util.Locale.US).format(java.util.Date())
             val dispatcher = smartSosDispatcher
             val res: com.example.service.sos.SosDispatchResult = if (dispatcher != null) {
@@ -1924,6 +2072,7 @@ class VesperaViewModel(
             _uiState.value = _uiState.value.copy(
                 isLoading = false,
                 myLocation = if (hasLocation) loc else _uiState.value.myLocation,
+                sosPosition = position,
                 isSosAlertActive = res.isSuccess,
                 activeSosMessage = honestMessage,
                 successMessage = if (res.isSuccess) honestMessage else null,
@@ -1933,38 +2082,68 @@ class VesperaViewModel(
     }
 
     fun sendSmartSosToRescue(hotline: String = "112") {
+        val ctx = context
         val name = _uiState.value.userProfile?.displayName.orEmpty().ifEmpty { "Công dân khẩn cấp" }
 
-        _uiState.value = _uiState.value.copy(isLoading = true)
+        // BUOC 1 — MO BAN QUAY SO NGAY TUC THOI, truoc khi cho GPS.
+        // Tam so 113 thi moi giay la moi su song: 12 giay di tim toa do khong
+        // duoc chen vao giua luc nguoi dung bam va tong dai nghe may. Toa do
+        // se di theo bang SMS o buoc 2, va neu may da ket noi thi cuoc goi da
+        // chay roi.
+        refreshSosEnvironment()
+        val dialNow = if (ctx != null)
+            com.example.service.sos.SosRescueIntents.call(
+                ctx, hotline, _uiState.value.hasCallPermission
+            )
+        else null
+        _uiState.value = _uiState.value.copy(
+            isLoading = true,
+            isSosAlertActive = true,
+            sosStatusMessage = com.example.service.sos.SosPlan.REDIRECTING_TO_RESCUE,
+            activeSosMessage = dialNow?.note
+                ?: com.example.service.sos.SosPlan.REDIRECTING_TO_RESCUE
+        )
+
         viewModelScope.launch {
-            val (loc, hasLocation) = resolveSosLocation(name)
-            val timeText = java.text.SimpleDateFormat("HH:mm", java.util.Locale.US).format(java.util.Date())
+            // BUOC 2 — lay vi tri roi gửi SMS toa do toi tong dai. startCall =
+            // false vi ban quay so DA mo o buoc 1, mo lan hai la chen len cuoc
+            // goi dang ket noi.
+            val (loc, position) = resolveSosPosition(name)
             val dispatcher = smartSosDispatcher
-            val dispatchResult = dispatcher?.sendSosToRescueForce(hotline, loc, name)
+            val dispatchResult = dispatcher?.sendSosToRescueForce(
+                hotline, loc, name, startCall = dialNow == null
+            )
             val dispatched = dispatchResult?.isSuccess == true
             val raw = dispatchResult?.detailMessage
             val message = when {
                 dispatcher == null ->
                     "Chưa gửi được yêu cầu cứu hộ $hotline: bộ phận SOS chưa sẵn sàng." +
-                        if (!hasLocation) " Ngoài ra chưa định vị được GPS lúc $timeText." else ""
+                        if (!loc.hasRealFix) " Ngoài ra chưa định vị được GPS lúc ${timeText()}." else ""
                 !dispatched -> raw.orEmpty() +
-                    if (!hasLocation) " (chưa định vị được GPS lúc $timeText)." else ""
-                hasLocation -> "$raw — tin nhắn gửi kèm vị trí GPS lúc $timeText."
-                else -> "Đã báo khẩn cấp cứu hộ $hotline nhưng KHÔNG xác định được vị trí GPS lúc $timeText" +
+                    if (!loc.hasRealFix) " (chưa định vị được GPS lúc ${timeText()})." else ""
+                loc.hasRealFix -> "$raw — tin nhắn gửi kèm vị trí GPS lúc ${timeText()}."
+                else -> "Đã báo khẩn cấp cứu hộ $hotline nhưng KHÔNG xác định được vị trí GPS lúc ${timeText()}" +
                     " — tin nhắn gửi đi KHÔNG kèm tọa độ."
             }
             _uiState.value = _uiState.value.copy(
                 isLoading = false,
-                myLocation = if (hasLocation) loc else _uiState.value.myLocation,
-                isSosAlertActive = dispatcher != null,
+                myLocation = if (loc.hasRealFix) loc else _uiState.value.myLocation,
+                sosPosition = position,
+                isSosAlertActive = true,
+                // Van giu dong "Đang chuyển hướng đến cứu hộ": cuoc goi dang chay.
+                sosStatusMessage = com.example.service.sos.SosPlan.REDIRECTING_TO_RESCUE,
                 activeSosMessage = message,
                 // luôn có đúng một phản hồi: dispatcher thành công mà thiếu vị trí
                 // trước đây rơi vào successMessage = null VÀ errorMessage = null => câm lặng.
-                successMessage = if (dispatched && hasLocation) message else null,
-                errorMessage = if (dispatched && hasLocation) null else message
+                successMessage = if (dispatched && loc.hasRealFix) message else null,
+                errorMessage = if (dispatched && loc.hasRealFix) null else message
             )
         }
     }
+
+    /** Chuoi gio hien tai, dung trong loi bao cao SOS — de may khong bao "vi tri" ma khong noi luc nao. */
+    private fun timeText(): String =
+        java.text.SimpleDateFormat("HH:mm", java.util.Locale.US).format(java.util.Date())
 
     /** Lý do hiện tại KHÔNG gửi được SMS cứu nạn (null nếu gửi được) — dùng cho UI cảnh báo. */
     fun smsAvailabilityIssue(): String? = smartSosDispatcher?.smsPreflightReason()

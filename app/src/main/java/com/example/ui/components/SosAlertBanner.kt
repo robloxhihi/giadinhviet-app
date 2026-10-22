@@ -17,6 +17,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -69,6 +70,10 @@ fun SosAlertBanner(
 fun SosEmergencyWarningDialog(
     message: String,
     channel: com.example.service.sos.SosChannelUsed,
+    /** Trang thai may dang lam gi — mac dinh la dong chu nguoi dung yeu cau. */
+    statusMessage: String = com.example.service.sos.SosPlan.REDIRECTING_TO_RESCUE,
+    /** Vi tri hien tren man hinh va doc ra sau 2 giay. null = chua do duoc GPS. */
+    position: com.example.service.sos.SosPlan.Position? = null,
     onDismiss: () -> Unit
 ) {
     androidx.compose.material3.AlertDialog(
@@ -93,11 +98,18 @@ fun SosEmergencyWarningDialog(
         text = {
             androidx.compose.foundation.layout.Column(modifier = Modifier.fillMaxWidth()) {
                 Text(
-                    text = "Hệ thống Vespera đã tự động ghi nhận và phát tín hiệu cứu nạn khẩn cấp!",
+                    text = statusMessage,
                     style = androidx.compose.material3.MaterialTheme.typography.bodyMedium,
                     color = Color.White,
-                    fontWeight = FontWeight.Bold
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.testTag("sos_status_strip")
                 )
+                // Vi tri cau cuu in THAT MAN va doc ra sau 2 giay: nguoi dung
+                // khong kip nhin thi con kip nghe.
+                position?.let { spot ->
+                    Spacer(modifier = Modifier.height(8.dp))
+                    SosRescuePositionPanel(spot)
+                }
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
                     text = message,

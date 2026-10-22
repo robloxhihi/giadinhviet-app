@@ -67,6 +67,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.service.sos.FallbackSmsManager
 import com.example.service.sos.SosChannelUsed
+import com.example.service.sos.SosPlan
 import com.example.ui.theme.NeonAmber
 import com.example.ui.theme.NeonCyan
 import com.example.ui.theme.NeonEmerald
@@ -85,16 +86,33 @@ import kotlin.math.roundToInt
  * Nút SOS Nổi di chuyển được (Draggable Floating SOS Button):
  * - Xuất hiện ở mọi giao diện, nhỏ gọn, kéo thả linh hoạt trên màn hình.
  * - Nhấn vào mở bảng điều khiển cứu nạn với 2 lựa chọn rõ ràng:
- *   [1] Gửi SOS tới người thân (có cơ chế đếm ngược 5s chống bấm nhầm).
+ *   [1] Gửi SOS tới người thân (có cơ chế đếm ngược 5s chống bấm nhầm), KÈM
+ *       hai duong di tiep theo: soan tin nhắn DA dien san toa do, hoac goi.
  *   [2] Gửi SOS & Gọi tới Lực lượng cứu hộ (112, 115, 114, 113).
+ * - Kenh goi phu theo may: co Zalo thi co nut "Gọi qua Zalo", khong co thi
+ *   chi con "Gọi điện thoại thường" (so nguoi than da luu trong danh ba cua
+ *   app). Quyet dinh nam o `SosPlan.callOptions` — xem `SosPlanTest`.
+ * - Vi tri (vĩ độ / kinh độ / địa điểm) hien ngay trong bang va duoc doc to
+ *   sau 2 giay.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DraggableFloatingSosButton(
     currentChannel: SosChannelUsed,
     isSosAllowedNow: Boolean,
+    /** null = chua kip kiem tra; false = may khong cai Zalo. */
+    zaloInstalled: Boolean?,
+    hasCallPermission: Boolean,
+    emergencyPhone: String,
+    position: SosPlan.Position?,
+    /** "Đang chuyển hướng đến cứu hộ" — hien khi may dang mo ban quay so/soan tin. */
+    statusMessage: String?,
     onSendSosToFamily: () -> Unit,
     onSendSosToRescue: (hotline: String) -> Unit,
+    onCallFamily: (SosPlan.CallChannel) -> Unit,
+    onOpenFamilySms: () -> Unit,
+    /** Goi khi mo bang: xin diem dinh vi + dia chi may nay, khong dung so lieu cu. */
+    onSheetOpened: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     var offsetX by remember { mutableFloatStateOf(0f) }
@@ -124,7 +142,10 @@ fun DraggableFloatingSosButton(
                     )
                 )
                 .border(1.dp, Color.White.copy(alpha = 0.8f), CircleShape)
-                .clickable { showSosSheet = true }
+                .clickable {
+                    showSosSheet = true
+                    onSheetOpened()
+                }
                 .padding(8.dp)
                 .testTag("floating_sos_button"),
             contentAlignment = Alignment.Center
@@ -158,6 +179,11 @@ fun DraggableFloatingSosButton(
             SosBottomSheetContent(
                 currentChannel = currentChannel,
                 isSosAllowedNow = isSosAllowedNow,
+                zaloInstalled = zaloInstalled,
+                hasCallPermission = hasCallPermission,
+                emergencyPhone = emergencyPhone,
+                position = position,
+                statusMessage = statusMessage,
                 onDismiss = { showSosSheet = false },
                 onSendSosToFamily = {
                     onSendSosToFamily()
@@ -165,6 +191,14 @@ fun DraggableFloatingSosButton(
                 },
                 onSendSosToRescue = { hotline ->
                     onSendSosToRescue(hotline)
+                    showSosSheet = false
+                },
+                onCallFamily = { channel ->
+                    onCallFamily(channel)
+                    showSosSheet = false
+                },
+                onOpenFamilySms = {
+                    onOpenFamilySms()
                     showSosSheet = false
                 }
             )
@@ -176,9 +210,16 @@ fun DraggableFloatingSosButton(
 fun SosBottomSheetContent(
     currentChannel: SosChannelUsed,
     isSosAllowedNow: Boolean,
+    zaloInstalled: Boolean?,
+    hasCallPermission: Boolean,
+    emergencyPhone: String,
+    position: SosPlan.Position?,
+    statusMessage: String?,
     onDismiss: () -> Unit,
     onSendSosToFamily: () -> Unit,
-    onSendSosToRescue: (hotline: String) -> Unit
+    onSendSosToRescue: (hotline: String) -> Unit,
+    onCallFamily: (SosPlan.CallChannel) -> Unit,
+    onOpenFamilySms: () -> Unit
 ) {
     val scrollState = rememberScrollState()
     var countdownSeconds by remember { mutableIntStateOf(5) }
@@ -246,6 +287,16 @@ fun SosBottomSheetContent(
         }
 
         Spacer(modifier = Modifier.height(14.dp))
+
+        // Vi tri cau cuu: ba dong vi do / kinh do / dia diem + loi doc tu dong
+        // sau 2 giay. Dat CAU DAU tien trong bang de nguoi dung nhin thay no
+        // truoc khi bam bat ky nut nao.
+        SosRescuePositionPanel(position = position)
+
+        statusMessage?.let { notice ->
+            Spacer(modifier = Modifier.height(10.dp))
+            SosStatusStrip(text = notice)
+        }
 
         // Chỉ báo kênh cứu hộ tự động
         // Chi bao "Trực tuyến"/"ngoai tuyen" khi co nguoc that: `currentChannel`
@@ -405,6 +456,86 @@ fun SosBottomSheetContent(
                         )
                     }
                 }
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                // Duong 2a: soan SAN tin nhắn cuu nan kem toa do. Dung
+                // ACTION_SENDTO nen may chua cap quyen SMS van dung duoc —
+                // chi bam "Gui" trong ung dung tin nhan cua may.
+                OutlinedButton(
+                    onClick = onOpenFamilySms,
+                    enabled = emergencyPhone.isNotBlank(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("btn_open_family_sms"),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = NeonCyan),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Icon(Icons.Default.Send, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Soạn tin nhắn cứu nạn kèm toạ độ")
+                }
+
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = if (emergencyPhone.isBlank())
+                        SosPlan.NO_SAVED_NUMBER
+                    else
+                        "Tin nhắn đã điền sẵn vĩ độ, kinh độ và địa điểm — bấm Gửi.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = TextSecondary
+                )
+
+                Spacer(modifier = Modifier.height(10.dp))
+                Text(
+                    text = "Hoặc gọi ngay cho người thân:",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = TextPrimary,
+                    fontWeight = FontWeight.Bold
+                )
+
+                // Quyet dinh "may co Zalo hay khong" nam o SosPlan; UI chi ve
+                // nut theo dung danh sach do tra ve.
+                SosPlan.callOptions(zaloInstalled == true, emergencyPhone).forEach { option ->
+                    Spacer(modifier = Modifier.height(8.dp))
+                    if (option.isZalo) {
+                        OutlinedButton(
+                            onClick = { onCallFamily(option.channel) },
+                            enabled = option.enabled,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("btn_call_via_zalo"),
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = NeonCyan),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Icon(Icons.Default.Call, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(option.label)
+                        }
+                    } else {
+                        Button(
+                            onClick = { onCallFamily(option.channel) },
+                            enabled = option.enabled,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("btn_call_saved_number"),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = NeonEmerald,
+                                contentColor = Color.White
+                            ),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Icon(Icons.Default.Call, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(option.label, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                    Text(
+                        text = option.note,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = TextSecondary
+                    )
+                }
             }
         }
 
@@ -506,6 +637,17 @@ fun SosBottomSheetContent(
                         )
                     }
                 }
+
+                Spacer(modifier = Modifier.height(10.dp))
+                // Noi TRUOC ket qua de nguoi dung khong tuong bam xong la may
+                // tu goi: 113 tren may chua cap quyen goi thi chi mo ban quay so.
+                Text(
+                    text = "Bấm một số: app gửi SMS toạ độ cho tổng đài rồi " +
+                        (if (hasCallPermission) "gọi thẳng." else "mở bàn quay số — bấm Gọi để kết nối.") +
+                        " " + SosPlan.REDIRECTING_TO_RESCUE,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = TextSecondary
+                )
             }
         }
 

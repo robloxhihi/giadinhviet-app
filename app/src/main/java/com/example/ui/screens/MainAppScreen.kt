@@ -116,6 +116,10 @@ fun MainAppScreen(
             com.example.ui.components.SosEmergencyWarningDialog(
                 message = uiState.activeSosMessage,
                 channel = uiState.currentSosChannel,
+                statusMessage = uiState.sosStatusMessage.ifBlank {
+                    com.example.service.sos.SosPlan.REDIRECTING_TO_RESCUE
+                },
+                position = uiState.sosPosition,
                 onDismiss = { viewModel.dismissSosAlert() }
             )
         }
@@ -279,8 +283,16 @@ fun MainAppScreen(
         DraggableFloatingSosButton(
             currentChannel = uiState.currentSosChannel,
             isSosAllowedNow = viewModel.isSosAllowedNow(),
+            zaloInstalled = uiState.zaloInstalled,
+            hasCallPermission = uiState.hasCallPermission,
+            emergencyPhone = uiState.emergencyPhoneNumber,
+            position = uiState.sosPosition,
+            statusMessage = uiState.sosStatusMessage.ifBlank { null },
             onSendSosToFamily = { viewModel.sendSmartSosToFamily() },
             onSendSosToRescue = { hotline -> viewModel.sendSmartSosToRescue(hotline) },
+            onCallFamily = { channel -> viewModel.callFamilyForSos(channel) },
+            onOpenFamilySms = { viewModel.openFamilySmsDraft() },
+            onSheetOpened = { viewModel.prepareSosConsole() },
             modifier = Modifier
                 .align(Alignment.BottomEnd)
                 // O Chat, hàng soạn tin nằm sát thanh điều hướng, đúng chỗ quả
