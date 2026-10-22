@@ -273,7 +273,9 @@ data class ExtraTimeRequest(
     val pairingId: String = "",
     val childId: String = "",
     val childName: String = "",
-    val minutesRequested: Int = 30,
+    // Mac dinh = 0 chu khong phai 30: mot document thieu truong phai hiện ra
+    // la "chưa có con số", khong phai mot yêu cầu 30 phut do app tu che.
+    val minutesRequested: Int = 0,
     val reason: String = "",
     val status: RequestStatus = RequestStatus.PENDING,
     val respondedAt: Long? = null,
@@ -283,7 +285,7 @@ data class ExtraTimeRequest(
 data class ScreenTimeAgreement(
     val id: String = "",
     val pairingId: String = "",
-    val requestedMinutes: Int = 120,
+    val requestedMinutes: Int = 0,
     val proposerRole: UserRole = UserRole.PARENT,
     val status: RequestStatus = RequestStatus.PENDING,
     val createdAt: Long = System.currentTimeMillis(),
@@ -297,9 +299,11 @@ data class PrivacyRequest(
     val childName: String = "",
     val startDate: String = "",
     val endDate: String = "",
-    val startHour: Int = 14,
+    // -1 = khong co khung gio. 14/16 tung khiến một phiếu thiếu dữ liệu đọc
+    // thành "từ 14:00 đến 16:00", tức app bịa ra khung giờ người ta không xin.
+    val startHour: Int = -1,
     val startMinute: Int = 0,
-    val endHour: Int = 16,
+    val endHour: Int = -1,
     val endMinute: Int = 0,
     val reason: String = "",
     val status: RequestStatus = RequestStatus.PENDING,

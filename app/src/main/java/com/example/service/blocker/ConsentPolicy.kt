@@ -10,7 +10,7 @@ import com.example.data.model.windowDisplay
 /**
  * Phiếu đồng thuận của nội quy gia đình: không ai được một mình đổi luật.
  *
- * Nguyên tắc: mẹ là người đặt luật, nhưng mẹ không được tự thông qua. Một
+ * Nguyên tắc: phụ huynh là người đặt luật, nhưng phụ huynh không được tự thông qua. Một
  * thay đổi (chặn thêm app, bỏ chặn, đổi hạn mức phút, đổi khung giờ được dùng
  * máy, chuyển "chỉ nhắc" sang "chặn thật") chỉ có hiệu lực khi bên kia bấm
  * Đồng ý. Trong lúc chờ
@@ -32,7 +32,7 @@ object ConsentPolicy {
 
     /** Tên gọi trong giao diện, ngắn để vừa banner. */
     fun label(role: UserRole?): String = when (role) {
-        UserRole.PARENT -> "Mẹ"
+        UserRole.PARENT -> "Phụ huynh"
         UserRole.CHILD -> "Con"
         null -> "Gia đình"
     }

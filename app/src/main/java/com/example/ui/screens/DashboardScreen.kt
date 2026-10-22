@@ -181,7 +181,18 @@ fun DashboardScreen(
                             }
                             Spacer(modifier = Modifier.height(6.dp))
                             Text(
-                                text = "Học sinh ${req.childName} xin bảo vệ riêng tư: từ ${req.startHour}:00 đến ${req.endHour}:00 ${if (req.startDate.isNotEmpty()) "ngày ${req.startDate}" else ""}.",
+                                text = buildString {
+                                    append("Học sinh ")
+                                    append(req.childName.ifEmpty { "nhà mình" })
+                                    append(" xin bảo vệ riêng tư: ")
+                                    append(
+                                        if (req.startHour < 0 || req.endHour < 0) "chưa nêu khung giờ cụ thể"
+                                        else "từ ${req.startHour}:${"%02d".format(req.startMinute)} " +
+                                            "đến ${req.endHour}:${"%02d".format(req.endMinute)}"
+                                    )
+                                    if (req.startDate.isNotEmpty()) append(" ngày ${req.startDate}")
+                                    append(".")
+                                },
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = TextPrimary,
                                 fontWeight = FontWeight.Bold

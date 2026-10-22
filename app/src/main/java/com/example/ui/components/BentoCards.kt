@@ -263,6 +263,7 @@ fun IosDynamicIslandPill(
     isCharging: Boolean,
     activeApp: String,
     appMins: Int,
+    isLive: Boolean,
     modifier: Modifier = Modifier
 ) {
     Box(
@@ -283,7 +284,10 @@ fun IosDynamicIslandPill(
                     modifier = Modifier
                         .size(10.dp)
                         .clip(CircleShape)
-                        .background(NeonEmerald)
+                        // Cham green = MAY BEN KIA VUA gui diem that. Truoc day
+                        // mau nay co dinh: pill bao "dang live" ca khi ping
+                        // cu o may con tu hom qua.
+                        .background(if (isLive) NeonEmerald else NeonAmber)
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 Column {
@@ -311,7 +315,11 @@ fun IosDynamicIslandPill(
                         .padding(horizontal = 6.dp, vertical = 2.dp)
                 ) {
                     Text(
-                        text = "$activeApp: ${appMins}m",
+                        // "Chưa đọc được dữ liệu: 0m" la mot nhan that bai gan
+                        // con so bia. Chua co ten ung dung thi noi het, khong
+                        // kem phut.
+                        text = if (activeApp.isBlank()) "Chưa đọc được ứng dụng"
+                        else "$activeApp: ${appMins}m",
                         color = NeonCyan,
                         fontSize = 10.sp,
                         fontWeight = FontWeight.Bold
@@ -319,7 +327,8 @@ fun IosDynamicIslandPill(
                 }
                 Spacer(modifier = Modifier.width(6.dp))
                 Text(
-                    text = "$batteryPct% ${if (isCharging) "⚡" else "🔋"}",
+                    text = if (batteryPct < 0) "Pin ?"
+                    else "$batteryPct% ${if (isCharging) "⚡" else "🔋"}",
                     color = TextPrimary,
                     fontSize = 10.sp,
                     fontWeight = FontWeight.SemiBold

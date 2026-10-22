@@ -333,12 +333,16 @@ class FixRegressionTest {
     fun modelPickerSendsToTheModelUserChose() {
         val models = projectFile("src/main/java/com/example/service/ai/AiModels.kt").readText()
         listOf(
-            "deepseek/deepseek-v4.1-flash-free",
-            "deepseek/deepseek-v4-flash-free",
-            "z-ai/glm-5.3-flash-free"
+            "deepseek/deepseek-v4.1-flash",
+            "deepseek/deepseek-v4-flash",
+            "z-ai/glm-5.3-flash"
         ).forEach { id ->
             assertTrue("Bo chon model phai co $id", models.contains("\"$id\""))
         }
+        // OpenRouter dung duoi `:free` cho ban khong tien; `...-free` la doan
+        // ten nguoi dung che tu chu UI, goi thang no thi API tra 404 va model
+        // do khong bao gio tra loi — dung ten co that trong catalog.
+        assertTrue("Khong duoc co ten model dang `-free`", !models.contains("-free\""))
         assertTrue("Gemini van phai o trong bo chon", models.contains("AiModel.Provider.GEMINI"))
         assertTrue("Chon model phai luu lai tren may", models.contains("FIELD_SELECTED"))
         assertTrue("Goi dung model duoc chon, khong thu lan luot",

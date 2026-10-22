@@ -325,7 +325,7 @@ class ConsentPolicyTest {
         val parentView = ConsentPolicy.summary(vote, UserRole.PARENT)!!
         assertTrue(childView, childView.contains("chờ bạn duyệt"))
         assertTrue(parentView, parentView.contains("chờ Con duyệt"))
-        assertTrue(childView, childView.startsWith("Mẹ đề xuất"))
+        assertTrue(childView, childView.startsWith("Phụ huynh đề xuất"))
     }
 
     @Test
@@ -363,7 +363,7 @@ class ConsentPolicyTest {
 
     @Test
     fun `ten goi vai tro khong bi loi`() {
-        assertEquals("Mẹ", ConsentPolicy.label(UserRole.PARENT))
+        assertEquals("Phụ huynh", ConsentPolicy.label(UserRole.PARENT))
         assertEquals("Con", ConsentPolicy.label(UserRole.CHILD))
         assertEquals("Gia đình", ConsentPolicy.label(null))
         assertEquals(UserRole.CHILD, ConsentPolicy.opposite(UserRole.PARENT))

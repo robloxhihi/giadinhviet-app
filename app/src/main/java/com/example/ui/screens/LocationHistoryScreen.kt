@@ -368,9 +368,10 @@ fun LocationHistoryScreen(
                 modifier = Modifier.weight(1f),
                 icon = Icons.Default.Speed,
                 label = "TỐC ĐỘ MAX",
-                value = "${maxSpeed.toInt()} km/h",
-                hint = "Trong toàn bộ lịch sử",
-                tint = Premium.amber
+                value = if (maxSpeed > 0f) "${maxSpeed.toInt()} km/h" else "—",
+                hint = if (history.isEmpty()) "Chưa có điểm định vị nào"
+                    else "Trong toàn bộ lịch sử",
+                tint = if (maxSpeed > 0f) Premium.amber else TextMuted
             )
         }
 

@@ -1277,6 +1277,14 @@ class VesperaViewModel(
      * khong can mo them phieu nua.
      */
     private fun applyDailyTargetFromAgreement(minutes: Int) {
+        // Phieu thieu con so (mac dinh 0) khong duoc phep van may thanh "0 phut
+        // toi da" — may se chan con ngay lap tuc vi da "qua han muc".
+        if (minutes <= 0) {
+            _uiState.value = _uiState.value.copy(
+                errorMessage = "Phiếu thỏa thuận không có số phút nên chưa đổi hạn mức."
+            )
+            return
+        }
         val currentSched = _uiState.value.usageSchedule ?: com.example.data.model.UsageSchedule(dailyTargetMinutes = minutes, usedMinutes = 0)
         
         // Optimistic update
@@ -1677,7 +1685,7 @@ class VesperaViewModel(
             val acc = loc?.accuracy ?: 0f
             val spd = loc?.speed ?: 0.0f
             val detailed = telemetryHelper.getDetailedAppUsageList()
-            val topApp = detailed.firstOrNull()?.appName ?: "Đang chờ dữ liệu"
+            val topApp = detailed.firstOrNull()?.appName.orEmpty()
             val topMins = detailed.firstOrNull()?.minutesUsed ?: 0
             val totalMins = detailed.sumOf { it.minutesUsed }
 

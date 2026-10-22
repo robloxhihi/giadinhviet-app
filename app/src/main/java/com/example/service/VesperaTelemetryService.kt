@@ -556,7 +556,7 @@ class VesperaTelemetryService : Service() {
             try {
                 // Fetch real app usage from UsageStatsManager
                 val detailedApps = telemetryHelper.getDetailedAppUsageList()
-                val topApp = detailedApps.firstOrNull()?.appName ?: "Đang chờ dữ liệu"
+                val topApp = detailedApps.firstOrNull()?.appName.orEmpty()
                 val topAppMins = detailedApps.firstOrNull()?.minutesUsed ?: 0
                 val totalUsedMins = detailedApps.sumOf { it.minutesUsed }.coerceAtLeast(topAppMins)
 
@@ -587,18 +587,25 @@ class VesperaTelemetryService : Service() {
                 // Notification cũng phải nói đúng: số lẻ lấy theo sai số thật, không
                 // in "±1m" cua may gia lap hay mock.
                 val honestAcc = FixPrecision.honestAccuracyMeters(location.accuracy)
+                // Pin -1 = he thong khong bao: trong notification phai la "chua
+                // doc duoc", khong phai "0%" (ngua nguoi doc thanh pin sat gui).
+                val batteryText = if (batteryLevel >= 0) "$batteryLevel%" else "chưa đọc được"
+                // Chua doc duoc ung dung nao thi khong in ": 0 ph" — khong ai
+                // biet hom nay may dung bao nhieu, do la trang thai, khong phai
+                // con so 0 phut.
+                val topAppText = if (topApp.isBlank()) "chưa đọc được ứng dụng"
+                else "$topApp: $topAppMins ph"
                 val notifStatus = String.format(
                     Locale.US,
-                    "📍 GPS: %s (±%.0fm) | 📱 %s: %d ph | ⚡ Pin: %d%%%s%s",
+                    "📍 GPS: %s (±%.0fm) | 📱 %s | ⚡ Pin: %s%s%s",
                     FixPrecision.formatCoordinates(
                         location.latitude,
                         location.longitude,
                         honestAcc
                     ),
                     honestAcc,
-                    topApp,
-                    topAppMins,
-                    batteryLevel,
+                    topAppText,
+                    batteryText,
                     if (isCharging) " (Sạc)" else "",
                     if (isStaleFix) " | 🕒 cũ ${formatFixAge(fixAge)}" else ""
                 )

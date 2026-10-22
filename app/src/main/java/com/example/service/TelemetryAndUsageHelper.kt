@@ -326,7 +326,12 @@ class TelemetryAndUsageHelper(private val context: Context) {
             .sumOf { (it.totalTimeInForeground / 60_000L).toInt() }
 
     /**
-     * Get current battery percentage & charging status
+     * Get current battery percentage & charging status.
+     *
+     * `-1` = may KHONG BAO pin nao. Truoc day o day tra `85` khi doc khong
+     * duoc, va con so bia den that đi khắp nơi: notification, Firestore
+     * `batteryLevel`, tin nhan SOS — may phu huynh thay "Pin 85%" cua mot cai
+     * may khong he do ra pin. That bai thi phai noi that bai.
      */
     fun getBatteryInfo(): Pair<Int, Boolean> {
         val ifilter = IntentFilter(Intent.ACTION_BATTERY_CHANGED)
@@ -334,7 +339,7 @@ class TelemetryAndUsageHelper(private val context: Context) {
 
         val level: Int = batteryStatus?.getIntExtra(BatteryManager.EXTRA_LEVEL, -1) ?: -1
         val scale: Int = batteryStatus?.getIntExtra(BatteryManager.EXTRA_SCALE, -1) ?: -1
-        val batteryPct = if (level >= 0 && scale > 0) (level * 100 / scale) else 85
+        val batteryPct = if (level >= 0 && scale > 0) (level * 100 / scale) else -1
 
         val status: Int = batteryStatus?.getIntExtra(BatteryManager.EXTRA_STATUS, -1) ?: -1
         val isCharging: Boolean = status == BatteryManager.BATTERY_STATUS_CHARGING ||

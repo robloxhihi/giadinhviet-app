@@ -393,4 +393,80 @@ class NoDemoDataRegressionTest {
         }
         assertTrue("Store không màn hình nào dùng phải bị xoá", !File(mainRoot, "data/study/StudyProgressStore.kt").exists())
     }
+
+    // ── 17. Xich cua bieu do va mac dinh phieu khong duoc boi len ─────────
+
+    /**
+     * Bon thu tung lam bang so lieu "that" ma khong phai: dinh 160 phut tu vong
+     * cho bieu do ca tuan (khong gia dinh nao dat, khong sensor nao do), san 5%
+     * cho nhom 0 phut (ve gach mau nhu co dung), "0 km/h" khi chua co diem dinh
+     * vi nao, va cac mac dinh 30/120 phut + 14:00-16:00 trong Models — mot phieu
+     * thieu du lieu doc thanh con so va khung gio nguoi ta khong tung nhap.
+     */
+    @Test
+    fun chartScalesAndRequestDefaultsAreNotInvented() {
+        val screen = stripComments(readUtf8(projectFile("src/main/java/com/example/ui/screens/ScreenTimeScreen.kt")))
+        assertTrue("Biểu đồ tuần vẫn dùng trần 160 phút bịa sẵn", !screen.contains("160f"))
+        assertTrue("Trần biểu đồ phải lấy từ chính dữ liệu tuần",
+            screen.contains("uiState.weeklyUsage.maxOfOrNull { it.second }"))
+        assertTrue("Nhóm 0 phút phải vẽ thanh rỗng, không tô 5%",
+            screen.contains("if (minutes <= 0) 0f else percentage.coerceIn(0f, 1f)"))
+        assertTrue("Chỉ hiện nhóm có phút thật", screen.contains("usageCategories.filter { it.minutes > 0 }"))
+        assertTrue("Không có phút nào phải nói thẳng", screen.contains("chưa ghi nhận phút dùng nào"))
+
+        val history = stripComments(readUtf8(projectFile("src/main/java/com/example/ui/screens/LocationHistoryScreen.kt")))
+        assertTrue("Tốc độ max phải để trống khi chưa có điểm định vị",
+            history.contains("if (maxSpeed > 0f) \"${'$'}{maxSpeed.toInt()} km/h\" else \"—\""))
+
+        val models = stripComments(readUtf8(projectFile("src/main/java/com/example/data/model/Models.kt")))
+        listOf(
+            "val minutesRequested: Int = 0",
+            "val requestedMinutes: Int = 0",
+            "val startHour: Int = -1",
+            "val endHour: Int = -1"
+        ).forEach { assertTrue("Models còn giá trị bịa sẵn, thiếu: $it", models.contains(it)) }
+        listOf("val minutesRequested: Int = 30", "val requestedMinutes: Int = 120", "val startHour: Int = 14")
+            .forEach { assertTrue("Models vẫn còn $it", !models.contains(it)) }
+
+        val dashboard = stripComments(readUtf8(projectFile("src/main/java/com/example/ui/screens/DashboardScreen.kt")))
+        assertTrue("Phiếu không có khung giờ phải nói rõ", dashboard.contains("chưa nêu khung giờ cụ thể"))
+
+        val vm = stripComments(readUtf8(projectFile("src/main/java/com/example/ui/viewmodel/VesperaViewModel.kt")))
+        assertTrue("Duyệt phiếu không có số phút phải từ chối đổi hạn mức",
+            vm.contains("Phiếu thỏa thuận không có số phút nên chưa đổi hạn mức."))
+
+        val consent = stripComments(readUtf8(projectFile("src/main/java/com/example/service/blocker/ConsentPolicy.kt")))
+        assertTrue("Nhãn vai trò phải trung tính, không đoán giới tính người dùng",
+            consent.contains("UserRole.PARENT -> \"Phụ huynh\""))
+        val gendered = firstOffender(listOf("\"Mẹ\""))
+        assertTrue("Vẫn còn nơi gọi người dùng là \"Mẹ\": $gendered", gendered.isEmpty())
+    }
+
+    // ── 18. Bao cao nen tang: chua doc duoc la chua doc duoc ──────────────
+
+    /**
+     * `batteryPct = else 85` va "Ứng dụng: 12ph" trong thong bao dient ra da
+     * duoc ghi len Firestore va hien trong tin nhan SOS — nguoi doc tuong pin
+     * that cua may con. Nay `-1`/chuoi rong phai chay thang ra chuoi "chưa đọc
+     * được", va danh thiem song chi sang mau khi du lieu duoi 5 phut.
+     */
+    @Test
+    fun telemetryFallbacksSayUnknown() {
+        val helper = stripComments(readUtf8(projectFile("src/main/java/com/example/service/TelemetryAndUsageHelper.kt")))
+        assertTrue("Pin phải về -1 khi đọc không được",
+            helper.contains("if (level >= 0 && scale > 0) (level * 100 / scale) else -1"))
+        assertTrue("Không còn phần trăm bịa 85", !helper.contains("else 85"))
+
+        val telemetry = stripComments(readUtf8(projectFile("src/main/java/com/example/service/VesperaTelemetryService.kt")))
+        assertTrue("Thông báo phải nói khi chưa đọc được pin", telemetry.contains("chưa đọc được"))
+        assertTrue("Ứng dụng nổi bật phải lấy từ danh sách thật hoặc để trống",
+            telemetry.contains(".firstOrNull()?.appName.orEmpty()"))
+
+        val bento = stripComments(readUtf8(projectFile("src/main/java/com/example/ui/components/BentoCards.kt")))
+        assertTrue("Đèn danh thiếp phải phân biệt dữ liệu live", bento.contains("isLive: Boolean"))
+        assertTrue("Pin chưa đọc được hiển thị là Pin ?", bento.contains("\"Pin ?\""))
+
+        val screen = stripComments(readUtf8(projectFile("src/main/java/com/example/ui/screens/ScreenTimeScreen.kt")))
+        assertTrue("Danh thiếp phải nói rõ dữ liệu còn mới", screen.contains("isLive = partnerLoc.updatedAt > 0L"))
+    }
 }

@@ -130,9 +130,16 @@ fun ScreenTimeScreen(
                     if (isChild) {
                         // Hiển thị đề xuất từ mẹ hoặc nút để con đề xuất
                         val pending = uiState.agreementRequests.filter { it.status == com.example.data.model.RequestStatus.PENDING && it.proposerRole == com.example.data.model.UserRole.PARENT }
+                        // Ten phai lay tu document ghep noi: doan rang nguoi o
+                        // may kia la "Mẹ" la gia dinh cua nguoi dung.
                         if (pending.isNotEmpty()) {
                             pending.forEach { agreement ->
-                                Text("Mẹ đề xuất: ${agreement.requestedMinutes} phút/ngày")
+                                Text(
+                                    if (agreement.requestedMinutes > 0)
+                                        "${uiState.activePairing?.parentName?.ifEmpty { "Phụ huynh" } ?: "Phụ huynh"} đề xuất: ${agreement.requestedMinutes} phút/ngày"
+                                    else
+                                        "${uiState.activePairing?.parentName?.ifEmpty { "Phụ huynh" } ?: "Phụ huynh"} đề xuất đổi nội quy, nhưng phiếu này không có số phút."
+                                )
                                 Row {
                                     Button(onClick = { onRespondToAgreement(agreement, true) }) { Text("Đồng ý") }
                                     Button(onClick = { onRespondToAgreement(agreement, false) }) { Text("Từ chối") }
@@ -142,8 +149,15 @@ fun ScreenTimeScreen(
                             Text("Chưa có đề xuất mới.")
                         }
                     } else {
-                        // Phụ huynh đề xuất
-                        Button(onClick = { onProposeAgreement(120) }) { Text("Đề xuất 120 phút") }
+                        // Nut de xuat khong duoc mang mot con so bia san (120).
+                        // De xuat dung han muc gia dinh dang dung; chua dat han
+                        // muc thi noi chua co, khong noi "120 phut".
+                        val target = uiState.usageSchedule?.dailyTargetMinutes ?: 0
+                        if (target > 0) {
+                            Button(onClick = { onProposeAgreement(target) }) { Text("Đề xuất $target phút/ngày") }
+                        } else {
+                            Text("Chưa đặt hạn mức phút cho con, nên chưa có con số để đề xuất. Đặt hạn mức trước đã.")
+                        }
                     }
                 }
             }
@@ -204,8 +218,12 @@ fun ScreenTimeScreen(
                     safeZone = partnerLoc.currentSafeZone.ifEmpty { "Chưa xác định được khu vực" },
                     batteryPct = partnerLoc.batteryLevel,
                     isCharging = partnerLoc.isCharging,
-                    activeApp = partnerLoc.topActiveApp.ifEmpty { "Chưa đọc được dữ liệu" },
-                    appMins = partnerLoc.topActiveAppMinutes
+                    activeApp = partnerLoc.topActiveApp,
+                    appMins = partnerLoc.topActiveAppMinutes,
+                    // "Live" phai la ping vua den, khong phai hang trang tri:
+                    // diem cu hon 5 phut thi den chuyen sang mau cho doi.
+                    isLive = partnerLoc.updatedAt > 0L &&
+                        System.currentTimeMillis() - partnerLoc.updatedAt < 5 * 60_000L
                 )
             } else {
                 // Khung pill thật về giao diện nhưng ghi rõ trạng thái rỗng, không bịa 80% pin.
@@ -455,7 +473,10 @@ fun ScreenTimeScreen(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.Bottom
                 ) {
-                    val maxMins = 160f
+                    // Dinh cua cot do chinh so lieu sinh ra: lay ngay dung nhieu
+                    // nhat trong tuan. Tru day co dinh 160 phut khien tuan ca
+                    // 300 phut van moc dinh va tuan 40 phut luc nao cung gan day.
+                    val chartMaxMins = uiState.weeklyUsage.maxOfOrNull { it.second } ?: 0
                     // `weeklyUsage` la mang co dinh theo thu tu T2..CN, nen
                     // "hom nay" la MO COT theo thu tu do — khong phai co CN.
                     // Cũ so ten thu cuu "CN" nen cot noi sang luc nao cung la
@@ -477,7 +498,8 @@ fun ScreenTimeScreen(
                         // San 15% truoc day khien ngay 0 phut van mo cot mau
                         // trong khi dinh no ghi "0" — hai thu mau thuan nhau.
                         // Ngay khong du lieu chi con mot gach xam rat ngan.
-                        val ratio = (mins / maxMins).coerceIn(0.06f, 1f)
+                        val ratio = if (chartMaxMins <= 0) 0f
+                            else (mins.toFloat() / chartMaxMins).coerceIn(0.06f, 1f)
                         val barHeight = if (mins <= 0) 3.dp else (70 * ratio).dp
                         val barColor = when {
                             mins <= 0 -> TextMuted.copy(alpha = 0.28f)
@@ -594,14 +616,24 @@ fun ScreenTimeScreen(
                         }
                     }
                 } else {
-                    // Real Categories list
-                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        uiState.usageCategories.forEach { cat ->
-                            CategoryUsageItem(
-                                title = cat.categoryName,
-                                minutes = cat.minutes,
-                                percentage = cat.percentage
-                            )
+                    // Chi ve nhom co phut that. Giu nguyen 4 dong "0 phut" khien
+                    //Bang nay trong nhu bang mau cua ung dung khong phai cua may nay.
+                    val usedCategories = uiState.usageCategories.filter { it.minutes > 0 }
+                    if (usedCategories.isEmpty()) {
+                        Text(
+                            text = "Hôm nay máy chưa ghi nhận phút dùng nào cho các nhóm ứng dụng.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = TextSecondary
+                        )
+                    } else {
+                        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                            usedCategories.forEach { cat ->
+                                CategoryUsageItem(
+                                    title = cat.categoryName,
+                                    minutes = cat.minutes,
+                                    percentage = cat.percentage
+                                )
+                            }
                         }
                     }
                 }
@@ -752,7 +784,9 @@ fun CategoryUsageItem(
         ) {
             Box(
                 modifier = Modifier
-                    .fillMaxWidth(percentage.coerceIn(0.05f, 1f))
+                    // San 5% du day 0 phut co mot gach mau: nguoi dung doc thanh
+                    // "co dung it". Khong co phut nao thi bar trong hon toan bo.
+                    .fillMaxWidth(if (minutes <= 0) 0f else percentage.coerceIn(0f, 1f))
                     .height(8.dp)
                     .clip(RoundedCornerShape(4.dp))
                     .background(barColor)

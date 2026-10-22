@@ -27,6 +27,10 @@ object AiModels {
     private const val FIELD_SELECTED = "selected_model"
 
     /** Model mac dinh phai la thu da duoc do bang key that som nhat. */
+    // Ten model lay tu `GET https://openrouter.ai/api/v1/models` ngay
+    // 2026-10-22 — catalog do la chuan: kieu `...-flash-free` KHONG ton tai
+    // tren OpenRouter (ho dung duoi `:free`), goi no thi API tra 404
+    // "model not found", nen dung ten that va noi het chi phi o `note`.
     val all: List<AiModel> = listOf(
         AiModel(
             id = "gemini",
@@ -35,22 +39,22 @@ object AiModels {
             note = "Của Google — cần khoá AI Studio. Đã đo: trả lời tiếng Việt đúng khuôn."
         ),
         AiModel(
-            id = "deepseek/deepseek-v4.1-flash-free",
+            id = "deepseek/deepseek-v4.1-flash",
             label = "DeepSeek V4.1",
             provider = AiModel.Provider.OPENROUTER,
-            note = "Qua OpenRouter, gói miễn phí."
+            note = "Qua OpenRouter · 0,30 US$ mỗi triệu chữ hỏi, 1,20 US$ mỗi triệu chữ trả lời."
         ),
         AiModel(
-            id = "deepseek/deepseek-v4-flash-free",
+            id = "deepseek/deepseek-v4-flash",
             label = "DeepSeek V4",
             provider = AiModel.Provider.OPENROUTER,
-            note = "Qua OpenRouter, gói miễn phí."
+            note = "Qua OpenRouter · 0,09 US$ mỗi triệu chữ hỏi, 0,18 US$ mỗi triệu chữ trả lời."
         ),
         AiModel(
-            id = "z-ai/glm-5.3-flash-free",
+            id = "z-ai/glm-5.3-flash",
             label = "GLM 5.3",
             provider = AiModel.Provider.OPENROUTER,
-            note = "Qua OpenRouter, gói miễn phí."
+            note = "Qua OpenRouter · rẻ nhất: 0,01 US$ mỗi triệu chữ hỏi, 0,17 mỗi triệu chữ trả lời."
         )
     )
 
