@@ -31,7 +31,12 @@ object AiModels {
     // Cung mot bo nho du dung cho khoa AI: model duoc chon khong phai bi mat
     // khi xoa khoa, nhung cung khong di chuyen giua cac may.
     private const val PREFS = "ai_config_v1"
-    private const val FIELD_SELECTED = "selected_model"
+    // Ban 41.0 them model mien phi, nhung kiem tra tren may that (BlueStacks,
+    // 2026-10-22) phat hien: mo app len van dem "GLM 5.3 Flash (tra phi)" o
+    // tieu de, vi `FIELD_SELECTED` con giu lua chon tra phi cua ban cu. Doi
+    // ten truong de lua chon cu bi bo qua, va mac dinh cua may moi la model
+    // MIEN PHI — khoa Orcarouter da nhung san trong ban cai nen goi duoc ngay.
+    private const val FIELD_SELECTED_V2 = "selected_model_v2"
 
     /** Model mac dinh phai la thu da duoc do bang key that som nhat. */
     // Nha cung cap la Orcarouter (orcarouter.ai), KHONG phai OpenRouter. Ban
@@ -121,14 +126,14 @@ object AiModels {
     fun selectedId(context: Context): String =
         context.applicationContext
             .getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .getString(FIELD_SELECTED, default.id)
+            .getString(FIELD_SELECTED_V2, defaultOpenRouter.id)
             .orEmpty()
-            .ifBlank { default.id }
+            .ifBlank { defaultOpenRouter.id }
 
     fun saveSelected(context: Context, id: String) {
         val safe = find(id).id
         context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .edit().putString(FIELD_SELECTED, safe).apply()
+            .edit().putString(FIELD_SELECTED_V2, safe).apply()
     }
 
     /** Khoá đang có hiệu lực cho provider của model này. */

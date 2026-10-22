@@ -90,4 +90,39 @@ class AiModelCostRegressionTest {
         ).forEach { assertTrue("Thiếu model `$it` trong bảng chọn", ids.contains(it)) }
         assertTrue("Danh sach Orcarouter phat sinh them ten chua do: $ids", ids.size <= 6)
     }
+
+    /**
+     * Hai loi phat hien khi cai 41.0 that tren BlueStacks (2026-10-22) — CI xanh
+     * ma may van sai, nen hai thu nay phai nam duoi dang test hoi quy:
+     *  - tieu de van dem "GLM 5.3 Flash (trả phí)" vi SharedPreferences con giu
+     *    lua chon tra phi cua ban cu, lan truot model mien phi moi them;
+     *  - app noi "đã lưu trên máy này" trong khi key thuc te di san trong ban cai.
+     */
+    @Test
+    fun luaChonTraPhiCuKhongDuocChayTuDong() {
+        val src = source("src/main/java/com/example/service/ai/AiModels.kt")
+        assertTrue("Van doc truong lua chon cu nen model tra phi cu quay lai",
+            !src.contains("getString(FIELD_SELECTED,"))
+        assertTrue("Phai luu vao truong moi de bo lua chon tra phi cua ban cu",
+            src.contains("FIELD_SELECTED_V2"))
+        assertTrue("Mac dinh khi mo app phai la model mien phi",
+            src.contains("getString(FIELD_SELECTED_V2, defaultOpenRouter.id)"))
+        assertTrue("Gia tri rong cung phai roi ve model mien phi",
+            src.contains("ifBlank { defaultOpenRouter.id }"))
+    }
+
+    @Test
+    fun chuVeNguonKeyPhaiDungSuThat() {
+        val screen = source("src/main/java/com/example/ui/screens/AiChatScreen.kt")
+        assertTrue("Phai phan biet key nhap tay voi key cua ban cai",
+            screen.contains("AiKey.enteredOpenRouter(context).isNotBlank()"))
+        assertTrue("Thieu cau mo key di san trong ban cai",
+            screen.contains("đi kèm trong bản cài đặt này"))
+    }
+
+    private fun source(relative: String): String {
+        val file = listOf(java.io.File(relative), java.io.File("app/$relative")).firstOrNull { it.exists() }
+            ?: error("Không tìm thấy tệp nguồn: $relative")
+        return String(file.readBytes(), Charsets.UTF_8)
+    }
 }

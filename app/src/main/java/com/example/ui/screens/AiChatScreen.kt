@@ -300,8 +300,20 @@ fun AiChatScreen(
             // ung dung.
             GlassCard(modifier = Modifier.fillMaxWidth()) {
                 Column {
+                    // Noi dung phai khop voi nguon cua khoa: tu ban 41.0 key
+                    // Orcarouter di SAN trong ban cai (BuildConfig tu repo
+                    // secret), khong phai nguoi dung luu tay tren may. Noi
+                    // "da luu tren may nay" khi khong phai vay la mot tuyen bo
+                    // sai ve phia nguoi dung.
+                    val manualKeyOnDevice = when (model.provider) {
+                        AiModel.Provider.OPENROUTER -> AiKey.enteredOpenRouter(context).isNotBlank()
+                        AiModel.Provider.GEMINI -> AiKey.entered(context).isNotBlank()
+                    }
                     Text(
-                        text = "Đang dùng ${AiModels.keyLabel(model)} đã lưu trên máy này.",
+                        text = if (manualKeyOnDevice)
+                            "Đang dùng ${AiModels.keyLabel(model)} đã lưu trên máy này."
+                        else
+                            "Đang dùng ${AiModels.keyLabel(model)} đi kèm trong bản cài đặt này.",
                         style = MaterialTheme.typography.bodySmall,
                         color = TextSecondary
                     )
