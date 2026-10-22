@@ -293,6 +293,35 @@ fun AiChatScreen(
                 }
             }
             Spacer(modifier = Modifier.height(14.dp))
+        } else {
+            // Da co khoa tren may nay thi van phai co duong go no. Tu ban 39.0
+            // tro ve truoc, the nhap khoa an han sau khi luu, nen mot khoa nhap
+            // sai (hoac khoa gia) khong the nao xoac duoc ngoai viec xoa du lieu
+            // ung dung.
+            GlassCard(modifier = Modifier.fillMaxWidth()) {
+                Column {
+                    Text(
+                        text = "Đang dùng ${AiModels.keyLabel(model)} đã lưu trên máy này.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = TextSecondary
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    GlassButton(
+                        text = "Gỡ khoá đã nhập",
+                        onClick = {
+                            if (model.provider == AiModel.Provider.OPENROUTER)
+                                AiKey.clearOpenRouter(context) else AiKey.clear(context)
+                            keyDraft = ""
+                            key = AiModels.keyFor(context, model)
+                        },
+                        modifier = Modifier.fillMaxWidth().testTag("ai_clear_key_btn"),
+                        tint = Premium.rose,
+                        height = 38.dp,
+                        fontSize = 12
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.height(14.dp))
         }
 
         // ── So lieu that app do duoc — nguon cua moi cau tra loi ───────────
@@ -305,14 +334,14 @@ fun AiChatScreen(
                 SectionHeader(
                     title = "Hôm nay máy đo được",
                     subtitle = if (showStats) "Bảng số liệu gửi kèm mỗi câu hỏi" else "Đang ẩn để dành chỗ cho đoạn chat",
-                    tint = Premium.cyan
+                    tint = Premium.accent
                 )
                 Spacer(modifier = Modifier.height(6.dp))
                 GlassButton(
                     text = if (showStats) "Ẩn bảng số liệu" else "Xem bảng số liệu",
                     onClick = { showStats = !showStats },
                     modifier = Modifier.fillMaxWidth().testTag("ai_toggle_stats"),
-                    tint = Premium.cyan,
+                    tint = Premium.accent,
                     height = 34.dp,
                     fontSize = 12
                 )
@@ -320,7 +349,7 @@ fun AiChatScreen(
                     Spacer(modifier = Modifier.height(8.dp))
                     // Cung mot kieu danh cho nhu cau tra loi: gach dau dong thang
                     // phan loai, nhan dem mau de phat hien ngay thieu du lieu.
-                    AiAnswerBody(text = stats, ink = TextSecondary, accent = Premium.cyan)
+                    AiAnswerBody(text = stats, ink = TextSecondary, accent = Premium.accent)
                 }
             }
         }
@@ -403,7 +432,7 @@ fun AiChatScreen(
                                 AiAnswerBody(
                                     text = turn.text,
                                     ink = TextPrimary,
-                                    accent = Premium.cyan
+                                    accent = Premium.accent
                                 )
                             } else {
                                 AiInlineText(
@@ -420,7 +449,7 @@ fun AiChatScreen(
                         CircularProgressIndicator(
                             modifier = Modifier.height(16.dp).width(16.dp),
                             strokeWidth = 2.dp,
-                            color = Premium.cyan
+                            color = Premium.accent
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(text = "Trợ lý đang đọc số liệu…", style = MaterialTheme.typography.bodySmall, color = TextMuted)
