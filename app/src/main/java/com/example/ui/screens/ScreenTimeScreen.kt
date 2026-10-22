@@ -51,7 +51,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.model.UserRole
-import com.example.service.blocker.ConsentPolicy
 import com.example.ui.components.BentoCard
 import com.example.ui.components.BentoProgressBar
 import com.example.ui.components.BentoStatCard
@@ -87,8 +86,6 @@ fun ScreenTimeScreen(
     onOpenInsights: () -> Unit = {},
     onProposeAgreement: (Int) -> Unit = {},
     onRespondToAgreement: (com.example.data.model.ScreenTimeAgreement, Boolean) -> Unit = { _, _ -> },
-    onRespondRuleChange: (Boolean) -> Unit = {},
-    onWithdrawRuleProposal: () -> Unit = {}
 ) {
     val scrollState = rememberScrollState()
     val isChild = uiState.userProfile?.role == UserRole.CHILD
@@ -157,49 +154,6 @@ fun ScreenTimeScreen(
                             Button(onClick = { onProposeAgreement(target) }) { Text("Đề xuất $target phút/ngày") }
                         } else {
                             Text("Chưa đặt hạn mức phút cho con, nên chưa có con số để đề xuất. Đặt hạn mức trước đã.")
-                        }
-                    }
-                }
-            }
-        }
-        // ── Phieu noi quy cho duyet (danh sach chan app / che do chan) ─────
-        // Dat o man hinh chinh de ben duoc de xuat KHONG phai vao Cai dat tim
-        // mãi. Ben goi de xuat chi thay chu "cho duyet", khong thay nut Dong y.
-        val myRoleNow = uiState.userProfile?.role
-        val ruleSchedule = uiState.usageSchedule
-        val consentLine = ConsentPolicy.summary(ruleSchedule, myRoleNow)
-        if (consentLine != null && uiState.activePairing != null) {
-            Spacer(modifier = Modifier.height(16.dp))
-            BentoCard(modifier = Modifier.fillMaxWidth()) {
-                Column {
-                    Text(
-                        text = "PHIẾU NỘI QUY",
-                        style = MaterialTheme.typography.titleSmall,
-                        color = NeonViolet,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = consentLine,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = TextPrimary
-                    )
-                    if (ruleSchedule != null && ConsentPolicy.canVote(ruleSchedule, myRoleNow)) {
-                        Text(
-                            text = "Đồng ý thì nội quy này mới chạy trên máy con. " +
-                                "Từ chối thì giữ nguyên nội quy cũ — cả hai máy đều thấy.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = TextSecondary
-                        )
-                        Spacer(modifier = Modifier.height(10.dp))
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Button(onClick = { onRespondRuleChange(true) }) { Text("Đồng ý") }
-                            OutlinedButton(onClick = { onRespondRuleChange(false) }) { Text("Từ chối") }
-                        }
-                    } else if (ruleSchedule != null && ConsentPolicy.canWithdraw(ruleSchedule, myRoleNow)) {
-                        Spacer(modifier = Modifier.height(8.dp))
-                        OutlinedButton(onClick = onWithdrawRuleProposal) {
-                            Text("Rút đề xuất đang chờ")
                         }
                     }
                 }

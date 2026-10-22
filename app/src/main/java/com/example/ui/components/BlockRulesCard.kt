@@ -67,7 +67,6 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
-import com.example.data.model.RequestStatus
 import com.example.data.model.RuleAuditEntry
 import com.example.data.model.UsageSchedule
 import com.example.data.model.UserRole
@@ -108,10 +107,6 @@ fun BlockRulesCard(
     blockerServiceEnabled: Boolean,
     saveState: BlockRulesSaveState = BlockRulesSaveState.Idle,
     savedAtMillis: Long = 0L,
-    /** Vai tro cua nguoi dang nhin the nay: PARENT | CHILD. */
-    myRole: UserRole? = null,
-    /** Da ghep noi va PAIRED -> moi thay doi can ben kia duyet. */
-    hasCounterparty: Boolean = false,
     audit: List<RuleAuditEntry> = emptyList(),
     /** Loi gan nhat tu ViewModel — dung de banner "chưa lưu được" noi DUNG ly do. */
     errorText: String? = null,
@@ -123,38 +118,17 @@ fun BlockRulesCard(
         /** `"HH:mm-HH:mm"` = dat khung gio; `""` = khong chan theo gio. */
         windowCode: String
     ) -> Unit,
-    onApprove: () -> Unit = {},
-    onReject: () -> Unit = {},
-    onWithdraw: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
 
-    // Gia tri dang bi (hoặc se bi) ap dung — dung de doi chieu voi ban nhap.
-    // Khi co phieu mo thi ban nhap phai hien theo PHIEU, khong theo luat cu,
-    // neu khong nguoi dung mo lai the thay tick trang trong khi de xuat van
-    // con treo.
-    val pendingOpen = schedule?.changeStatus == RequestStatus.PENDING
-    val serverDraft = remember(schedule, pendingOpen) {
+    val serverDraft = remember(schedule) {
         RuleDraft(
-            blocked = (if (pendingOpen) schedule?.pendingBlockedPackages else schedule?.blockedPackages)
-                ?.toSet() ?: emptySet(),
-            reminderOnly = if (pendingOpen)
-                schedule?.pendingIsReminderOnly ?: (schedule?.isReminderOnly ?: true)
-            else schedule?.isReminderOnly ?: true,
-            allowed = (if (pendingOpen) schedule?.pendingAllowedApps else schedule?.allowedApps)
-                ?.toSet() ?: emptySet(),
-            // 0 = CHUA dat han muc, khong phai "120 phut". Slider o duoi
-            // duoc an khi gia tri nay <= 0 de khong crash va khong in so bịa.
-            minutes = if (pendingOpen)
-                schedule?.pendingDailyTargetMinutes ?: (schedule?.dailyTargetMinutes ?: 0)
-            else schedule?.dailyTargetMinutes ?: 0,
-            // "" = khong co khung gio nao (may khong chan theo gio). Day la
-            // gia tri NGUYEN VEN cua phieu: neu phieu dang mo noi "xoa khung
-            // gio" thi ban nhap cung phai trong, khong duoc hien khung gio cu.
-            window = if (pendingOpen)
-                schedule?.pendingAllowedWindow.orEmpty()
-            else schedule?.windowCode().orEmpty()
+            blocked = schedule?.blockedPackages?.toSet() ?: emptySet(),
+            reminderOnly = schedule?.isReminderOnly ?: true,
+            allowed = schedule?.allowedApps?.toSet() ?: emptySet(),
+            minutes = schedule?.dailyTargetMinutes ?: 0,
+            window = schedule?.windowCode().orEmpty()
         )
     }
     // Bien dung hoa ten cu cho de doc cac phan ben duoi.
@@ -340,80 +314,6 @@ fun BlockRulesCard(
 
             Spacer(Modifier.height(12.dp))
 
-            // ── Phieu dong thuan ──────────────────────────────────────────
-            val consentLine = ConsentPolicy.summary(schedule, myRole)
-            if (consentLine != null) {
-                StatusBanner(
-                    text = consentLine,
-                    tone = if (pendingOpen) Tone.Info else Tone.Warn
-                )
-                Spacer(Modifier.height(8.dp))
-            }
-
-            if (schedule != null && ConsentPolicy.canVote(schedule, myRole)) {
-                // Chi ben KHONG goi de xuat thay nut nay. Me da de xuat thi
-                // me chi thay chu "cho Con duyet", khong co nut Dong y.
-                Surface(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp),
-                    color = Premium.amber.copy(alpha = 0.12f)
-                ) {
-                    Column(modifier = Modifier.padding(12.dp)) {
-                        Text(
-                            "Phiếu chờ bạn duyệt",
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = Premium.amber
-                        )
-                        Spacer(Modifier.height(4.dp))
-                        Text(
-                            ConsentPolicy.describe(schedule, pending = true),
-                            style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                        Text(
-                            "Đồng ý thì nội quy này mới chạy. Từ chối thì giữ nguyên nội quy cũ — " +
-                                "hai bên đều thấy quyết định trong nhật ký.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Spacer(Modifier.height(10.dp))
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Button(
-                                onClick = onApprove,
-                                shape = RoundedCornerShape(10.dp),
-                                colors = ButtonDefaults.buttonColors(containerColor = Premium.emerald),
-                                modifier = Modifier.weight(1f)
-                            ) {
-                                Icon(Icons.Default.Check, null, Modifier.size(16.dp))
-                                Spacer(Modifier.width(6.dp))
-                                Text("Đồng ý", fontWeight = FontWeight.Bold)
-                            }
-                            OutlinedButton(
-                                onClick = onReject,
-                                shape = RoundedCornerShape(10.dp),
-                                modifier = Modifier.weight(1f)
-                            ) {
-                                Icon(Icons.Default.Close, null, Modifier.size(16.dp))
-                                Spacer(Modifier.width(6.dp))
-                                Text("Từ chối")
-                            }
-                        }
-                    }
-                }
-                Spacer(Modifier.height(12.dp))
-            } else if (schedule != null && ConsentPolicy.canWithdraw(schedule, myRole)) {
-                TextButton(
-                    onClick = onWithdraw,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text(
-                        "Rút đề xuất đang chờ ${ConsentPolicy.label(ConsentPolicy.voterOf(schedule))}",
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-                Spacer(Modifier.height(8.dp))
-            }
 
             // Trang thai 1: chua bat Tro nang
             if (!serviceEnabled) {
@@ -693,9 +593,6 @@ fun BlockRulesCard(
                     targetMinutes = targetMinutes,
                     windowSummary = if (hasWindow) "khung giờ $windowText"
                     else "không chặn theo giờ",
-                    hasCounterparty = hasCounterparty,
-                    votePending = pendingOpen,
-                    voterLabel = ConsentPolicy.label(voteOwnerRole(schedule, myRole, pendingOpen)),
                     errorText = errorText,
                     onSave = {
                         // KHONG tat dirty o day: that bai duoc thi phai giu ban nhap.
@@ -790,13 +687,6 @@ private data class RuleDraft(
     val window: String
 )
 
-/** Ai la nguoi can tra loi phieu dang mo (hoac se can, neu minh goi de xuat). */
-private fun voteOwnerRole(s: UsageSchedule?, myRole: UserRole?, pending: Boolean): UserRole? = when {
-    s != null && pending -> ConsentPolicy.voterOf(s)
-    myRole != null -> ConsentPolicy.opposite(myRole)
-    else -> null
-}
-
 /**
  * Hang duoi cung cua the: nut gui de xuat (hoac nut luu khi chua ghep noi) +
  * tich xanh bao da ghi. Tich chi xuat hien khi Firestore ghi xong
@@ -819,9 +709,6 @@ private fun SaveRow(
     targetMinutes: Int,
     /** Tom tat lop chan theo gio cua ban vua luu, de banner khong noi tran. */
     windowSummary: String,
-    hasCounterparty: Boolean,
-    votePending: Boolean,
-    voterLabel: String,
     /** Loi gan nhat tu ViewModel: banner "Chưa lưu được" phai noi DUNG ly do. */
     errorText: String?,
     onSave: () -> Unit,
@@ -863,10 +750,9 @@ private fun SaveRow(
                         else -> "chặn thật $countSelected app"
                     }
                     buildString {
-                        append(if (hasCounterparty) "Gửi đề xuất" else "Lưu nội quy")
+                        append("Lưu nội quy")
                         append(" • ").append(mode)
                         append(" • ").append(windowSummary)
-                        if (hasCounterparty) append(" • chờ $voterLabel duyệt")
                     }
                 },
                 fontWeight = FontWeight.Bold
@@ -885,12 +771,6 @@ private fun SaveRow(
                 text = "Đang ghi xuống máy chủ…",
                 tone = Tone.Info
             )
-            BlockRulesSaveState.Saved -> when {
-                votePending -> StatusBanner(
-                    text = "\u2713 Đã gửi đề xuất lúc ${formatTime(savedAtMillis)} — nội quy cũ vẫn đang chạy, " +
-                        "chưa chặn gì thêm cho tới khi $voterLabel duyệt.",
-                    tone = Tone.Ok
-                )
                 // "Áp dụng ngay" la sai khi may dang o che do nhac nho hoac
                 // chua bat Tro nang — day chinh la ly do nguoi dung bam tich
                 // xong thay app van chay binh thuong va tuong bo chan bi hong.

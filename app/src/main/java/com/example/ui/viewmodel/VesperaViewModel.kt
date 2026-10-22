@@ -34,7 +34,6 @@ import com.example.data.repository.VesperaRepository
 import com.example.service.blocker.BlockPolicy
 import com.example.service.blocker.ConsentPolicy
 import com.example.service.blocker.ProposeOutcome
-import com.example.service.blocker.RespondOutcome
 import com.example.data.model.DetailedAppUsage
 import com.example.service.AddressHelper
 import com.example.service.TelemetryAndUsageHelper
@@ -1401,19 +1400,6 @@ class VesperaViewModel(
             return
         }
 
-        // (2) Phieu cua BEN KIA dang mo: khong duoc goi de xuat moi de de len,
-        // vi `propose()` ghi de pending* + proposedByRole va ben kia mat phieu.
-        if (base.changeStatus == RequestStatus.PENDING &&
-            base.proposedByRole != null && base.proposedByRole != role
-        ) {
-            rejectBlockRules(
-                "Đang có đề xuất của ${ConsentPolicy.label(base.proposedByRole)} " +
-                    "chờ bạn duyệt. Hãy bấm Đồng ý hoặc Từ chối phiếu đó trước, rồi gửi " +
-                    "thay đổi của mình — hai phiếu cùng lúc sẽ đè lên nhau."
-            )
-            return
-        }
-
         // (3) Nguoi dung co the tick nham app ma [BlockPolicy] kiien trien
         // khong chan (launcher, ban phim, Cai dat, CH Play, chinh app nay).
         // Giua chung trong danh sach thi ghi xuong Firestore la no nam do mai
@@ -1431,7 +1417,6 @@ class VesperaViewModel(
         val result = ConsentPolicy.propose(
             base = base,
             byRole = role,
-            hasCounterparty = isPaired,
             blockedPackages = blockable,
             allowedApps = allowedApps ?: base.allowedApps,
             reminderOnly = reminderOnly,
@@ -1475,43 +1460,14 @@ class VesperaViewModel(
             try {
                 repository.saveSchedule(toSave)
                 val now = System.currentTimeMillis()
-                val message = when (result.outcome) {
-                    ProposeOutcome.PENDING ->
-                        "Đã gửi đề xuất • ${ConsentPolicy.describe(toSave, pending = true)} — " +
-                            "chờ ${ConsentPolicy.label(ConsentPolicy.voterOf(toSave))} duyệt. " +
-                            "Nội quy hiện tại vẫn đang áp dụng." + skippedNote
-
-                    ProposeOutcome.APPLIED ->
-                        "Đã áp dụng • ${ConsentPolicy.describe(toSave, pending = false)} " +
-                            "(chưa ghép nối nên không cần bên kia duyệt)" + skippedNote
-
-                    ProposeOutcome.WITHDRAWN ->
-                        "Đã rút đề xuất — nội quy giữ nguyên như đang chạy." + skippedNote
-
-                    ProposeOutcome.NO_CHANGE -> ""
-                }
+                val message = "Đã áp dụng • ${ConsentPolicy.describe(toSave)}$skippedNote"
                 logRuleAudit(
                     pairingId = toSave.pairingId,
                     role = role,
                     actorName = actorName,
-                    action = when (result.outcome) {
-                        ProposeOutcome.PENDING -> "de_xuat"
-                        ProposeOutcome.WITHDRAWN -> "rut"
-                        else -> "ap_dung"
-                    },
-                    detail = when (result.outcome) {
-                        ProposeOutcome.PENDING ->
-                            ConsentPolicy.label(role) + " đề xuất: " +
-                                ConsentPolicy.describe(toSave, pending = true)
-
-                        ProposeOutcome.WITHDRAWN ->
-                            ConsentPolicy.label(role) + " đã rút đề xuất, đang chờ " +
-                                ConsentPolicy.label(ConsentPolicy.opposite(role)) + " duyệt"
-
-                        else ->
-                            ConsentPolicy.label(role) + " áp dụng: " +
-                                ConsentPolicy.describe(toSave, pending = false)
-                    },
+                    action = "ap_dung",
+                    detail = ConsentPolicy.label(role) + " áp dụng: " +
+                        ConsentPolicy.describe(toSave),
                     status = toSave.changeStatus
                 )
                 _uiState.value = _uiState.value.copy(
@@ -1527,112 +1483,6 @@ class VesperaViewModel(
         }
     }
 
-    /**
-     * Ben con lai tra loi mot phieu de xuat. `byRole` lay tu ho so may dang
-     * chay, khong lay tu tham so — tranh truong hop UI goi sai vai tro va
-     * tu duyet duoc phieu cua ben da de xuat.
-     */
-    fun respondToRuleChange(accept: Boolean) {
-        val base = _uiState.value.usageSchedule
-        val pairing = _uiState.value.activePairing
-        if (base == null || pairing == null) {
-            _uiState.value = _uiState.value.copy(
-                errorMessage = "Chưa có nội quy nào để duyệt (chưa ghép nối hoặc chưa lưu luật)."
-            )
-            return
-        }
-        val role = _uiState.value.userProfile?.role ?: UserRole.PARENT
-        val actorName = _uiState.value.userProfile?.displayName.orEmpty()
-        val result = ConsentPolicy.respond(base, role, accept)
-
-        when (result.outcome) {
-            RespondOutcome.NOTHING_PENDING -> _uiState.value = _uiState.value.copy(
-                successMessage = "Không còn đề xuất nào đang chờ duyệt."
-            )
-
-            RespondOutcome.WRONG_SIDE -> _uiState.value = _uiState.value.copy(
-                errorMessage = "${ConsentPolicy.label(role)} là người đề xuất, nên không tự duyệt được phiếu này."
-            )
-
-            RespondOutcome.APPROVED, RespondOutcome.REJECTED -> {
-                val toSave = result.schedule.copy(pairingId = pairing.id)
-                val old = _uiState.value.usageSchedule
-                _uiState.value = _uiState.value.copy(
-                    usageSchedule = toSave,
-                    blockRulesSaveState = BlockRulesSaveState.Saving,
-                    blockRulesError = null
-                )
-                viewModelScope.launch {
-                    try {
-                        repository.saveSchedule(toSave)
-                        logRuleAudit(
-                            pairingId = pairing.id,
-                            role = role,
-                            actorName = actorName,
-                            action = if (accept) "dong_y" else "tu_choi",
-                            detail = ConsentPolicy.label(role) +
-                                if (accept) " đã đồng ý: ${ConsentPolicy.describe(toSave, pending = false)}"
-                                else " đã từ chối đề xuất — giữ nội quy cũ: ${ConsentPolicy.describe(toSave, pending = false)}",
-                            status = toSave.changeStatus
-                        )
-                        _uiState.value = _uiState.value.copy(
-                            blockRulesSaveState = BlockRulesSaveState.Saved,
-                            blockRulesSavedAtMillis = System.currentTimeMillis(),
-                            blockRulesError = null,
-                            successMessage = if (accept)
-                                "Đã đồng ý • nội quy mới đang áp dụng trên cả hai máy."
-                            else
-                                "Đã từ chối • nội quy cũ vẫn áp dụng, ${ConsentPolicy.label(base.proposedByRole)} sẽ thấy quyết định này."
-                        )
-                    } catch (e: Exception) {
-                        _uiState.value = _uiState.value.copy(usageSchedule = old)
-                        rejectBlockRules("Không lưu được quyết định duyệt: ${e.message ?: "lỗi mạng"}")
-                    }
-                }
-            }
-        }
-    }
-
-    /** Ben da goi de xuat co the rut phieu ve, khoi de ben kia phai tra loi. */
-    fun withdrawRuleProposal() {
-        val base = _uiState.value.usageSchedule
-        val pairing = _uiState.value.activePairing
-        if (base == null || pairing == null) return
-        val role = _uiState.value.userProfile?.role ?: UserRole.PARENT
-        val result = ConsentPolicy.withdraw(base, role)
-        when (result.outcome) {
-            RespondOutcome.WRONG_SIDE -> _uiState.value = _uiState.value.copy(
-                errorMessage = "Chỉ người đề xuất mới rút được phiếu này."
-            )
-
-            RespondOutcome.NOTHING_PENDING -> Unit
-
-            else -> {
-                val toSave = result.schedule.copy(pairingId = pairing.id)
-                viewModelScope.launch {
-                    try {
-                        repository.saveSchedule(toSave)
-                        logRuleAudit(
-                            pairingId = pairing.id,
-                            role = role,
-                            actorName = _uiState.value.userProfile?.displayName.orEmpty(),
-                            action = "rut",
-                            detail = ConsentPolicy.label(role) + " đã rút đề xuất",
-                            status = RequestStatus.APPROVED
-                        )
-                        _uiState.value = _uiState.value.copy(
-                            usageSchedule = toSave,
-                            successMessage = "Đã rút đề xuất • nội quy cũ vẫn áp dụng."
-                        )
-                    } catch (e: Exception) {
-                        _uiState.value = _uiState.value.copy(
-                            errorMessage = "Không rút được đề xuất: ${e.message ?: "lỗi mạng"}"
-                        )
-                    }
-                }
-            }
-        }
-    }
 
     /**
      * Ghi mot dong nhat ky noi quy. That bai o day KHONG duoc that bai ca

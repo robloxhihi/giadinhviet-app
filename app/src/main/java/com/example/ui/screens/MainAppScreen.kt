@@ -203,8 +203,6 @@ fun MainAppScreen(
                         onOpenInsights = { overlayScreen = "insights" },
                         onProposeAgreement = { viewModel.proposeAgreement(it) },
                         onRespondToAgreement = { agr, accept -> viewModel.respondToAgreement(agr, accept) },
-                        onRespondRuleChange = { accept -> viewModel.respondToRuleChange(accept) },
-                        onWithdrawRuleProposal = { viewModel.withdrawRuleProposal() }
                     )
                     3 -> {
                         val isPaired = uiState.activePairing != null &&
@@ -242,8 +240,6 @@ fun MainAppScreen(
                                 packages, reminderOnly, allowedApps, minutes, windowCode
                             )
                         },
-                        onRespondRuleChange = { accept -> viewModel.respondToRuleChange(accept) },
-                        onWithdrawRuleProposal = { viewModel.withdrawRuleProposal() }
                     )
                 }
                 }

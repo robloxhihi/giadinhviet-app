@@ -16,6 +16,7 @@ import com.example.data.model.RequestStatus
 import com.example.data.model.RuleAuditEntry
 import com.example.data.model.ScreenTimeAgreement
 import com.example.data.model.UsageSchedule
+import com.example.service.blocker.ConsentPolicy
 import com.example.data.model.UserProfile
 import com.example.data.model.UserRole
 import com.google.firebase.auth.FirebaseAuth
@@ -656,7 +657,7 @@ class VesperaRepository(private val db: FirebaseFirestore, private val auth: Fir
                     return@addSnapshotListener
                 }
                 if (snapshot != null && snapshot.exists()) {
-                    trySend(snapshot.toObject(UsageSchedule::class.java))
+                    trySend(snapshot.toObject(UsageSchedule::class.java)?.let(ConsentPolicy::normalizePending))
                 } else {
                     trySend(null)
                 }
@@ -823,14 +824,6 @@ class VesperaRepository(private val db: FirebaseFirestore, private val auth: Fir
             val updates = mutableMapOf<String, Any>(
                 "dailyTargetMinutes" to currentTarget + minutesToAdd
             )
-            // Neu dang co phieu noi quy mo (ben kia chua duyet) va phieu
-            // do cung doi han muc: cong them vao CA phieu. Neu khong, khi
-            // bam Dong y, `pendingDailyTargetMinutes` de len ban vua
-            // tang — so phut xin them bi xoa im lang.
-            val pendingTarget = (data["pendingDailyTargetMinutes"] as? Number)?.toLong()
-            if (data["changeStatus"] == RequestStatus.PENDING.name && pendingTarget != null) {
-                updates["pendingDailyTargetMinutes"] = pendingTarget + minutesToAdd
-            }
             schedRef.update(updates).await()
         }.exceptionOrNull()
         if (failure != null) {

@@ -98,8 +98,6 @@ fun SettingsScreen(
     onSaveSosSchedule: (Boolean, Int, Int) -> Unit = { _, _, _ -> },
     onUpdateProfile: (String, String) -> Unit = { _, _ -> },
     onUpdateBlockRules: (List<String>, Boolean, List<String>, Int, String) -> Unit = { _, _, _, _, _ -> },
-    onRespondRuleChange: (Boolean) -> Unit = {},
-    onWithdrawRuleProposal: () -> Unit = {}
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val scrollState = rememberScrollState()
@@ -116,10 +114,6 @@ fun SettingsScreen(
     val userProfile = uiState.userProfile
 
     // ── 3 trạng thái ghép nối (sửa lỗi pháp lý) ──────────────────────────
-    // Trước đây BlockRulesCard nhận hasCounterparty = (activePairing?.status
-    // == PAIRED): khi Firestore chưa trả snapshot activePairing (vừa mở app),
-    // biểu thức = false → card chuyển sang nút "Lưu luật chặn • áp dụng ngay",
-    // cho phụ huynh ghi nội quy lên máy con bỏ qua phiếu duyệt.
     // VesperaUiState KHÔNG có cờ "pairing đã tải", nên suy điều kiện an toàn
     // nhất từ chính hồ sơ: profile.activePairingId khác rỗng mà activePairing
     // vẫn null ⇒ bản ghi ghép nối CHƯA VỀ = CHƯA XÁC ĐỊNH (fail-safe, cấm ghi
@@ -390,14 +384,9 @@ fun SettingsScreen(
                 blockerServiceEnabled = blockerServiceEnabled,
                 saveState = uiState.blockRulesSaveState,
                 savedAtMillis = uiState.blockRulesSavedAtMillis,
-                myRole = uiState.userProfile?.role,
-                hasCounterparty = isPaired,
                 audit = uiState.ruleAudit,
                 errorText = uiState.blockRulesError,
                 onUpdate = onUpdateBlockRules,
-                onApprove = { onRespondRuleChange(true) },
-                onReject = { onRespondRuleChange(false) },
-                onWithdraw = onWithdrawRuleProposal
             )
         }
 

@@ -323,7 +323,7 @@ class NoDemoDataRegressionTest {
      * danh sach app, nen ben kia van nhin thay va dong y duoc.
      */
     @Test
-    fun outsideHoursWindowIsEditableAndConsented() {
+    fun outsideHoursWindowIsEditableAndAppliedDirectly() {
         val models = stripComments(readUtf8(projectFile("src/main/java/com/example/data/model/Models.kt")))
         listOf(
             "fun UsageSchedule.windowCode()",
@@ -336,15 +336,16 @@ class NoDemoDataRegressionTest {
         assertTrue("Không còn hasTimeWindow() bỏ trống", !models.contains("hasTimeWindow"))
 
         val consent = stripComments(readUtf8(projectFile("src/main/java/com/example/service/blocker/ConsentPolicy.kt")))
-        assertTrue("Phiếu đề xuất phải mang theo khung giờ", consent.contains("pendingAllowedWindow = windowCode"))
-        assertTrue("Duyệt phải áp đúng khung giờ của phiếu", consent.contains("kept.withWindowCode(base.pendingAllowedWindow)"))
         assertTrue("So sánh bản phải gồm cả khung giờ", consent.contains("s.windowCode() == windowCode"))
+        assertTrue("Khung giờ phải được ghi vào luật đang chạy", consent.contains(".withWindowCode(windowCode)"))
+        assertTrue("Vẫn còn đường trả về phiếu chờ duyệt", !consent.contains("ProposeOutcome.PENDING"))
 
         val card = stripComments(readUtf8(projectFile("src/main/java/com/example/ui/components/BlockRulesCard.kt")))
         listOf("WindowEditor", "TimeField", "windowSummary", "draftWindowCode").forEach {
             assertTrue("Bảng chặn thiếu: $it", card.contains(it))
         }
-        assertTrue("Phải hiển thị khung giờ đang chờ duyệt", card.contains("schedule?.pendingAllowedWindow"))
+        assertTrue("Bản nhập phải đọc khung giờ đang chạy", card.contains("window = schedule?.windowCode().orEmpty()"))
+        assertTrue("Thẻ chặn không được còn nút duyệt của con", !card.contains("ConsentPolicy.canVote"))
 
         val vm = stripComments(readUtf8(projectFile("src/main/java/com/example/ui/viewmodel/VesperaViewModel.kt")))
         assertTrue("ViewModel phải truyền khung giờ xuống đề xuất", vm.contains("windowCode = windowCode ?: base.windowCode()"))
