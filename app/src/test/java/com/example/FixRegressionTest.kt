@@ -364,7 +364,7 @@ class FixRegressionTest {
         assertTrue("Phai phao khi noi dung trong",
             chat.contains("trả về nội dung trống") || chat.contains("bị cắt vì quá dài"))
         assertTrue("Phai chay tren IO thread", chat.contains("withContext(Dispatchers.IO)"))
-        assertTrue("Cung mot khuon trinh bay cho moi model", chat.contains("AiPrompt.system(stats)"))
+        assertTrue("Cung mot khuon trinh bay cho moi model", chat.contains("AiPrompt.system(stats, report)"))
         assertTrue("Lich su Gemini phai doi sang ngon ngu OpenRouter",
             chat.contains("\"assistant\" else \"user\"") || chat.contains("to \"assistant\""))
 

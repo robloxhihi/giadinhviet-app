@@ -116,7 +116,7 @@ fun AiChatScreen(
         if (turns.isNotEmpty()) scroll.animateScrollTo(scroll.maxValue)
     }
 
-    fun send(question: String) {
+    fun send(question: String, report: Boolean = false) {
         val q = question.trim()
         if (q.isEmpty() || busy || !AiKey.isUsable(key)) return
         val next = turns + ChatTurn("user", q)
@@ -130,7 +130,8 @@ fun AiChatScreen(
                 apiKey = key,
                 history = next.dropLast(1),
                 question = q,
-                stats = usage.summaryForAi()
+                stats = usage.summaryForAi(),
+                report = report
             )
             busy = false
             answer.onSuccess { text ->
@@ -379,9 +380,11 @@ fun AiChatScreen(
                     1 -> "Hãy đưa giải pháp cụ thể từng bước cho tuần này."
                     else -> "Tôi nên nói gì với con về thời gian dùng máy?"
                 }
+                // Hai nut dau muon bao cao co cau truc; nut thu ba la chuyen
+                // thoai thuong nen KHONG duoc ep khuon bao cao.
                 GlassButton(
                     text = label,
-                    onClick = { send(question) },
+                    onClick = { send(question, report = index < 2) },
                     modifier = Modifier.weight(1f).testTag("ai_suggestion"),
                     tint = Premium.violet,
                     height = 38.dp,
@@ -488,7 +491,7 @@ fun AiChatScreen(
             text = "Xin AI phân tích hôm nay",
             icon = Icons.Default.AutoAwesome,
             enabled = hasKey && !busy,
-            onClick = { send("Dựa trên số liệu trên, hãy phân tích hôm nay của con và đưa giải pháp.") },
+            onClick = { send("Dựa trên số liệu trên, hãy phân tích hôm nay của con và đưa giải pháp.", report = true) },
             modifier = Modifier.fillMaxWidth()
         )
 

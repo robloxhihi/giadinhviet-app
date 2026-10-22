@@ -43,7 +43,8 @@ object OpenRouterClient {
         model: String,
         history: List<ChatTurn>,
         question: String,
-        stats: String
+        stats: String,
+        report: Boolean = false
     ): Result<String> {
         if (!AiKey.isUsable(apiKey)) {
             return Result.failure(
@@ -55,7 +56,7 @@ object OpenRouterClient {
         return withContext(Dispatchers.IO) {
             var lastError = "Không gọi được Orcarouter."
             for (attempt in 1..2) {
-                when (val outcome = once(apiKey, model, history, question, stats)) {
+                when (val outcome = once(apiKey, model, history, question, stats, report)) {
                     is Call.Ok -> return@withContext Result.success(outcome.text)
                     is Call.Retryable -> {
                         lastError = outcome.message
@@ -79,9 +80,10 @@ object OpenRouterClient {
         model: String,
         history: List<ChatTurn>,
         question: String,
-        stats: String
+        stats: String,
+        report: Boolean = false
     ): Call {
-        val body = mapAdapter.toJson(buildBody(model, history, question, stats))
+        val body = mapAdapter.toJson(buildBody(model, history, question, stats, report))
         return try {
             val conn = (java.net.URL(ENDPOINT).openConnection() as java.net.HttpURLConnection).apply {
                 requestMethod = "POST"
@@ -137,12 +139,12 @@ object OpenRouterClient {
     }
 
     /** Tach rieng de test doi chieu duoc payload ma khong goi mang. */
-    fun buildBody(model: String, history: List<ChatTurn>, question: String, stats: String): Map<String, Any> {
+    fun buildBody(model: String, history: List<ChatTurn>, question: String, stats: String, report: Boolean = false): Map<String, Any> {
         // `ChatTurn` luu theo ngon ngu cua Gemini ("model"); Orcarouter goi
         // tro ly la "assistant", nen phai doi ngay khi don — neu khong lich su
         // chat bi hieu thanh mot chuoi tin nhan cua cung mot phia.
         val messages = mutableListOf<Map<String, Any>>(
-            mapOf("role" to "system", "content" to AiPrompt.system(stats))
+            mapOf("role" to "system", "content" to AiPrompt.system(stats, report))
         )
         history
             .filter { it.role == "user" || it.role == "model" }

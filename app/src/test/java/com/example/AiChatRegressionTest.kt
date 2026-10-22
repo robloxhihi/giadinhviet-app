@@ -285,8 +285,8 @@ class AiChatRegressionTest {
 
         val gemini = source("src/main/java/com/example/service/ai/GeminiClient.kt")
         val router = source("src/main/java/com/example/service/ai/OpenRouterClient.kt")
-        assertTrue("Gemini phai dung khuon chung", gemini.contains("AiPrompt.system(stats)"))
-        assertTrue("OpenRouter phai dung khuon chung", router.contains("AiPrompt.system(stats)"))
+        assertTrue("Gemini phai dung khuon chung", gemini.contains("AiPrompt.system(stats, report)"))
+        assertTrue("OpenRouter phai dung khuon chung", router.contains("AiPrompt.system(stats, report)"))
     }
 
     /**

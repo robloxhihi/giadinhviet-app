@@ -51,7 +51,8 @@ object GeminiClient {
         apiKey: String,
         history: List<ChatTurn>,
         question: String,
-        stats: String
+        stats: String,
+        report: Boolean = false
     ): Result<String> {
         if (!AiKey.isUsable(apiKey)) {
             return Result.failure(AiException("Chưa có khoá Gemini. Nhập khoá để trợ lý trả lời bằng số liệu thật của máy."))
@@ -162,7 +163,7 @@ object GeminiClient {
             .toMutableList()
         contents.add(mapOf("role" to "user", "parts" to listOf(mapOf("text" to question))))
         return mapOf(
-            "systemInstruction" to mapOf("parts" to listOf(mapOf("text" to AiPrompt.system(stats)))),
+            "systemInstruction" to mapOf("parts" to listOf(mapOf("text" to AiPrompt.system(stats, report)))),
             "contents" to contents,
             "generationConfig" to mapOf(
                 "temperature" to 0.7,

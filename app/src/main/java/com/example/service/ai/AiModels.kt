@@ -157,9 +157,10 @@ object AiModels {
         apiKey: String,
         history: List<ChatTurn>,
         question: String,
-        stats: String
+        stats: String,
+        report: Boolean = false
     ): Result<String> = when (model.provider) {
-        AiModel.Provider.GEMINI -> GeminiClient.chat(apiKey, history, question, stats)
-        AiModel.Provider.OPENROUTER -> OpenRouterClient.chat(apiKey, model.id, history, question, stats)
+        AiModel.Provider.GEMINI -> GeminiClient.chat(apiKey, history, question, stats, report)
+        AiModel.Provider.OPENROUTER -> OpenRouterClient.chat(apiKey, model.id, history, question, stats, report)
     }
 }
