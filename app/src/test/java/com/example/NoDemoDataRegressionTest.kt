@@ -341,7 +341,7 @@ class NoDemoDataRegressionTest {
         assertTrue("So sánh bản phải gồm cả khung giờ", consent.contains("s.windowCode() == windowCode"))
 
         val card = stripComments(readUtf8(projectFile("src/main/java/com/example/ui/components/BlockRulesCard.kt")))
-        listOf("WindowEditor", "TimeEndpointRow", "windowSummary", "draftWindowCode").forEach {
+        listOf("WindowEditor", "TimeField", "windowSummary", "draftWindowCode").forEach {
             assertTrue("Bảng chặn thiếu: $it", card.contains(it))
         }
         assertTrue("Phải hiển thị khung giờ đang chờ duyệt", card.contains("schedule?.pendingAllowedWindow"))

@@ -21,6 +21,7 @@ import androidx.compose.foundation.rememberScrollState
 
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
@@ -58,8 +59,10 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -923,20 +926,6 @@ private fun formatTime(millis: Long): String =
 
 private enum class Tone { Ok, Warn, Info }
 
-/**
- * O chon khung gio duoc dung máy — lop chan thu hai trong [BlockPolicy].
- *
- * Ly do dung chip thay vi dialog TimePicker: tab Cài đặt là một Column có
- * verticalScroll, dialog de loi cham va mat vi tri cuon; do chinh xac 15 phut
- * la du cho mot noi quy giac, va 24 + 4 o doc gon hon dial.
- *
- * KHONG co gia tri mac dinh. Ca hai moc deu phai do nguoi dung chon; neu chi
- * chon mot ben thi `windowCode` cua ban nhap van rong, tuc la khong co luat
- * ngoai gio — dung cai ma [BlockPolicy] lam (no bo qua khi field null). Truoc
- * day giao dien khong co lay nao cho khung gio, nen 4 truong
- * `allowedStartHour/...` trong Firestore mai mai null: gia dinh tuong da khoa
- * ngoai gio con may thi khong chan gi theo gio ca.
- */
 @Composable
 private fun WindowEditor(
     startMinutes: Int?,
@@ -975,13 +964,15 @@ private fun WindowEditor(
             }
         }
 
-        TimeEndpointRow(
+        TimeField(
+            tag = "block_window_start",
             label = "Bắt đầu",
             minutes = startMinutes,
             onSelect = { onStartChange(it) }
         )
         Spacer(Modifier.height(6.dp))
-        TimeEndpointRow(
+        TimeField(
+            tag = "block_window_end",
             label = "Kết thúc",
             minutes = endMinutes,
             onSelect = { onEndChange(it) }
@@ -998,76 +989,45 @@ private fun WindowEditor(
 }
 
 /**
- * Mot moc cua khung gio: hang gio (0–23) va hang phut (le 15). Bam o nao thi
- * giu nguyen nua kia cua gia tri dang co, nen "07" + ":30" tao ra 07:30 chu
- * khong bi reset ve 00:00.
+ * Mot moc cua khung gio, nhap kieu "21:00" (ung "2100" cung duoc). Chu dung
+ * chip liet ke 0..23 vi nguoi dung bao nhin loan va kho tim. O nay khong goi
+ * onSelect khi chuoi chua phai gio that, nen khong the vo sinh moc 00:00 nhu
+ * hang phut cu (bam ":30" khi chua chon gio tung bi hieu thanh 00:30).
  */
 @Composable
-private fun TimeEndpointRow(
+private fun TimeField(
     label: String,
+    tag: String,
     minutes: Int?,
     onSelect: (Int) -> Unit
 ) {
-    val hour = minutes?.let { it / 60 % 24 }
-    val minute = minutes?.let { it % 60 }
-    Column(Modifier.fillMaxWidth()) {
-        Text(
-            text = if (minutes == null) "$label: chưa chọn"
-            else "$label: %02d:%02d".format(hour ?: 0, minute ?: 0),
-            style = MaterialTheme.typography.labelMedium,
-            fontWeight = FontWeight.Bold,
-            color = if (minutes == null) MaterialTheme.colorScheme.onSurfaceVariant
-            else MaterialTheme.colorScheme.primary
-        )
-        Spacer(Modifier.height(3.dp))
-        Row(
-            modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(5.dp)
-        ) {
-            (0..23).forEach { h ->
-                MiniChip(text = "%02d".format(h), selected = hour == h) {
-                    onSelect(h * 60 + (minute ?: 0))
-                }
-            }
-        }
-        Spacer(Modifier.height(3.dp))
-        Row(
-            modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(5.dp)
-        ) {
-            listOf(0, 15, 30, 45).forEach { m ->
-                MiniChip(text = ":%02d".format(m), selected = minute == m) {
-                    onSelect((hour ?: 0) * 60 + m)
-                }
-            }
-        }
+    var text by remember(minutes) {
+        mutableStateOf(minutes?.let { "%02d:%02d".format(it / 60 % 24, it % 60) } ?: "")
     }
-}
+    var invalid by remember(minutes) { mutableStateOf(false) }
 
-/** O chon gio/phut. Nen KIN (opaqueSurface) — sakling alpha de chong nen hoa lan. */
-@Composable
-private fun MiniChip(text: String, selected: Boolean, onClick: () -> Unit) {
-    val shape = RoundedCornerShape(8.dp)
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier
-            .clip(shape)
-            .background(
-                if (selected) Premium.emerald.copy(alpha = 0.28f) else Premium.opaqueSurface
-            )
-            .border(
-                width = 1.dp,
-                color = if (selected) Premium.emerald else MaterialTheme.colorScheme.outline.copy(alpha = 0.45f),
-                shape = shape
-            )
-            .clickable(role = Role.Button, onClick = onClick)
-            .padding(horizontal = 8.dp, vertical = 5.dp)
-    ) {
-        Text(
-            text = text,
-            style = MaterialTheme.typography.labelMedium,
-            fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
-            color = if (selected) Premium.emerald else MaterialTheme.colorScheme.onSurface
+    Column(Modifier.fillMaxWidth()) {
+        OutlinedTextField(
+            value = text,
+            onValueChange = { raw ->
+                val digits = raw.filter { it.isDigit() }.take(4)
+                text = if (digits.length > 2) "${digits.take(2)}:${digits.drop(2)}" else digits
+                val h = digits.take(2).toIntOrNull()
+                val m = digits.drop(2).toIntOrNull()
+                val ok = digits.length == 4 && h != null && m != null && h in 0..23 && m in 0..59
+                invalid = digits.isNotEmpty() && !ok
+                if (ok) onSelect(h * 60 + m)
+            },
+            label = { Text(label) },
+            placeholder = { Text("21:00") },
+            singleLine = true,
+            isError = invalid,
+            supportingText = if (invalid) {
+                { Text("Phải là giờ thật, kiểu 21:00 hoặc 06:30") }
+            } else null,
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+            shape = RoundedCornerShape(12.dp),
+            modifier = Modifier.fillMaxWidth().testTag(tag)
         )
     }
 }
