@@ -54,6 +54,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
@@ -203,6 +204,7 @@ fun GoogleMapsStudentLocationCard(
     }
     var layerIndex by remember { mutableStateOf(mapPrefs.getInt("layer2", MapLayer.HYBRID.ordinal)) }
     var zoomLevel by remember { mutableStateOf(mapPrefs.getFloat("zoom2", 19f).toDouble()) }
+    var layerPickerOpen by remember { mutableStateOf(false) }
     LaunchedEffect(layerIndex, zoomLevel) {
         mapPrefs.edit()
             .putInt("layer2", layerIndex.coerceIn(0, MapLayer.entries.lastIndex))
@@ -228,6 +230,22 @@ fun GoogleMapsStudentLocationCard(
     // de ghi trong update block ma khong kich recomposition vong lap.
     val followAnchor = remember { arrayOfNulls<Pair<Double, Double>>(1) }
 
+    // Doi lop PHAI cap nhat maxZoomLevel theo lop moi: het Google z21, Esri het z19,
+    // OpenTopo het z17. Neu chi setTileSource thi MapView giu max cua lop cu va
+    // ve o xam o zoom cao — dung cai nguoi dung bao "map khong nhu ggmap".
+    val applyLayer: (Int) -> Unit = { index ->
+        layerIndex = index.coerceIn(0, MapLayer.entries.lastIndex)
+        mapViewRef?.let { m ->
+            val next = layerAt(layerIndex)
+            m.setTileSource(next.source)
+            val mx = next.maxZoom().coerceAtMost(zoomCeiling)
+            m.maxZoomLevel = mx
+            if (m.zoomLevelDouble > mx) m.controller.setZoom(mx)
+            zoomLevel = m.zoomLevelDouble
+            m.invalidate()
+        }
+    }
+
     // Nhịp nhấp nháy cho bảng "đang dò GPS" (chi dung animateFloatAsState da co tien le).
     var pulseOn by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) {
@@ -241,8 +259,12 @@ fun GoogleMapsStudentLocationCard(
         label = "gpsPulse"
     )
 
+    // Toan man hinh = that su chiem het man hinh, khong phai 560.dp co dinh nhu
+    // ban cu (van con lot thanh dieu khien ben duoi va khong choai duoc nut lop).
+    // tru 24.dp de bo goc do khong bi cat khi the nam trong Column co padding.
+    val viewportHeight = LocalConfiguration.current.screenHeightDp.dp
     val mapHeight by animateDpAsState(
-        targetValue = if (isExpanded) 560.dp else 400.dp,
+        targetValue = if (isExpanded) (viewportHeight - 24.dp) else 400.dp,
         label = "mapHeight"
     )
 
@@ -416,7 +438,10 @@ fun GoogleMapsStudentLocationCard(
 
                             overlays.add(
                                 org.osmdroid.views.overlay.ScaleBarOverlay(this).apply {
-                                    setCentred(false); setScaleBarOffset(20, 30)
+                                    // Doi (20, 30) cua ban cu thanh (20, 96): chip "Lop"
+                                    // va bang chon lop nam duoi goc trai, offset 30 px
+                                    // (≈11dp) de scale bar de nguyen chip.
+                                    setCentred(false); setScaleBarOffset(20, 96)
                                 }
                             )
 
@@ -662,111 +687,178 @@ fun GoogleMapsStudentLocationCard(
                 }
             }
 
-            // Góc trên phải: nút mở Google Maps ngoài (chỉ khi có vị trí thật)
+            // ============ DIEU KHONG NOI TREN MAP — BO CUC GOOGLE MAPS ============
             if (showMap) {
-                Button(
-                    onClick = openExternalMaps,
-                    modifier = Modifier.align(Alignment.TopEnd).padding(6.dp).height(26.dp)
-                        .testTag("open_google_maps_btn"),
-                    shape = RoundedCornerShape(6.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = FacebookBlue.copy(alpha = 0.85f),
-                        contentColor = Color.White
-                    ),
-                    contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 6.dp, vertical = 0.dp)
+                // Góc trên phải: mở Google Maps ngoài + nút toàn màn hình
+                Column(
+                    modifier = Modifier.align(Alignment.TopEnd).padding(6.dp),
+                    horizontalAlignment = Alignment.End
                 ) {
-                    Icon(Icons.Default.OpenInNew, null, modifier = Modifier.size(12.dp))
-                    Spacer(modifier = Modifier.width(2.dp))
-                    Text("Maps", fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                    Button(
+                        onClick = openExternalMaps,
+                        modifier = Modifier.height(26.dp)
+                            .testTag("open_google_maps_btn"),
+                        shape = RoundedCornerShape(6.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = FacebookBlue,
+                            contentColor = Color.White
+                        ),
+                        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 6.dp, vertical = 0.dp)
+                    ) {
+                        Icon(Icons.Default.OpenInNew, null, modifier = Modifier.size(12.dp))
+                        Spacer(modifier = Modifier.width(2.dp))
+                        Text("Maps", fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                    }
+                    Spacer(modifier = Modifier.height(6.dp))
+                    MapControlButton(
+                        icon = if (isExpanded) Icons.Default.FullscreenExit else Icons.Default.Fullscreen,
+                        description = if (isExpanded) "Thu bản đồ lại" else "Toàn màn hình",
+                        tint = TextSecondary,
+                        onClick = { isExpanded = !isExpanded }
+                    )
+                }
+
+                // Cạnh phải, giữa: cụm zoom + căn Bắc — nổi trên map như Google Maps
+                Column(
+                    modifier = Modifier
+                        .align(Alignment.CenterEnd)
+                        .padding(end = 8.dp)
+                        .shadow(3.dp, RoundedCornerShape(10.dp)),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(2.dp)
+                ) {
+                    MapControlButton(Icons.Default.Add, "Phóng to", TextPrimary) {
+                        mapViewRef?.let { m ->
+                            m.controller.zoomIn()
+                            zoomLevel = m.zoomLevelDouble
+                        }
+                    }
+                    MapControlButton(Icons.Default.Remove, "Thu nhỏ", TextPrimary) {
+                        mapViewRef?.let { m ->
+                            m.controller.zoomOut()
+                            zoomLevel = m.zoomLevelDouble
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(4.dp))
+                    MapControlButton(Icons.Default.Explore, "Căn hướng Bắc", TextSecondary) {
+                        mapViewRef?.mapOrientation = 0f
+                    }
+                }
+
+                // Góc dưới phải: nút định vị (xanh = map đang bám vị trí thật)
+                Box(
+                    modifier = Modifier.align(Alignment.BottomEnd).padding(end = 8.dp, bottom = 12.dp)
+                        .shadow(3.dp, CircleShape)
+                ) {
+                    MapControlButton(
+                        icon = Icons.Default.MyLocation,
+                        description = if (followMode) "Đang theo dõi vị trí" else "Quay về vị trí và theo dõi",
+                        tint = if (followMode) NeonEmerald else FacebookBlue,
+                        size = 40.dp,
+                        onClick = {
+                            val target = 18.0.coerceAtMost(zoomCeiling).coerceAtMost(layerAt(layerIndex).maxZoom())
+                            mapViewRef?.let { m ->
+                                m.controller.setZoom(target)
+                                m.controller.animateTo(org.osmdroid.util.GeoPoint(latitude, longitude))
+                            }
+                            zoomLevel = target
+                            followAnchor[0] = latitude to longitude
+                            followMode = true
+                        }
+                    )
+                }
+
+                // Góc dưới trái: chip lớp bản đồ, bấm lên mở bảng chọn tên lớp
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.BottomStart)
+                        .padding(start = 6.dp, bottom = 6.dp)
+                        .shadow(3.dp, RoundedCornerShape(8.dp))
+                ) {
+                    Surface(
+                        onClick = { layerPickerOpen = !layerPickerOpen },
+                        shape = RoundedCornerShape(8.dp),
+                        color = MaterialTheme.colorScheme.surface,
+                        border = androidx.compose.foundation.BorderStroke(1.dp, rgbGradientBrush),
+                        modifier = Modifier.testTag("map_layer_chip")
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 7.dp, vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(Icons.Default.Layers, null, tint = FacebookBlue, modifier = Modifier.size(13.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = layerAt(layerIndex).label,
+                                fontSize = 10.sp, fontWeight = FontWeight.Bold, color = TextPrimary,
+                                maxLines = 1, overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                    }
+                }
+                if (layerPickerOpen) {
+                    Column(
+                        modifier = Modifier
+                            .align(Alignment.BottomStart)
+                            .padding(start = 6.dp, bottom = 38.dp, end = 6.dp)
+                            .fillMaxWidth(0.8f)
+                            .shadow(6.dp, RoundedCornerShape(10.dp))
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(MaterialTheme.colorScheme.surface)
+                            .border(1.dp, rgbGradientBrush, RoundedCornerShape(10.dp))
+                            .testTag("map_layer_picker")
+                    ) {
+                        MapLayer.entries.forEachIndexed { i, entry ->
+                            val selected = i == layerIndex
+                            Surface(
+                                onClick = { applyLayer(i); layerPickerOpen = false },
+                                color = if (selected) FacebookBlue.copy(alpha = 0.18f)
+                                        else Color.Transparent,
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Box(
+                                        modifier = Modifier.size(7.dp).clip(CircleShape)
+                                            .background(if (selected) FacebookBlue else TextMuted)
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            entry.label, fontSize = 11.sp,
+                                            fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                                            color = TextPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis
+                                        )
+                                        Text(
+                                            entry.credit, fontSize = 8.sp, color = TextMuted,
+                                            maxLines = 1, overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
+                                    // Trần zoom THẬT của lớp này, đã trừ hàng rào sai số
+                                    Text(
+                                        "z" + String.format(
+                                            Locale.US, "%.0f",
+                                            entry.maxZoom().coerceAtMost(zoomCeiling)
+                                        ),
+                                        fontSize = 9.sp, fontWeight = FontWeight.Bold,
+                                        color = if (selected) FacebookBlue else TextSecondary
+                                    )
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
 
-        // ============ HÀNG ĐIỀU KHIỂN — NĂM DƯỚI THẺ MAP, KHÔNG ĐÈ LÊN MAP ============
-        Spacer(modifier = Modifier.height(6.dp))
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(10.dp))
-                .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.94f))
-                .border(1.dp, rgbGradientBrush, RoundedCornerShape(10.dp))
-                .padding(horizontal = 6.dp, vertical = 4.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            MapControlButton(Icons.Default.Layers, "Lớp: ${layerAt(layerIndex).label}", FacebookBlue) {
-                val next = (layerIndex + 1) % MapLayer.entries.size
-                layerIndex = next
-                mapViewRef?.let { m ->
-                    val layer = layerAt(next)
-                    m.setTileSource(layer.source)
-                    val mx = layer.maxZoom().coerceAtMost(zoomCeiling)
-                    m.maxZoomLevel = mx
-                    if (m.zoomLevelDouble > mx) {
-                        m.controller.setZoom(mx)
-                        zoomLevel = mx
-                    } else {
-                        zoomLevel = m.zoomLevelDouble
-                    }
-                    m.invalidate()
-                }
-            }
-            MapControlButton(Icons.Default.Add, "Phóng to", TextPrimary) {
-                mapViewRef?.let { m ->
-                    m.controller.zoomIn()
-                    zoomLevel = m.zoomLevelDouble
-                }
-            }
-            MapControlButton(Icons.Default.Remove, "Thu nhỏ", TextPrimary) {
-                mapViewRef?.let { m ->
-                    m.controller.zoomOut()
-                    zoomLevel = m.zoomLevelDouble
-                }
-            }
-            MapControlButton(Icons.Default.Explore, "Căn hướng Bắc", TextSecondary) {
-                mapViewRef?.mapOrientation = 0f
-            }
-            if (showMap) {
-                MapControlButton(Icons.Default.MyLocation, "Căn giữa", FacebookBlue) {
-                    val p = org.osmdroid.util.GeoPoint(latitude, longitude)
-                    mapViewRef?.let { m ->
-                        val target = 18.0.coerceAtMost(zoomCeiling).coerceAtMost(layerAt(layerIndex).maxZoom())
-                        m.controller.setZoom(target)
-                        m.controller.animateTo(p)
-                        zoomLevel = target
-                    }
-                    followAnchor[0] = latitude to longitude
-                    followMode = true
-                }
-                MapControlButton(
-                    Icons.Default.GpsFixed,
-                    if (followMode) "Đang theo dõi — bấm để tắt" else "Bật lại chế độ theo dõi",
-                    if (followMode) NeonEmerald else TextSecondary
-                ) {
-                    val next = !followMode
-                    followMode = next
-                    if (next) {
-                        val p = org.osmdroid.util.GeoPoint(latitude, longitude)
-                        mapViewRef?.let { it.controller.animateTo(p) }
-                        followAnchor[0] = latitude to longitude
-                    } else {
-                        followAnchor[0] = null
-                    }
-                }
-            } else {
-                MapControlButton(Icons.Default.Refresh, "Thử định vị lại ngay", NeonAmber) {
-                    onRetryLocation()
-                }
-            }
-            MapControlButton(
-                if (isExpanded) Icons.Default.FullscreenExit else Icons.Default.Fullscreen,
-                "Mở rộng", TextSecondary
-            ) { isExpanded = !isExpanded }
-        }
+        // ============ HANG DIEU KHONG DA CHUYEN LEN MAP (nut noi kieu Google Maps)
+        // ============ KHONG CON PANEL DE DIEN DUOI MAP NUA ===============
 
         if (showMap && !followMode) {
             Text(
-                "Bạn đang tự di chuyển bản đồ — bấm nút 🛰 để map bám vị trí thật trở lại.",
+                "Bạn đang tự di chuyển bản đồ — bấm nút định vị ở góc dưới phải để map bám vị trí thật trở lại.",
                 style = MaterialTheme.typography.labelSmall,
                 color = NeonAmber,
                 modifier = Modifier.padding(start = 6.dp, top = 2.dp)
@@ -829,6 +921,7 @@ private fun MapControlButton(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     description: String,
     tint: Color,
+    size: androidx.compose.ui.unit.Dp = 32.dp,
     onClick: () -> Unit
 ) {
     Surface(
@@ -836,10 +929,10 @@ private fun MapControlButton(
         shape = CircleShape,
         color = MaterialTheme.colorScheme.surface,
         border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
-        modifier = Modifier.size(32.dp)
+        modifier = Modifier.size(size)
     ) {
         Box(contentAlignment = Alignment.Center) {
-            Icon(icon, contentDescription = description, tint = tint, modifier = Modifier.size(16.dp))
+            Icon(icon, contentDescription = description, tint = tint, modifier = Modifier.size(size / 2.4f))
         }
     }
 }

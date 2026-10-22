@@ -61,7 +61,16 @@ data class Pairing(
     /** Ai la nguoi thay doi gan nhat, va thay doi luc nao. */
     val historyChangedByRole: UserRole? = null,
     val historyChangedByName: String = "",
-    val historyChangedAt: Long = 0L
+    val historyChangedAt: Long = 0L,
+    /**
+     * "Chạm tay" Zenly Bump. Truoc day nut nay CHI rung may dang bam va tang
+     * mot bo dem trong bo nho — may ben kia khong nhan duoc gi ca, trong khi
+     * nhan ghi "Rung chuông". Nay ghi gio that vao document ghep noi de ben
+     * kia nghe duoc listener va rung that; 0 = chua ai chạm.
+     */
+    val lastBumpAt: Long = 0L,
+    val lastBumpByRole: UserRole? = null,
+    val lastBumpByName: String = ""
 )
 
 data class PairingRequest(
@@ -105,11 +114,24 @@ val LocationData.hasRealFix: Boolean
             latitude >= -90.0 && latitude <= 90.0 &&
             longitude >= -180.0 && longitude <= 180.0
 
+/**
+ * Bo noi quy gia dinh. TOAN BO mac dinh o day mang nghia "CHUA cau hinh",
+ * khong phai mot gia tri do duoc:
+ *  - `title` rong -> UI in "Chưa đặt tên lịch";
+ *  - `dailyTargetMinutes = 0` -> chua han muc phut, BlockPolicy khong chan
+ *    theo phut (xem `BlockPolicy.blockReason`);
+ *  - khung gio `null` -> chua cau hinh gio giac, BlockPolicy bo qua luat ngoai
+ *    gio. Truoc day no la 7:00-21:30 nen mot gia dinh chua bao gio chon gi
+ *    van bi hien "khung gio cho phep 07:00 - 21:30" nhu do chinh ho da dat;
+ *  - `daysOfWeek` rong -> ap dung moi ngay (BlockPolicy da hieu the);
+ *  - `isActive = false` + `isReminderOnly = true` -> may hoc sinh khong chan
+ *    gi ca cho den khi co nguoi bat that su.
+ */
 data class UsageSchedule(
     val id: String = "",
     val pairingId: String = "",
-    val title: String = "Lịch ngày thường",
-    val dailyTargetMinutes: Int = 120,
+    val title: String = "",
+    val dailyTargetMinutes: Int = 0,
     /**
      * So phut da dung hom nay. MAC DINH LA 0 — day KHONG phai noi dung de
      * tu hien: `usedMinutes` chua bao gio duoc ghi lai sau khi tao tai lieu,
@@ -119,11 +141,11 @@ data class UsageSchedule(
      * nay chi la du lieu du phong khi may chua cap quyen Usage Access.
      */
     val usedMinutes: Int = 0,
-    val allowedStartHour: Int = 7,
-    val allowedStartMinute: Int = 0,
-    val allowedEndHour: Int = 21,
-    val allowedEndMinute: Int = 30,
-    val daysOfWeek: String = "T2, T3, T4, T5, T6, T7, CN",
+    val allowedStartHour: Int? = null,
+    val allowedStartMinute: Int? = null,
+    val allowedEndHour: Int? = null,
+    val allowedEndMinute: Int? = null,
+    val daysOfWeek: String = "",
     val isReminderOnly: Boolean = true,
     /**
      * Danh sach goi tuc ung dung bi chan hoan toan khi [isReminderOnly] = false.
@@ -134,7 +156,8 @@ data class UsageSchedule(
      * Nhung ung dung luon duoc phep chay, ke ca khi ngoai gio hoac het han ngay.
      */
     val allowedApps: List<String> = emptyList(),
-    val isActive: Boolean = true,
+    /** Bat len thi may hoc sinh moi chan; mac dinh = chua bat. */
+    val isActive: Boolean = false,
     val createdAt: Long = System.currentTimeMillis(),
     /**
      * Phieu dong thuan cua noi quy gia dinh.
@@ -159,9 +182,72 @@ data class UsageSchedule(
     val pendingIsReminderOnly: Boolean? = null,
     /** null = khong doi han muc phut/ngay. */
     val pendingDailyTargetMinutes: Int? = null,
+    /**
+     * Khung gio ben phieu de xuat xin ap dung, dung chung dang với
+     * [windowCode]: `""` = ben nay xin XOA khung gio (may khong chan theo nua),
+     * con lai la `"HH:mm-HH:mm"`.
+     *
+     * Dung chuoi rong chu khong dung `null` vi khi serialize POJO, Firebase
+     * Firestore bo qua truong null: mot phieu "xin xoa khung gio" se bi may doc
+     * thanh "phieu nay khong noi gi den khung gio". Phieu luon mang TOAN BO
+     * noi quy (app chan + che do + mien tran + han muc + khung gio) nen khong
+     * co truong hop "chi doi mot phan".
+     */
+    val pendingAllowedWindow: String = "",
     val proposedAt: Long = 0L,
     val respondedAt: Long = 0L
 )
+
+/**
+ * Dang khung gio dang chay thanh mot chuoi de so sanh va gui trong phieu.
+ * `""` = chua dat: khong phai "cho phep ca ngay" ma la "KHONG co luat ngoai
+ * gio" — UI phai in "Chưa đặt khung giờ", con BlockPolicy thi bo qua lop nay.
+ */
+fun UsageSchedule.windowCode(): String {
+    val s = allowedStartHour ?: return ""
+    val e = allowedEndHour ?: return ""
+    return windowCodeFrom(s * 60 + (allowedStartMinute ?: 0), e * 60 + (allowedEndMinute ?: 0))
+}
+
+/** "07:00-21:30" -> (420, 1290) so phut tu 00:00; null neu chuoi khong hop le. */
+fun parseWindowCode(code: String): Pair<Int, Int>? {
+    val halves = code.split('-')
+    if (halves.size != 2) return null
+    val a = halves[0].trim().split(':').map { it.toIntOrNull() ?: return null }
+    val b = halves[1].trim().split(':').map { it.toIntOrNull() ?: return null }
+    if (a.size != 2 || b.size != 2) return null
+    if (a[0] !in 0..23 || b[0] !in 0..23 || a[1] !in 0..59 || b[1] !in 0..59) return null
+    return (a[0] * 60 + a[1]) to (b[0] * 60 + b[1])
+}
+
+fun windowCodeFrom(startMinutes: Int, endMinutes: Int): String =
+    "%02d:%02d-%02d:%02d".format(
+        startMinutes / 60 % 24, startMinutes % 60,
+        endMinutes / 60 % 24, endMinutes % 60
+    )
+
+/**
+ * Ap mot khung gio (hay xoa no, neu [code] rong hoac khong parse duoc) vao
+ * noi quy. Chi dung khi ap dung phieu — doc tu Firestore ve thi khong go.
+ */
+fun UsageSchedule.withWindowCode(code: String): UsageSchedule {
+    val w = parseWindowCode(code)
+    return if (w == null) {
+        copy(
+            allowedStartHour = null, allowedStartMinute = null,
+            allowedEndHour = null, allowedEndMinute = null
+        )
+    } else {
+        copy(
+            allowedStartHour = w.first / 60, allowedStartMinute = w.first % 60,
+            allowedEndHour = w.second / 60, allowedEndMinute = w.second % 60
+        )
+    }
+}
+
+/** Chuoi hien thi cho nguoi dung: "07:00 → 21:30", hoac null khi chua dat. */
+fun windowDisplay(code: String): String? =
+    parseWindowCode(code)?.let { windowCodeFrom(it.first, it.second).replace("-", " → ") }
 
 /**
  * Mot dong trong nhat ky noi quy: ai doi gi, khi nao, ket ra sao.
@@ -268,7 +354,13 @@ data class LocationHistoryEntry(
     val userName: String = "",
     val latitude: Double = 0.0,
     val longitude: Double = 0.0,
-    val placeName: String = "Điểm dừng chân",
+    /**
+     * Rong = may do duoc toa do nhung KHONG dich duoc thanh ten cho (geocoder
+     * chua chay, chua co quyen, hoac o ngoai vi do). Truoc day mac dinh la
+     * "Điểm dừng chân" nen mot tai lieu thieu ten van hiên ra nhu mot dia diem
+     * that da duoc dat ten.
+     */
+    val placeName: String = "",
     val speed: Float = 0.0f,
     val batteryLevel: Int = 0,
     // Kotlin sinh getter `isCharging()`, Firestore cat chu "is" va doi doc
@@ -281,9 +373,12 @@ data class LocationHistoryEntry(
     val timestamp: Long = System.currentTimeMillis(),
     val dateStr: String = "",
     val timeStr: String = "",
-    val year: Int = 2026,
-    val month: Int = 10,
-    val day: Int = 12,
+    // 0 = tai lieu khong ghi duoc ngay/thang. Vi phan hien thi sap theo
+    // `timestamp` (FieldValues that tu GPS), cac truong nay chi la ban in thuan
+    // tien; bo mac dinh 2026/10/12 de khong co moc thoi gian ao nao.
+    val year: Int = 0,
+    val month: Int = 0,
+    val day: Int = 0,
     val hour: Int = 0,
     val minute: Int = 0,
     val second: Int = 0

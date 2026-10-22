@@ -224,8 +224,10 @@ fun MainAppScreen(
                         onSaveEmergencyPhone = { phone -> viewModel.saveEmergencyPhoneNumber(phone) },
                         onSaveSosSchedule = { restricted, startH, endH -> viewModel.saveSosSchedule(restricted, startH, endH) },
                         onUpdateProfile = { name, photo -> viewModel.updateUserProfile(name, photo) },
-                        onUpdateBlockRules = { packages, reminderOnly, allowedApps, minutes ->
-                            viewModel.updateBlockRules(packages, reminderOnly, allowedApps, minutes)
+                        onUpdateBlockRules = { packages, reminderOnly, allowedApps, minutes, windowCode ->
+                            viewModel.updateBlockRules(
+                                packages, reminderOnly, allowedApps, minutes, windowCode
+                            )
                         },
                         onRespondRuleChange = { accept -> viewModel.respondToRuleChange(accept) },
                         onWithdrawRuleProposal = { viewModel.withdrawRuleProposal() }
@@ -266,7 +268,6 @@ fun MainAppScreen(
 
         // Draggable floating SOS orb — available on every screen
         DraggableFloatingSosButton(
-            isOnline = uiState.isOnline,
             currentChannel = uiState.currentSosChannel,
             isSosAllowedNow = viewModel.isSosAllowedNow(),
             onSendSosToFamily = { viewModel.sendSmartSosToFamily() },

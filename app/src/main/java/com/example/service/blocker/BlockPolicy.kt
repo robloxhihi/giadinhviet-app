@@ -97,7 +97,9 @@ object BlockPolicy {
         }
 
         // Vuot han so phut ca ngay -> chan, trir danh sách cho phép.
-        if (usedMinutesToday >= schedule.dailyTargetMinutes) {
+        // dailyTargetMinutes = 0 la "chua dat han muc" (mac dinh cua Models.kt),
+        // khong duoc phep bien no thanh "chan tat ca sau 0 phut".
+        if (schedule.dailyTargetMinutes > 0 && usedMinutesToday >= schedule.dailyTargetMinutes) {
             if (schedule.allowedApps.none { it.equals(pkg, ignoreCase = true) }) {
                 return "Hôm nay đã dùng hết thời gian cho phép."
             }
@@ -123,9 +125,13 @@ object BlockPolicy {
 
     /** Co đang nằm trong khung giờ được dùng máy không. */
     private fun isWithinAllowedWindow(s: UsageSchedule, now: Calendar): Boolean {
+        // Chua chon gio nguoc nao = khong co luat ngoai gio. Duoc coi nhu "trong
+        // gio cho phep" de khong may nao bi chan vi mac dinh cua file Models.
+        val startHour = s.allowedStartHour ?: return true
+        val endHour = s.allowedEndHour ?: return true
         val minutes = now.get(Calendar.HOUR_OF_DAY) * 60 + now.get(Calendar.MINUTE)
-        val start = s.allowedStartHour * 60 + s.allowedStartMinute
-        val end = s.allowedEndHour * 60 + s.allowedEndMinute
+        val start = startHour * 60 + (s.allowedStartMinute ?: 0)
+        val end = endHour * 60 + (s.allowedEndMinute ?: 0)
 
         // end < start: khung gio dem (vi du 21:30 -> 06:00)
         return if (end >= start) minutes in start..end

@@ -98,7 +98,7 @@ fun SettingsScreen(
     onSaveEmergencyPhone: (String) -> Unit = { _ -> },
     onSaveSosSchedule: (Boolean, Int, Int) -> Unit = { _, _, _ -> },
     onUpdateProfile: (String, String) -> Unit = { _, _ -> },
-    onUpdateBlockRules: (List<String>, Boolean, List<String>, Int) -> Unit = { _, _, _, _ -> },
+    onUpdateBlockRules: (List<String>, Boolean, List<String>, Int, String) -> Unit = { _, _, _, _, _ -> },
     onRespondRuleChange: (Boolean) -> Unit = {},
     onWithdrawRuleProposal: () -> Unit = {}
 ) {
@@ -501,7 +501,8 @@ fun SettingsScreen(
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
-                            text = userProfile?.displayName?.take(1)?.uppercase() ?: "U",
+                            text = userProfile?.displayName?.take(1)?.uppercase()
+                                .orEmpty().ifEmpty { "?" },
                             style = MaterialTheme.typography.titleLarge,
                             color = Color.White,
                             fontWeight = FontWeight.Bold
@@ -510,13 +511,15 @@ fun SettingsScreen(
                     Spacer(modifier = Modifier.width(14.dp))
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = userProfile?.displayName ?: "Người dùng Google",
+                            text = userProfile?.displayName?.takeIf { it.isNotBlank() }
+                                ?: "Chưa đăng nhập",
                             style = MaterialTheme.typography.titleLarge,
                             color = TextPrimary,
                             fontWeight = FontWeight.Bold
                         )
                         Text(
-                            text = userProfile?.email ?: "",
+                            text = userProfile?.email?.takeIf { it.isNotBlank() }
+                                ?: "Chưa có email: máy này chưa đăng nhập tài khoản nào",
                             style = MaterialTheme.typography.bodyMedium,
                             color = TextMuted
                         )
@@ -660,7 +663,7 @@ fun SettingsScreen(
                     fontWeight = FontWeight.Bold
                 )
                 Text(
-                    text = "Được dùng để gửi SMS kèm link Google Maps khi mất Internet & ngoài bán kính Mesh 50m.",
+                    text = "Được dùng để gửi SMS kèm link Google Maps khi máy không còn Internet và không nối được mesh.",
                     style = MaterialTheme.typography.bodySmall,
                     color = TextSecondary
                 )

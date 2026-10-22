@@ -530,7 +530,8 @@ class VesperaTelemetryService : Service() {
     }
 
     private fun syncTelemetryWithLocation(location: Location) {
-        // Cho phép cả chế độ khách/demo (chưa đăng nhập) vẫn ghi dữ liệu thật của thiết bị.
+        // Chua dang nhap thi van ghi du lieu THAT cua may nay duoi id thiet bi
+        // on dinh (luu trong may), khong phai toa do mau.
         val currentUserId = FirebaseAuth.getInstance().currentUser?.uid
             ?: guestDeviceId()
         val currentUserName = FirebaseAuth.getInstance().currentUser?.displayName.orEmpty()

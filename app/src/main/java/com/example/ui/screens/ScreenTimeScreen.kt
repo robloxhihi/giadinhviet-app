@@ -93,14 +93,15 @@ fun ScreenTimeScreen(
     val scrollState = rememberScrollState()
     val isChild = uiState.userProfile?.role == UserRole.CHILD
     val sched = uiState.usageSchedule
-    val target = sched?.dailyTargetMinutes ?: 120
-    // So phut THAT tu may, khong phai con so 45 nam im trong tai lieu tu luc
-    // ghep noi — neu lay `sched.usedMinutes` thi man hinh bao "da dung 45 phut"
-    // ngay ca khi hom do con chua mo may.
-    val used = com.example.data.model.todayUsedMinutes(
-        uiState.detailedAppUsage,
-        sched?.usedMinutes ?: 0
-    )
+    // `?: 120` bien gia dinh chua dat gi thanh "le 120 phut". 0 = chua dat,
+    // va moi cho hien thi phai kiem tra `hasTarget` thay in con so 0.
+    val target = sched?.dailyTargetMinutes?.takeIf { it > 0 } ?: 0
+    val hasTarget = target > 0
+    // So phut THAT tu may, khong phai con so nam im trong tai lieu tu luc
+    // ghep noi — `sched.usedMinutes` khong ai ghi lai sau khi tao tai lieu, nen
+    // lay no lam gia tri bo sung la dung thu chinh comment tung nghem cam.
+    // Thieu du lieu thi 0 la 0, man hinh tu noi "chua co".
+    val used = com.example.data.model.todayUsedMinutes(uiState.detailedAppUsage)
     val remaining = (target - used).coerceAtLeast(0)
 
     // Trung bình chỉ tính trên ngày có dữ liệu thật (> 0); tuần trống → nói "chưa có dữ liệu".
@@ -200,7 +201,7 @@ fun ScreenTimeScreen(
                 // vào ô pin được — máy con chưa gửi số thì tách sang khung bên dưới.
                 IosDynamicIslandPill(
                     partnerName = partnerName,
-                    safeZone = partnerLoc.currentSafeZone.ifEmpty { "Khu vực an toàn" },
+                    safeZone = partnerLoc.currentSafeZone.ifEmpty { "Chưa xác định được khu vực" },
                     batteryPct = partnerLoc.batteryLevel,
                     isCharging = partnerLoc.isCharging,
                     activeApp = partnerLoc.topActiveApp.ifEmpty { "Chưa đọc được dữ liệu" },
@@ -257,7 +258,7 @@ fun ScreenTimeScreen(
                         fontWeight = FontWeight.Bold
                     )
                     Text(
-                        text = "Còn $remaining phút",
+                        text = if (hasTarget) "Còn $remaining phút" else "Chưa đặt mục tiêu",
                         style = MaterialTheme.typography.labelMedium,
                         color = NeonCyan,
                         fontWeight = FontWeight.Bold
@@ -358,9 +359,14 @@ fun ScreenTimeScreen(
 
                 Text(
                     text = if (uiState.isFocusSessionActive)
-                        "Đồng hồ đang chạy thật — còn ${formatFocusClock(uiState.focusSessionSecondsRemaining)}. Điện thoại sẽ nhắc nếu bạn thoát ra chơi game."
+                        // Dong ho dem that, nhung BO CHAN khong doc
+                        // `isFocusSessionActive`: no chi theo dung Nội quy da
+                        // bat. Noi "se nhac neu ban tho ra choi game" la hen
+                        // mot hanh vi chua he duoc lap trinh.
+                        "Đồng hồ đang chạy thật — còn ${formatFocusClock(uiState.focusSessionSecondsRemaining)}. " +
+                            "Đây chỉ là nháp giờ của riêng bạn: máy không tự chặn hay tự nhắc khi bạn mở app khác."
                     else
-                        "Kích hoạt phiên học 25 phút Pomodoro giúp rèn luyện thói quen tự giác, không xao nhãng.",
+                        "Đồng hồ Pomodoro 25 phút giúp bạn giữ nhịp học; nó không chặn ứng dụng nào cả.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = TextSecondary
                 )

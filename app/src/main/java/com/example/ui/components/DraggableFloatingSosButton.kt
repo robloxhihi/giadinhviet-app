@@ -91,7 +91,6 @@ import kotlin.math.roundToInt
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DraggableFloatingSosButton(
-    isOnline: Boolean,
     currentChannel: SosChannelUsed,
     isSosAllowedNow: Boolean,
     onSendSosToFamily: () -> Unit,
@@ -157,7 +156,6 @@ fun DraggableFloatingSosButton(
             containerColor = SpaceCardSurface
         ) {
             SosBottomSheetContent(
-                isOnline = isOnline,
                 currentChannel = currentChannel,
                 isSosAllowedNow = isSosAllowedNow,
                 onDismiss = { showSosSheet = false },
@@ -176,7 +174,6 @@ fun DraggableFloatingSosButton(
 
 @Composable
 fun SosBottomSheetContent(
-    isOnline: Boolean,
     currentChannel: SosChannelUsed,
     isSosAllowedNow: Boolean,
     onDismiss: () -> Unit,
@@ -251,10 +248,13 @@ fun SosBottomSheetContent(
         Spacer(modifier = Modifier.height(14.dp))
 
         // Chỉ báo kênh cứu hộ tự động
+        // Chi bao "Trực tuyến"/"ngoai tuyen" khi co nguoc that: `currentChannel`
+        // do SmartSosDispatcher day len tu NetworkMonitor + ket qua gui lan cuoi.
+        // "50m" da boc bo vi Wi-Fi P2P khong tra khoang cach ve app.
         val channelBadgeText = when (currentChannel) {
-            SosChannelUsed.INTERNET_CLOUD -> "🌐 Tầng 1: Internet Cloud (Firebase Trực tuyến)"
-            SosChannelUsed.OFFLINE_MESH_P2P -> "📡 Tầng 2: Mạng P2P Mesh ngoại tuyến (< 50m)"
-            SosChannelUsed.FALLBACK_SMS -> "✉️ Tầng 3: Kênh SMS Dự phòng (Ngoài 50m/Cô lập)"
+            SosChannelUsed.INTERNET_CLOUD -> "🌐 Tầng 1: Internet Cloud (Firebase)"
+            SosChannelUsed.OFFLINE_MESH_P2P -> "📡 Tầng 2: Mạng P2P Mesh ngoại tuyến"
+            SosChannelUsed.FALLBACK_SMS -> "✉️ Tầng 3: Kênh SMS Dự phòng"
         }
         val channelBadgeColor = when (currentChannel) {
             SosChannelUsed.INTERNET_CLOUD -> NeonCyan

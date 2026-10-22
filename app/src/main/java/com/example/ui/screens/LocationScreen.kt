@@ -354,6 +354,8 @@ fun LocationScreen(
                 Spacer(modifier = Modifier.height(14.dp))
 
                 // Zenly Bump Action
+                // Nhat nay bay qua document `pairings/{id}` (truong lastBumpAt),
+                // khong phai bo dem trong bo nho may bam nut nhu ban cu.
                 Button(
                     onClick = onSendZenlyBump,
                     modifier = Modifier.fillMaxWidth().testTag("zenly_bump_btn"),
@@ -363,7 +365,11 @@ fun LocationScreen(
                         contentColor = NeonAmber
                     )
                 ) {
-                    Text(text = "⚡ Chạm tay Zenly Bump (Rung chuông • ${uiState.lastBumpCount})", fontWeight = FontWeight.Bold)
+                    Text(
+                        text = "⚡ Chạm tay Zenly Bump • " +
+                            bumpStateLabel(uiState.lastBumpAt, uiState.lastBumpByName, System.currentTimeMillis()),
+                        fontWeight = FontWeight.Bold
+                    )
                 }
             } else {
                 // Paired, but partner has not sent location yet
@@ -595,7 +601,8 @@ fun LocationScreen(
                             Column(modifier = Modifier.weight(1f)) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Text(
-                                        text = "${index + 1}. ${entry.placeName.ifEmpty { "Điểm dừng" }}",
+                                        text = "${index + 1}. " +
+                                            entry.placeName.ifEmpty { "Không rõ địa điểm (chỉ có tọa độ)" },
                                         style = MaterialTheme.typography.bodySmall,
                                         color = TextPrimary,
                                         fontWeight = FontWeight.Bold,
@@ -811,4 +818,21 @@ private fun isValidFix(latitude: Double, longitude: Double): Boolean =
     !(latitude == 0.0 && longitude == 0.0) &&
         latitude >= -90.0 && latitude <= 90.0 &&
         longitude >= -180.0 && longitude <= 180.0
+
+/**
+ * Nhan "chạm tay" doc tu document ghep noi. Man Vi tri va man Tong quan dung
+ * chung ham nay de hai noi khong in ra hai cach noi khac nhau cung mot so lieu.
+ */
+internal fun bumpStateLabel(at: Long, byName: String, nowMillis: Long): String {
+    if (at <= 0L) return "chưa ai chạm lần nào"
+    val who = byName.ifEmpty { "máy bên kia" }
+    val mins = (nowMillis - at) / 60_000L
+    val ago = when {
+        mins < 1 -> "vừa chạm"
+        mins < 60 -> "${mins} phút trước"
+        mins < 1440 -> "${mins / 60} giờ trước"
+        else -> "hơn một ngày trước"
+    }
+    return "$who: $ago"
+}
 

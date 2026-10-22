@@ -72,20 +72,32 @@ fun InsightsScreen(
 ) {
     val scrollState = rememberScrollState()
 
-    val target = uiState.usageSchedule?.dailyTargetMinutes ?: 120
+    // Han muc phut PHAI do gia dinh dat. `?: 120` cu bien mot nha chua tung
+    // chon gi thanh "le 120 phut/ngay" roi tinh diem tu con so do.
+    val target = uiState.usageSchedule?.dailyTargetMinutes?.takeIf { it > 0 }
     val todayMinutes = remember(uiState.detailedAppUsage) {
-        uiState.detailedAppUsage.sumOf { it.minutesUsed }.let { if (it > 0) it else uiState.usageSchedule?.usedMinutes ?: 0 }
+        com.example.data.model.todayUsedMinutes(uiState.detailedAppUsage)
     }
     val week = uiState.weeklyUsage
     val weekTotal = week.sumOf { it.second }
-    val weekAvg = if (week.isEmpty()) 0 else weekTotal / week.size
-    val overTargetDays = week.count { it.second > target }
+    // `weeklyUsage` luc nao cung co 7 cot, nhung cot bang 0 co the nghia la
+    // hom do may chua duoc do — trung binh chi lay tren ngay co du lieu.
+    val measuredDays = week.count { it.second > 0 }
+    val weekAvg = if (measuredDays == 0) 0 else weekTotal / measuredDays
+    val overTargetDays = if (target == null) 0 else week.count { it.second > target }
 
-    // Focus score: penalise overshoot of the daily goal, reward consistency.
-    val overshoot = ((todayMinutes - target).coerceAtLeast(0).toFloat() / target.coerceAtLeast(1))
-    val consistency = 1f - (overTargetDays.toFloat() / 7f)
-    val focusScore = ((0.65f * (1f - overshoot.coerceIn(0f, 1f)) + 0.35f * consistency) * 100f)
-        .coerceIn(0f, 100f)
+    // Focus score: chi tinh khi du hai dieu kien that — gia dinh da dat han muc
+    // va may da co it nhat mot ngay duoc do.
+    val focusScore: Float? = if (target == null || measuredDays == 0) null else {
+        val overshoot = ((todayMinutes - target).coerceAtLeast(0).toFloat() / target)
+        val consistency = 1f - (overTargetDays.toFloat() / measuredDays)
+        ((0.65f * (1f - overshoot.coerceIn(0f, 1f)) + 0.35f * consistency) * 100f)
+            .coerceIn(0f, 100f)
+    }
+    val scoreMissingReason = when {
+        target == null -> "Chưa đặt hạn mức phút/ngày ở màn Nội quy nên không có mốc để chấm."
+        else -> "Chưa có ngày nào được đo — cần quyền \"Truy cập dữ liệu sử dụng\" và máy đã dùng hôm nay."
+    }
 
     Column(
         modifier = Modifier
@@ -126,10 +138,11 @@ fun InsightsScreen(
         GlassCard(modifier = Modifier.fillMaxWidth(), glow = Premium.primaryBright) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 RingProgress(
-                    progress = focusScore / 100f,
+                    progress = (focusScore ?: 0f) / 100f,
                     ringSize = 118.dp,
                     strokeWidth = 12.dp,
                     colors = when {
+                        focusScore == null -> listOf(TextMuted, TextMuted)
                         focusScore >= 75f -> listOf(Premium.emerald, Premium.cyan)
                         focusScore >= 50f -> Premium.primaryGradient
                         else -> listOf(Premium.amber, Premium.rose)
@@ -137,7 +150,9 @@ fun InsightsScreen(
                 ) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text(
-                            text = "${focusScore.toInt()}",
+                            // Khong co du kien that thi in "—", not la mot con so
+                            // tinh tu mac dinh bi bịa.
+                            text = focusScore?.toInt()?.toString() ?: "—",
                             style = MaterialTheme.typography.headlineMedium,
                             color = TextPrimary,
                             fontWeight = FontWeight.Bold
@@ -148,21 +163,26 @@ fun InsightsScreen(
                 Spacer(modifier = Modifier.width(16.dp))
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = focusLabel(focusScore),
+                        text = focusScore?.let { focusLabel(it) } ?: "Chưa tính được điểm",
                         style = MaterialTheme.typography.titleMedium,
                         color = TextPrimary,
                         fontWeight = FontWeight.Bold
                     )
                     Spacer(modifier = Modifier.height(6.dp))
                     Text(
-                        text = focusAdvice(focusScore, todayMinutes, target),
+                        text = focusScore?.let { focusAdvice(it, todayMinutes, target ?: 0) }
+                            ?: scoreMissingReason,
                         style = MaterialTheme.typography.bodyMedium,
                         color = TextSecondary
                     )
                     Spacer(modifier = Modifier.height(10.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         PremiumChip(text = "$todayMinutes ph hôm nay", tint = Premium.primaryBright, filled = true)
-                        PremiumChip(text = "TB tuần $weekAvg ph", tint = Premium.violet)
+                        PremiumChip(
+                            text = if (measuredDays == 0) "Chưa có ngày nào được đo"
+                            else "TB $weekAvg ph/ngày ($measuredDays ngày)",
+                            tint = Premium.violet
+                        )
                     }
                 }
             }
@@ -175,7 +195,9 @@ fun InsightsScreen(
             Column {
                 SectionHeader(
                     title = "Nhịp sử dụng trong tuần",
-                    subtitle = "Mục tiêu mỗi ngày: $target phút",
+                    subtitle = if (target == null)
+                        "Chưa đặt mục tiêu phút/ngày — soạn ở màn Nội quy"
+                    else "Mục tiêu mỗi ngày: $target phút",
                     icon = Icons.Default.Schedule,
                     tint = Premium.cyan
                 )
@@ -196,7 +218,8 @@ fun InsightsScreen(
                         color = TextSecondary
                     )
                     Text(
-                        text = "$overTargetDays ngày vượt mục tiêu",
+                        text = if (target == null) "Chưa có mốc để so"
+                        else "$overTargetDays ngày vượt mục tiêu",
                         style = MaterialTheme.typography.labelSmall,
                         color = if (overTargetDays > 0) Premium.rose else Premium.emerald,
                         fontWeight = FontWeight.Bold
@@ -217,15 +240,17 @@ fun InsightsScreen(
                 icon = Icons.Default.Schedule,
                 label = "HÔM NAY",
                 value = "$todayMinutes ph",
-                hint = "Mục tiêu $target ph",
+                hint = if (target == null) "Chưa đặt mục tiêu" else "Mục tiêu $target ph",
                 tint = Premium.primaryBright
             )
             StatTile(
                 modifier = Modifier.weight(1f),
                 icon = Icons.Default.Insights,
                 label = "CÒN LẠI",
-                value = "${(target - todayMinutes).coerceAtLeast(0)} ph",
-                hint = "Trong ngân sách",
+                // "—" khi chua dat han muc: `(0 - today).coerceAtLeast(0)` se
+                // in ra "0 ph con lai" va gia dinh tuong rang con da het slot.
+                value = if (target == null) "—" else "${(target - todayMinutes).coerceAtLeast(0)} ph",
+                hint = if (target == null) "Chưa có ngân sách ngày" else "Trong ngân sách",
                 tint = Premium.emerald
             )
         }
@@ -364,59 +389,7 @@ fun InsightsScreen(
             }
         }
 
-        Spacer(modifier = Modifier.height(14.dp))
-
-        // ── Wellbeing tips ────────────────────────────────────────────────
-        GlassCard(modifier = Modifier.fillMaxWidth(), glow = Premium.violet) {
-            Column {
-                SectionHeader(
-                    title = "Gợi ý cân bằng số",
-                    subtitle = "Được tạo từ thói quen của gia đình bạn",
-                    icon = Icons.Default.Lightbulb,
-                    tint = Premium.violet
-                )
-                Spacer(modifier = Modifier.height(12.dp))
-                TipRow("🌙", "Giờ ngủ lý tưởng", "Tắt màn hình sau 21:30 để đảm bảo 8 tiếng ngủ cho con.")
-                TipRow("📚", "Khung giờ vàng", "Ưu tiên học tập 19:00 – 20:30 khi khả năng tập trung cao nhất.")
-                TipRow("🤝", "Thoả thuận gia đình", "Cùng con chốt mục tiêu $target phút/ngày thay vì áp đặt.")
-                TipRow("🌳", "Vận động ngoài trời", "Mỗi 60 phút màn hình nên có 10 phút vận động.")
-            }
-        }
-
         Spacer(modifier = Modifier.height(28.dp))
-    }
-}
-
-@Composable
-private fun TipRow(emoji: String, title: String, body: String) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 7.dp)
-    ) {
-        Box(
-            modifier = Modifier
-                .size(38.dp)
-                .clip(RoundedCornerShape(12.dp))
-                .background(Brush.linearGradient(listOf(Premium.violet.copy(alpha = 0.22f), Premium.cyan.copy(alpha = 0.18f)))),
-            contentAlignment = Alignment.Center
-        ) {
-            Text(text = emoji, fontSize = 18.sp)
-        }
-        Spacer(modifier = Modifier.width(12.dp))
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.bodyMedium,
-                color = TextPrimary,
-                fontWeight = FontWeight.Bold
-            )
-            Text(
-                text = body,
-                style = MaterialTheme.typography.labelSmall,
-                color = TextSecondary
-            )
-        }
     }
 }
 

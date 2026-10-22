@@ -99,19 +99,10 @@ fun LocationHistoryScreen(
     val todayStr = java.text.SimpleDateFormat("dd/MM/yyyy", java.util.Locale.getDefault())
         .format(java.util.Date())
 
-    // Danh sach mau: app CHUA luu tru vung an toan (geofence) nao tren may chu.
-    // LocationData.currentSafeZone chi la nhan mo ta vi tri hien tai, khong phai
-    // danh sach vung da bat. Giu list de minh hoa nhung gan nhan "Mau" that thuc.
-    val safeZonesAreSample = true
-    val safeZones = remember {
-        mutableStateListOf(
-            Triple("Trường học", 300f, true),
-            Triple("Nhà riêng", 250f, true),
-            Triple("Nhà bà ngoại", 400f, false)
-        )
-    }
-    var newZoneRadius by remember { mutableFloatStateOf(300f) }
-    var selectedZone by remember { mutableStateOf(0) }
+    // Danh sach vung an toan da bi xoa khoi man hinh nay: no tung la chuoi baa
+    // ("Trường học", "Nhà riêng", "Nhà bà ngoại") chi ton tai trong bo nho.
+    // May chu chua co collection nao cho vung an toan, nen o day khong con
+    // bien nao de "minh hoa" — thay vao do la the trang thai that ben duoi.
 
     val stopsToday = history.count { it.dateStr == todayStr }
     val routeFixCount = history.count { it.latitude != 0.0 || it.longitude != 0.0 }
@@ -120,11 +111,16 @@ fun LocationHistoryScreen(
     // batteryLevel = 0 khi chưa gửi pin, tính gộp cả điểm 0 sẽ kéo trung bình thấp hơn thực.
     val batteryReadings = history.map { it.batteryLevel }.filter { it > 0 }
     val avgBattery = if (batteryReadings.isEmpty()) 0 else batteryReadings.average().toInt()
-    val frequentPlaces = history.groupBy { it.placeName }
+    // Chi xep hang nhung diem THAT SU co ten. `placeName` rong nghia la may
+    // do duoc toa do nhung chua dich duoc thanh dia chi — gop chung vao thi
+    // sinh ra mot "dia diem quen thuoc" khong ten voi dem luu diem lon nhat.
+    val frequentPlaces = history.filter { it.placeName.isNotBlank() }
+        .groupBy { it.placeName }
         .mapValues { it.value.size }
         .toList()
         .sortedByDescending { it.second }
         .take(4)
+    val unnamedFixes = history.count { it.placeName.isBlank() }
 
     Column(
         modifier = Modifier
@@ -392,14 +388,6 @@ fun LocationHistoryScreen(
                 hint = "Trung bình các điểm có số pin",
                 tint = if (avgBattery > 0) Premium.emerald else TextMuted
             )
-            StatTile(
-                modifier = Modifier.weight(1f),
-                icon = Icons.Default.Home,
-                label = "VÙNG AN TOÀN",
-                value = "${safeZones.count { it.third }}/${safeZones.size}",
-                hint = "Mẫu — chưa lưu",
-                tint = if (safeZonesAreSample) Premium.amber else Premium.violet
-            )
         }
 
         Spacer(modifier = Modifier.height(14.dp))
@@ -447,111 +435,50 @@ fun LocationHistoryScreen(
                 }
             }
             Spacer(modifier = Modifier.height(14.dp))
-        }
-
-        // ── Safe zones manager ────────────────────────────────────────────
-        GlassCard(modifier = Modifier.fillMaxWidth(), glow = Premium.emerald) {
-            Column {
-                SectionHeader(
-                    title = if (safeZonesAreSample) "Vùng an toàn (mẫu — chưa lưu vào máy chủ)" else "Vùng an toàn (Geofence)",
-                    subtitle = if (safeZonesAreSample) "Danh sách minh hoạ — chưa cảnh báo thật"
-                               else "Nhận thông báo khi con ra khỏi vùng",
-                    icon = Icons.Default.LocationOn,
-                    tint = if (safeZonesAreSample) Premium.amber else Premium.emerald
-                )
-                if (safeZonesAreSample) {
-                    Spacer(modifier = Modifier.height(8.dp))
+        } else if (unnamedFixes > 0) {
+            GlassCard(modifier = Modifier.fillMaxWidth()) {
+                Column {
+                    SectionHeader(
+                        title = "Địa điểm quen thuộc",
+                        subtitle = "Chưa dịch được điểm nào thành tên",
+                        icon = Icons.Default.Place,
+                        tint = TextMuted
+                    )
+                    Spacer(modifier = Modifier.height(10.dp))
                     Text(
-                        text = "Chưa có vùng an toàn thật nào được lưu hoặc bật trên máy chủ — " +
-                            "các mục và công tắc bên dưới chỉ là dữ liệu mẫu để minh hoạ giao diện.",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = Premium.amber
+                        text = "$unnamedFixes điểm định vị đã ghi được tọa độ nhưng chưa tra ra " +
+                            "địa chỉ, nên chưa xếp hạng được địa điểm nào. Cần quyền vị trí " +
+                            "và mạng để dịch tọa độ thành tên.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = TextSecondary
                     )
                 }
-                Spacer(modifier = Modifier.height(12.dp))
-                safeZones.forEachIndexed { index, zone ->
-                    val selected = index == selectedZone
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(16.dp))
-                            .background(if (selected) Premium.emerald.copy(alpha = 0.12f) else Premium.glassFillTop)
-                            .border(
-                                1.dp,
-                                if (selected) Premium.emerald.copy(alpha = 0.5f) else Premium.glassBorder,
-                                RoundedCornerShape(16.dp)
-                            )
-                            .clickable { selectedZone = index }
-                            .padding(horizontal = 12.dp, vertical = 10.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(30.dp)
-                                .clip(CircleShape)
-                                .background(Premium.emerald.copy(alpha = 0.18f)),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(Icons.Default.LocationOn, contentDescription = null, tint = Premium.emerald, modifier = Modifier.size(16.dp))
-                        }
-                        Spacer(modifier = Modifier.width(10.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = zone.first,
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = TextPrimary,
-                                fontWeight = FontWeight.SemiBold
-                            )
-                            Text(
-                                text = "Bán kính ${zone.second.toInt()} m",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = TextSecondary
-                            )
-                            if (safeZonesAreSample) {
-                                Spacer(modifier = Modifier.height(4.dp))
-                                PremiumChip(text = "Mẫu", tint = Premium.amber)
-                            }
-                        }
-                        Switch(
-                            checked = zone.third,
-                            onCheckedChange = { enabled ->
-                                safeZones[index] = Triple(zone.first, zone.second, enabled)
-                            },
-                            colors = SwitchDefaults.colors(
-                                checkedThumbColor = Color.White,
-                                checkedTrackColor = Premium.emerald
-                            )
-                        )
-                    }
-                    Spacer(modifier = Modifier.height(8.dp))
-                }
+            }
+            Spacer(modifier = Modifier.height(14.dp))
+        }
 
-                Spacer(modifier = Modifier.height(6.dp))
+        // ── Safe zones: trang thai that ───────────────────────────────────
+        // Truoc day the nay dung danh sach ba ("Trường học 300m", "Nhà riêng
+        // 250m", "Nhà bà ngoại 400m") co cong tac bat/tat, thanh keo ban kinh
+        // va nut "Them vung" — tat ca chi sua mot danh sach trong bo nho, roi
+        // bi xoan khi thoat man hinh. May chu khong co collection vung an toan
+        // nao, va app cung khong dang ki GeofencingClient o dau. Giu lai mot
+        // noi dung thang: chua co, va chua co canh bao.
+        GlassCard(modifier = Modifier.fillMaxWidth()) {
+            Column {
+                SectionHeader(
+                    title = "Vùng an toàn",
+                    subtitle = "Chưa có vùng nào trên máy này",
+                    icon = Icons.Default.LocationOn,
+                    tint = TextMuted
+                )
+                Spacer(modifier = Modifier.height(10.dp))
                 Text(
-                    text = "Bán kính vùng đang chọn: ${newZoneRadius.toInt()} m",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = Premium.emerald,
-                    fontWeight = FontWeight.Bold
-                )
-                Slider(
-                    value = newZoneRadius,
-                    onValueChange = {
-                        newZoneRadius = it
-                        val zone = safeZones[selectedZone]
-                        safeZones[selectedZone] = Triple(zone.first, it, zone.third)
-                    },
-                    valueRange = 100f..1000f,
-                    steps = 17
-                )
-                Spacer(modifier = Modifier.height(6.dp))
-                GlassButton(
-                    text = "Thêm vùng an toàn mới",
-                    icon = Icons.Default.Add,
-                    onClick = {
-                        safeZones.add(Triple("Vùng mới ${safeZones.size + 1}", newZoneRadius, true))
-                    },
-                    tint = Premium.emerald,
-                    modifier = Modifier.fillMaxWidth()
+                    text = "App chưa lưu vùng an toàn nào và chưa bật cảnh báo ra khỏi vùng. " +
+                        "Màn hình này chỉ hiển thị những điểm định vị thật mà máy đã gửi, " +
+                        "cùng nhãn nơi đang đứng lấy từ địa chỉ thực.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = TextSecondary
                 )
             }
         }
@@ -639,7 +566,7 @@ fun LocationHistoryScreen(
                                     horizontalArrangement = Arrangement.SpaceBetween
                                 ) {
                                     Text(
-                                        text = entry.placeName.ifEmpty { "Điểm dừng chân" },
+                                        text = entry.placeName.ifEmpty { "Không rõ địa điểm — chỉ có tọa độ" },
                                         style = MaterialTheme.typography.bodyMedium,
                                         color = TextPrimary,
                                         fontWeight = FontWeight.SemiBold,

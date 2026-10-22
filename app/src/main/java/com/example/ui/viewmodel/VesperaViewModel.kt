@@ -29,6 +29,7 @@ import com.example.data.model.UserRole
 import com.example.data.ai.DailyUsageStore
 import com.example.data.model.hasRealFix
 import com.example.data.model.todayUsedMinutes
+import com.example.data.model.windowCode
 import com.example.data.repository.VesperaRepository
 import com.example.service.blocker.BlockPolicy
 import com.example.service.blocker.ConsentPolicy
@@ -66,7 +67,6 @@ private const val TAG = "VesperaViewModel"
 data class VesperaUiState(
     val isLoading: Boolean = false,
     val isAuthenticated: Boolean = false,
-    val isGuestDemoMode: Boolean = false,
     val isIosPreviewMode: Boolean = false,
     val isBackgroundServiceRunning: Boolean = false,
     val isDarkMode: Boolean = true,
@@ -102,13 +102,25 @@ data class VesperaUiState(
     val errorMessage: String? = null,
     val successMessage: String? = null,
     val selectedEmotion: EmotionTag? = null,
-    val smartAdvice: String = "Chào bạn! Hãy đặt mục tiêu cân bằng 120 phút mỗi ngày giữa học tập và giải trí để bảo vệ sức khỏe.",
-    val lastBumpCount: Int = 0,
+    /**
+     * Thoi diem "chạm tay" gan nhat MAI DUOC trong document ghep noi, khong
+     * phai bo dem trong bo nho nhu ban cu (ban cu tang len khi bam nut va ben
+     * kia khong nhan duoc gi). 0 = chua co lan nao.
+     */
+    val lastBumpAt: Long = 0L,
+    val lastBumpByRole: UserRole? = null,
+    val lastBumpByName: String = "",
     val weeklyUsage: List<Pair<String, Int>> = listOf(
         "T2" to 0, "T3" to 0, "T4" to 0, "T5" to 0, "T6" to 0, "T7" to 0, "CN" to 0
     ),
     val locationHistory: List<LocationHistoryEntry> = emptyList(),
-    val isOnline: Boolean = true,
+    /**
+     * null = CHUA kiem tra duoc mạng. Truoc day mac dinh la `true`, nen khung
+     * chat bao "Trực tuyến" ngay ca khi NetworkMonitor chua kip tra loi (va
+     * ca khi may chang co mang). Chi `NetworkMonitor` (init:216) duoc phep
+     * gan gia tri that.
+     */
+    val isOnline: Boolean? = null,
     val discoveredMeshPeers: List<MeshPeer> = emptyList(),
     val connectedMeshPeers: List<MeshPeer> = emptyList(),
     val meshMessages: List<MeshMessage> = emptyList(),
@@ -190,16 +202,6 @@ class VesperaViewModel(
     private var usageRefreshInFlight: Boolean = false
 
     init {
-        // Initialize SocketManager and observe messages
-        com.example.service.socket.SocketManager.connect()
-        viewModelScope.launch {
-            com.example.service.socket.SocketManager.incomingMessages.collect { json ->
-                // Handle incoming message and update state
-                // Need to parse JSON to FamilyMessage
-                Log.d(TAG, "Received socket message: $json")
-            }
-        }
-        
         if (context != null) {
             val dispatcher = SmartSosDispatcher(context, repository, viewModelScope)
             smartSosDispatcher = dispatcher
@@ -253,7 +255,6 @@ class VesperaViewModel(
         if (initialUser != null) {
             _uiState.value = _uiState.value.copy(
                 isAuthenticated = true,
-                isGuestDemoMode = false,
                 authUserId = initialUser.uid,
                 isLoading = false
             )
@@ -265,12 +266,11 @@ class VesperaViewModel(
             if (user != null) {
                 _uiState.value = _uiState.value.copy(
                     isAuthenticated = true,
-                    isGuestDemoMode = false,
                     authUserId = user.uid,
                     isLoading = false
                 )
                 startObservingUserData(user.uid)
-            } else if (!_uiState.value.isGuestDemoMode) {
+            } else {
                 stopAllObservers()
                 _uiState.value = VesperaUiState(isAuthenticated = false)
             }
@@ -297,83 +297,6 @@ class VesperaViewModel(
     }
 
     /**
-     * Start Guest / Demo Mode without requiring login
-     * True production state: Starts UNPAIRED cleanly so judges see authentic real status!
-     */
-    fun enterGuestDemoMode(initialRole: UserRole = UserRole.PARENT) {
-        stopAllObservers()
-
-        val isParent = initialRole == UserRole.PARENT
-        val currentUserId = if (isParent) "parent_user_local" else "child_user_local"
-        val uniqueCode = if (isParent) "" else repository.getOrGenerateDeviceStudentCode()
-        val uniquePin = if (isParent) "" else repository.getOrGenerateVerificationPin()
-
-        val guestProfile = UserProfile(
-            id = currentUserId,
-            email = if (isParent) "phuhuynh@giadinhviet.vn" else "hocsinh@giadinhviet.vn",
-            displayName = if (isParent) "Phụ huynh" else "Học sinh",
-            role = initialRole,
-            studentCode = uniqueCode,
-            verificationPin = uniquePin,
-            pairedWith = "",
-            activePairingId = ""
-        )
-
-        val realCats = if (telemetryHelper.hasUsageStatsPermission()) {
-            telemetryHelper.getTodayUsageCategories()
-        } else emptyList()
-
-        val realDetailed = if (telemetryHelper.hasUsageStatsPermission()) {
-            telemetryHelper.getDetailedAppUsageList()
-        } else emptyList()
-
-        // Không có tọa độ mẫu: guest bắt đầu với myLocation = null.
-        _uiState.value = VesperaUiState(
-            isLoading = false,
-            isAuthenticated = true,
-            isGuestDemoMode = true,
-            authUserId = currentUserId,
-            userProfile = guestProfile,
-            activePairing = null, // Pristine UNPAIRED state!
-            partnerLocation = null, // No fake partner location until paired!
-            myLocation = null,
-            usageSchedule = UsageSchedule(dailyTargetMinutes = 120, usedMinutes = 0),
-            usageCategories = realCats,
-            detailedAppUsage = realDetailed,
-            hasUsagePermission = telemetryHelper.hasUsageStatsPermission(),
-            extraTimeRequests = emptyList(),
-            privacyRequests = emptyList(),
-            messages = emptyList(),
-            // weeklyUsage de nguyen mac dinh 0: bieu do do refreshUsageStats
-            // lap bang so THAT tren IO thread (mot van truy van UsageStats
-            // moi ngay trong tuan), con day la luot khoi tao tren main thread
-            // nen goi luon se lam giat lan dau vao app.
-            selectedEmotion = EmotionTag.NORMAL,
-            smartAdvice = if (isParent)
-                "Chào mừng Quý phụ huynh. Hãy nhập mã học sinh của con để bắt đầu giám sát an toàn và quản lý thời gian sử dụng."
-            else
-                "Chào bạn! Cung cấp mã học sinh hiển thị trên màn hình cho phụ huynh để bắt đầu ghép nối bảo vệ an toàn."
-        )
-        refreshPermissions()
-    }
-
-
-    /**
-     * Switch role inside Demo Mode to test both sides instantly
-     */
-    fun switchDemoRole(targetRole: UserRole) {
-        selectRole(targetRole)
-    }
-
-    /**
-     * Exit demo mode back to SignIn
-     */
-    fun exitDemoMode() {
-        stopAllObservers()
-        _uiState.value = VesperaUiState(isAuthenticated = false, isGuestDemoMode = false)
-    }
-
-    /**
      * Toggle iOS UI Preview Mode (Apple Dynamic Island & Bento Glass)
      */
     fun toggleIosPreviewMode() {
@@ -381,9 +304,9 @@ class VesperaViewModel(
         _uiState.value = _uiState.value.copy(
             isIosPreviewMode = next,
             successMessage = if (next)
-                "🍏 Đã bật Chế độ xem trước Giao diện iOS (Apple Dynamic Island & Bento Glass)!"
+                "🍏 Đã đổi SANG giao diện kiểu iOS (Dynamic Island & Bento). Đây là bộ áo, app vẫn chạy trên Android."
             else
-                "Đã chuyển về giao diện Android chuẩn."
+                "Đã đổi lại giao diện Android chuẩn."
         )
     }
 
@@ -402,7 +325,12 @@ class VesperaViewModel(
             focusSessionMinutesRemaining = minutes,
             focusSessionTotalMinutes = minutes,
             focusSessionSecondsRemaining = totalSeconds,
-            successMessage = "🎯 Đã kích hoạt Chế độ Học tập Tập trung ($minutes phút)! Vespera sẽ phát cảnh báo nếu mở mạng xã hội."
+            // Pomodoro chi la dong ho dem nguoc. Bo chan (AppBlockService)
+            // KHONG doc truong `isFocusSessionActive` nao ca — do vay that
+            // may bao "Vespera sẽ phát cảnh báo nếu mở mạng xã hội" la het
+            // noi dung cua mot tinh nang khong ton tai.
+            successMessage = "🎯 Đồng hồ phiên tập trung $minutes phút đang chạy. " +
+                "Máy chỉ chặn ứng dụng theo Nội quy mà gia đình đã bật — phiên này không tự chặn gì thêm."
         )
         startFocusTicker()
     }
@@ -442,35 +370,112 @@ class VesperaViewModel(
     }
 
     /**
+     * Gio cua lan chạm tay ma MAY NAY da rung. Listener cua document ghep noi
+     * dua lan nay tra ve chinh no, nen phai co moc so de khong rung lan thu hai.
+     * -1 = CHUA nhan snapshot nao: moc dau tien chi duoc ghi lai chu khong rung,
+     * neu khong mo app len lai rung may vi cai cham tay tu hom qua.
+     */
+    @Volatile
+    private var lastRungBumpAt: Long = -1L
+
+    /**
      * Interactive Zenly "Bump / Chạm tay" feature with tactile vibration
      */
     fun sendZenlyBump(context: Context? = null) {
-        val currentCount = _uiState.value.lastBumpCount + 1
-        context?.let { ctx ->
+        val pairing = _uiState.value.activePairing
+        val profile = _uiState.value.userProfile
+        if (pairing == null || pairing.status != PairingStatus.PAIRED) {
+            _uiState.value = _uiState.value.copy(
+                errorMessage = "Chưa ghép nối với máy nào nên không có ai để chạm tay. " +
+                    "Hai máy phải nhập mã ghép nối ở màn Tổng quan trước đã."
+            )
+            return
+        }
+        val at = System.currentTimeMillis()
+        // Ghi trước khi rung: tự nhận lan nay la cua minh de listener khong
+        // rung may lan thu hai khi document quay lai.
+        lastRungBumpAt = at
+        viewModelScope.launch {
             try {
-                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
-                    val mgr = ctx.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as? android.os.VibratorManager
-                    mgr?.defaultVibrator?.vibrate(
+                repository.sendBump(
+                    pairingId = pairing.id,
+                    atMillis = at,
+                    role = profile?.role ?: UserRole.PARENT,
+                    actorName = profile?.displayName.orEmpty()
+                )
+                context?.let { vibrateForBump(it) }
+                _uiState.value = _uiState.value.copy(
+                    lastBumpAt = at,
+                    lastBumpByRole = profile?.role,
+                    lastBumpByName = profile?.displayName.orEmpty(),
+                    successMessage = "⚡ Đã ghi chạm tay lên máy chủ lúc " +
+                        java.text.SimpleDateFormat("HH:mm", java.util.Locale.US).format(java.util.Date(at)) +
+                        ". Máy bên kia chỉ rung khi đang mở app và còn kết nối — app này không xác nhận được điều đó."
+                )
+            } catch (e: Exception) {
+                Log.w(TAG, "sendZenlyBump: khong ghi duoc lastBumpAt", e)
+                _uiState.value = _uiState.value.copy(
+                    errorMessage = "Không gửi được chạm tay: máy không ghi được lên máy chủ " +
+                        "(mất mạng hoặc quyền Firestore). Máy bạn cũng không rung, vì chưa có ai nhận được."
+                )
+            }
+        }
+    }
+
+    /** Rung theo kieu Zenly: ngan - ngat - dai. */
+    private fun vibrateForBump(ctx: Context) {
+        try {
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+                val mgr = ctx.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as? android.os.VibratorManager
+                mgr?.defaultVibrator?.vibrate(
+                    android.os.VibrationEffect.createWaveform(longArrayOf(0, 100, 70, 150), -1)
+                )
+            } else {
+                @Suppress("DEPRECATION")
+                val vibrator = ctx.getSystemService(Context.VIBRATOR_SERVICE) as? android.os.Vibrator
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                    vibrator?.vibrate(
                         android.os.VibrationEffect.createWaveform(longArrayOf(0, 100, 70, 150), -1)
                     )
                 } else {
                     @Suppress("DEPRECATION")
-                    val vibrator = ctx.getSystemService(Context.VIBRATOR_SERVICE) as? android.os.Vibrator
-                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-                        vibrator?.vibrate(
-                            android.os.VibrationEffect.createWaveform(longArrayOf(0, 100, 70, 150), -1)
-                        )
-                    } else {
-                        @Suppress("DEPRECATION")
-                        vibrator?.vibrate(200)
-                    }
+                    vibrator?.vibrate(200)
                 }
-            } catch (_: Exception) {}
+            }
+        } catch (_: Exception) {}
+    }
+
+    /**
+     * Mot snapshot cua `pairings/{id}` di qua day. Chi rung khi thoi diem chạm
+     * tay MOI HON cai ma may nay da rung; snapshot dau tien sau khi mo app chi
+     * ghi moc — neu khong thi mo app len lai rung vi lan cham tu hom qua.
+     */
+    private fun applyBumpFromServer(pairing: Pairing) {
+        if (pairing.lastBumpAt <= 0L) {
+            if (_uiState.value.lastBumpAt != 0L) {
+                _uiState.value = _uiState.value.copy(
+                    lastBumpAt = 0L, lastBumpByRole = null, lastBumpByName = ""
+                )
+            }
+            return
         }
-        _uiState.value = _uiState.value.copy(
-            lastBumpCount = currentCount,
-            successMessage = "⚡ BUMP! Bạn vừa chạm tay tương tác Zenly. Tín hiệu rung haptic đã kích hoạt! 👋❤️"
-        )
+        if (lastRungBumpAt < 0) {
+            lastRungBumpAt = pairing.lastBumpAt
+        } else if (pairing.lastBumpAt > lastRungBumpAt) {
+            lastRungBumpAt = pairing.lastBumpAt
+            context?.let { vibrateForBump(it) }
+            _uiState.value = _uiState.value.copy(
+                successMessage = "⚡ " + pairing.lastBumpByName.ifEmpty { "Máy bên kia" } +
+                    " vừa chạm tay — máy này đã rung."
+            )
+        }
+        if (_uiState.value.lastBumpAt != pairing.lastBumpAt) {
+            _uiState.value = _uiState.value.copy(
+                lastBumpAt = pairing.lastBumpAt,
+                lastBumpByRole = pairing.lastBumpByRole,
+                lastBumpByName = pairing.lastBumpByName
+            )
+        }
     }
 
     private fun startObservingUserData(userId: String) {
@@ -515,6 +520,8 @@ class VesperaViewModel(
         pairingJob = viewModelScope.launch {
             repository.observePairing(pairingId).collect { pairing ->
                 _uiState.value = _uiState.value.copy(activePairing = pairing)
+                // Chạm tay bay qua document ghep noi: ben kia ghi thi may nay rung.
+                if (pairing != null) applyBumpFromServer(pairing)
                 if (pairing != null && pairing.status == PairingStatus.PAIRED) {
                     // Cong tat ghi dinh vi lay theo document ghep noi, khong lay
                     // theo SharedPreferences nua — neu khong thi ben kia tat la
@@ -795,7 +802,6 @@ class VesperaViewModel(
                     // Immediately transition to Authenticated state so the app navigates without delay!
                     _uiState.value = _uiState.value.copy(
                         isAuthenticated = true,
-                        isGuestDemoMode = false,
                         authUserId = user.uid,
                         userProfile = initialProfile,
                         isLoading = false,
@@ -833,36 +839,17 @@ class VesperaViewModel(
                 Log.w(TAG, "Google Sign-in was cancelled by user", e)
                 _uiState.value = _uiState.value.copy(isLoading = false)
             } catch (e: Exception) {
-                Log.w(TAG, "Credential Manager flow exception: ${e.message}, ensuring smooth authenticated entry", e)
-                val fallbackUid = auth.currentUser?.uid ?: "user_${System.currentTimeMillis() % 1000000}"
-                val studentCode = if (selectedRole == UserRole.CHILD) repository.generateStudentCode() else ""
-                val directProfile = UserProfile(
-                    id = fallbackUid,
-                    email = auth.currentUser?.email.orEmpty().ifEmpty {
-                        if (selectedRole == UserRole.PARENT) "phuhuynh@giadinhviet.vn" else "hocsinh@giadinhviet.vn"
-                    },
-                    displayName = auth.currentUser?.displayName.orEmpty().ifEmpty {
-                        if (selectedRole == UserRole.CHILD) "Học sinh" else "Phụ huynh"
-                    },
-                    role = selectedRole,
-                    studentCode = studentCode
-                )
+                Log.w(TAG, "Credential Manager flow exception: ${e.message}", e)
+                // Nhanh nay TUNG tao ho so voi uid `user_<ngau nhien>` va email
+                // `phuhuynh@giadinhviet.vn` roi bao la dang nhap thanh cong. Do la
+                // tai khoan ao: khong ai tim duoc, khong dong bo duoc, ma van ghi
+                // thang len `users/`. Nay bao that loi de nguoi dung chon cach khac.
                 _uiState.value = _uiState.value.copy(
-                    isAuthenticated = true,
-                    isGuestDemoMode = false,
-                    authUserId = fallbackUid,
-                    userProfile = directProfile,
                     isLoading = false,
-                    errorMessage = null
+                    errorMessage = "Không đăng nhập được bằng Google: " +
+                        (e.localizedMessage ?: "lỗi không xác định") +
+                        ". Hãy thử lại, hoặc đăng nhập bằng tài khoản và mật khẩu."
                 )
-                launch {
-                    try {
-                        repository.saveUserProfile(directProfile)
-                    } catch (e: Exception) {
-                        Log.w(TAG, "Save direct profile error", e)
-                    }
-                }
-                startObservingUserData(fallbackUid)
             }
         }
     }
@@ -889,7 +876,6 @@ class VesperaViewModel(
                     )
                     _uiState.value = _uiState.value.copy(
                         isAuthenticated = true,
-                        isGuestDemoMode = false,
                         authUserId = user.uid,
                         userProfile = profile,
                         isLoading = false,
@@ -944,7 +930,6 @@ class VesperaViewModel(
                     repository.saveUserProfile(profile)
                     _uiState.value = _uiState.value.copy(
                         isAuthenticated = true,
-                        isGuestDemoMode = false,
                         authUserId = user.uid,
                         userProfile = profile,
                         isLoading = false,
@@ -976,20 +961,24 @@ class VesperaViewModel(
         } else {
             current?.verificationPin.orEmpty()
         }
+        // Chua dang nhap thi KHONG biem ten hay email. `user_local` +
+        // "phuhuynh@giadinhviet.vn" tung khien man hinh in ra mot tai khoan
+        // khong ton tai; giu rong de cac man hinh tu hien thi "chua dang nhap".
         val updated = (current ?: UserProfile(
-            id = auth.currentUser?.uid ?: "user_local",
-            email = if (role == UserRole.PARENT) "phuhuynh@giadinhviet.vn" else "hocsinh@giadinhviet.vn"
+            id = auth.currentUser?.uid.orEmpty(),
+            email = auth.currentUser?.email.orEmpty()
         )).copy(
             role = role,
             studentCode = studentCode,
             verificationPin = verificationPin,
-            displayName = if (role == UserRole.CHILD) "Học sinh" else "Phụ huynh"
+            displayName = (current?.displayName ?: auth.currentUser?.displayName.orEmpty())
+                .ifEmpty { if (role == UserRole.CHILD) "Học sinh" else "Phụ huynh" }
         )
         _uiState.value = _uiState.value.copy(
             userProfile = updated,
             successMessage = "Đã chuyển sang vai trò: ${if (role == UserRole.CHILD) "Học sinh 🎒" else "Phụ huynh 🛡️"}"
         )
-        if (!_uiState.value.isGuestDemoMode && auth.currentUser != null) {
+        if (auth.currentUser != null) {
             viewModelScope.launch {
                 try {
                     repository.saveUserProfile(updated)
@@ -1015,7 +1004,7 @@ class VesperaViewModel(
             userProfile = updated,
             successMessage = "Đã tạo mã học sinh mới: $newCode (PIN: $newPin)"
         )
-        if (!_uiState.value.isGuestDemoMode && auth.currentUser != null) {
+        if (auth.currentUser != null) {
             viewModelScope.launch {
                 try {
                     repository.saveUserProfile(updated)
@@ -1042,16 +1031,12 @@ class VesperaViewModel(
         _uiState.value = _uiState.value.copy(isLoading = true, errorMessage = null)
         viewModelScope.launch {
             try {
-                if (_uiState.value.isGuestDemoMode) {
-                    _uiState.value = _uiState.value.copy(isLoading = false, successMessage = "Ghép nối thành công (Demo)!")
-                } else {
-                    val pairing = repository.pairDirectly(cleanCode, parent)
-                    _uiState.value = _uiState.value.copy(
-                        isLoading = false,
-                        activePairing = pairing,
-                        successMessage = "Ghép nối thành công với học sinh!"
-                    )
-                }
+                val pairing = repository.pairDirectly(cleanCode, parent)
+                _uiState.value = _uiState.value.copy(
+                    isLoading = false,
+                    activePairing = pairing,
+                    successMessage = "Ghép nối thành công với học sinh!"
+                )
             } catch (e: Exception) {
                 Log.e(TAG, "Pairing error", e)
                 _uiState.value = _uiState.value.copy(
@@ -1064,12 +1049,6 @@ class VesperaViewModel(
 
     fun acceptPairing(request: PairingRequest) {
         val child = _uiState.value.userProfile ?: return
-        if (_uiState.value.isGuestDemoMode) {
-            _uiState.value = _uiState.value.copy(
-                successMessage = "Demo: Đã chấp nhận ghép nối!"
-            )
-            return
-        }
         viewModelScope.launch {
             try {
                 repository.acceptPairingRequest(request, child)
@@ -1083,12 +1062,6 @@ class VesperaViewModel(
     }
 
     fun rejectPairing(requestId: String) {
-        if (_uiState.value.isGuestDemoMode) {
-            _uiState.value = _uiState.value.copy(
-                pendingRequests = _uiState.value.pendingRequests.filterNot { it.id == requestId }
-            )
-            return
-        }
         viewModelScope.launch {
             try {
                 repository.rejectPairingRequest(requestId)
@@ -1100,14 +1073,6 @@ class VesperaViewModel(
 
     fun unpairConnection() {
         val pairing = _uiState.value.activePairing ?: return
-        if (_uiState.value.isGuestDemoMode) {
-            _uiState.value = _uiState.value.copy(
-                activePairing = null,
-                partnerLocation = null,
-                successMessage = "Demo: Đã hủy liên kết thiết bị thành công."
-            )
-            return
-        }
         viewModelScope.launch {
             try {
                 repository.unpair(pairing.id, pairing.parentId, pairing.childId)
@@ -1177,7 +1142,7 @@ class VesperaViewModel(
                 withContext(Dispatchers.IO) {
                     DailyUsageStore(ctx).writeTodaySnapshot(
                         usedMinutes = todayUsedMinutes(snapshot.detailed, snapshot.categories.sumOf { it.minutes }),
-                        quotaMinutes = _uiState.value.usageSchedule?.dailyTargetMinutes ?: 120,
+                        quotaMinutes = _uiState.value.usageSchedule?.dailyTargetMinutes ?: 0,
                         categories = snapshot.categories,
                         detailed = snapshot.detailed,
                         locationPings = pingsToday,
@@ -1293,7 +1258,14 @@ class VesperaViewModel(
          */
         allowedApps: List<String>? = null,
         /** null = khong doi han muc phut/ngay so voi luat dang chay. */
-        dailyTargetMinutes: Int? = null
+        dailyTargetMinutes: Int? = null,
+        /**
+         * Khung gio duoc dung máy ma ban nay muon ap dung: `"07:00-21:30"` = dat,
+         * `""` = xin xoa (may khong chan theo nua), `null` = giu nguyen nhu
+         * luat dang chay. The BlockRulesCard luon truyen chuoi ro rang (khong
+         * dung null) vi ban nhap mang TOAN BO noi quy, khong phai tung mon.
+         */
+        windowCode: String? = null
     ) {
         val pairing = _uiState.value.activePairing
         val role = _uiState.value.userProfile?.role ?: UserRole.PARENT
@@ -1349,7 +1321,8 @@ class VesperaViewModel(
             blockedPackages = blockable,
             allowedApps = allowedApps ?: base.allowedApps,
             reminderOnly = reminderOnly,
-            dailyTargetMinutes = dailyTargetMinutes ?: base.dailyTargetMinutes
+            dailyTargetMinutes = dailyTargetMinutes ?: base.dailyTargetMinutes,
+            windowCode = windowCode ?: base.windowCode()
         )
 
         if (result.outcome == ProposeOutcome.NO_CHANGE) {
@@ -1590,15 +1563,33 @@ class VesperaViewModel(
                 return
             }
             VesperaTelemetryService.start(context)
-            _uiState.value = _uiState.value.copy(
-                isBackgroundServiceRunning = true,
-                successMessage = "🟢 Đã bật Dịch vụ Chạy Ngầm! Gia Đình Việt đang cập nhật GPS và giám sát thời gian sử dụng."
-            )
+            // `startForegroundService` la lenh BAT dong bo, con `isServiceRunning`
+            // do chinh service gan len trong onStartCommand. Viet ra UI ngay luc
+            // do la noi vay; cho toi da 3 giay roi moi bao "Đang chạy".
+            viewModelScope.launch {
+                var confirmed = false
+                repeat(15) {
+                    if (VesperaTelemetryService.isServiceRunning) { confirmed = true; return@repeat }
+                    delay(200L)
+                }
+                _uiState.value = _uiState.value.copy(
+                    isBackgroundServiceRunning = confirmed,
+                    successMessage = if (confirmed)
+                        "🟢 Dịch vụ chạy ngầm đang chạy: máy sẽ tự cập nhật vị trí và thống kê giờ dùng."
+                    else null,
+                    errorMessage = if (confirmed) _uiState.value.errorMessage else
+                        "Dịch vụ KHÔNG chạy: Android không khởi động được Foreground Service. " +
+                            "Kiểm tra quyền Thông báo và Quyền pin (đặt thành Không giới hạn)."
+                )
+            }
         } else {
             VesperaTelemetryService.stop(context)
             _uiState.value = _uiState.value.copy(
-                isBackgroundServiceRunning = false,
-                successMessage = "Đã dừng dịch vụ chạy ngầm."
+                isBackgroundServiceRunning = VesperaTelemetryService.isServiceRunning,
+                successMessage = if (!VesperaTelemetryService.isServiceRunning)
+                    "Đã dừng dịch vụ chạy ngầm." else null,
+                errorMessage = if (VesperaTelemetryService.isServiceRunning)
+                    "Đã gửi lệnh dừng nhưng dịch vụ vẫn đang chạy." else null
             )
         }
     }
@@ -1655,7 +1646,7 @@ class VesperaViewModel(
                     updatedAt = System.currentTimeMillis()
                 )
 
-                val canUpload = user != null && _uiState.value.isAuthenticated && !_uiState.value.isGuestDemoMode
+                val canUpload = user != null && _uiState.value.isAuthenticated
                 // Repository CHỈ có một đường ghi gộp (VesperaRepository.kt:371 dùng .set(),
                 // ghi đè TOÀN BỘ doc locations/<userId>). Ghi bản 0/0 lúc này = xoá toạ độ thật
                 // mà phụ huynh đang xem, nên bắt buộc chặn; người dùng được nói rõ vì sao.
@@ -1666,7 +1657,10 @@ class VesperaViewModel(
 
                 _uiState.value = _uiState.value.copy(
                     myLocation = locationData,
-                    isBackgroundServiceRunning = true,
+                    // Bam "lam moi" KHONG duoc bien dich vu dang chay: doc
+                    // trang thai that cua service, neu khong thi moi lan bam
+                    // la the hien "Đang chạy" gia.
+                    isBackgroundServiceRunning = VesperaTelemetryService.isServiceRunning,
                     errorMessage = if (!locationData.hasRealFix)
                         (noFixReason + (uploadBlockedNote.orEmpty()))
                     else _uiState.value.errorMessage
@@ -1713,8 +1707,12 @@ class VesperaViewModel(
                             speed = loc.speed,
                             batteryLevel = bat,
                             isCharging = chg,
-                            currentSafeZone = if (fix.source == com.example.service.LocationFixSource.STALE_CACHED_FIX)
-                                "Vị trí cũ (cached)" else "Vị trí GPS thực tế",
+                            // `currentSafeZone` la TEN NOI CHO, khong phai nguon
+                            // do diem. Truoc day day chuoi "Vị trí GPS thực tế"
+                            // vao day nen man hinh/SMS in ra no nhu ten cua mot
+                            // dia chi. Diem nay chua keo duoc dia chi thi noi
+                            // thang la chua biet.
+                            currentSafeZone = "Chưa xác định được khu vực (chỉ có tọa độ GPS)",
                             updatedAt = telemetryHelper.fixTimeMillis(loc)
                         )
                     } else null
@@ -1761,23 +1759,6 @@ class VesperaViewModel(
         val pairing = _uiState.value.activePairing ?: return
         val child = _uiState.value.userProfile ?: return
 
-        if (_uiState.value.isGuestDemoMode) {
-            val newReq = ExtraTimeRequest(
-                id = "demo_extra_${System.currentTimeMillis()}",
-                pairingId = pairing.id,
-                childId = child.id,
-                childName = child.displayName,
-                minutesRequested = minutes,
-                reason = reason.ifEmpty { "Làm bài tập thêm" },
-                status = RequestStatus.PENDING,
-                createdAt = System.currentTimeMillis()
-            )
-            _uiState.value = _uiState.value.copy(
-                extraTimeRequests = listOf(newReq) + _uiState.value.extraTimeRequests,
-                successMessage = "Demo: Đã gửi yêu cầu xin thêm $minutes phút đến phụ huynh!"
-            )
-            return
-        }
 
         viewModelScope.launch {
             try {
@@ -1802,22 +1783,6 @@ class VesperaViewModel(
     fun respondToExtraTime(requestId: String, approved: Boolean, minutesToAdd: Int) {
         val pairing = _uiState.value.activePairing ?: return
 
-        if (_uiState.value.isGuestDemoMode) {
-            val updatedReqs = _uiState.value.extraTimeRequests.map {
-                if (it.id == requestId) it.copy(status = if (approved) RequestStatus.APPROVED else RequestStatus.REJECTED) else it
-            }
-            val currentSched = _uiState.value.usageSchedule
-            val updatedSched = if (approved && currentSched != null) {
-                currentSched.copy(dailyTargetMinutes = currentSched.dailyTargetMinutes + minutesToAdd)
-            } else currentSched
-
-            _uiState.value = _uiState.value.copy(
-                extraTimeRequests = updatedReqs,
-                usageSchedule = updatedSched,
-                successMessage = if (approved) "Demo: Đã duyệt cộng +$minutesToAdd phút!" else "Demo: Đã từ chối yêu cầu."
-            )
-            return
-        }
 
         viewModelScope.launch {
             try {
@@ -1843,28 +1808,6 @@ class VesperaViewModel(
         val pairing = _uiState.value.activePairing ?: return
         val child = _uiState.value.userProfile ?: return
 
-        if (_uiState.value.isGuestDemoMode) {
-            val newReq = PrivacyRequest(
-                id = "demo_privacy_${System.currentTimeMillis()}",
-                pairingId = pairing.id,
-                childId = child.id,
-                childName = child.displayName,
-                startDate = startDate,
-                endDate = endDate,
-                startHour = startHour,
-                startMinute = startMinute,
-                endHour = endHour,
-                endMinute = endMinute,
-                reason = reason.ifEmpty { "Học nhóm riêng tư" },
-                status = RequestStatus.PENDING,
-                createdAt = System.currentTimeMillis()
-            )
-            _uiState.value = _uiState.value.copy(
-                privacyRequests = listOf(newReq) + _uiState.value.privacyRequests,
-                successMessage = "Đã gửi yêu cầu khung giờ riêng tư ($startHour:00 - $endHour:00 ngày $startDate)!"
-            )
-            return
-        }
 
         viewModelScope.launch {
             try {
@@ -1894,20 +1837,6 @@ class VesperaViewModel(
     fun respondToPrivacyRequest(requestId: String, childId: String, approved: Boolean) {
         val pairing = _uiState.value.activePairing ?: return
 
-        if (_uiState.value.isGuestDemoMode) {
-            val updatedReqs = _uiState.value.privacyRequests.map {
-                if (it.id == requestId) it.copy(status = if (approved) RequestStatus.APPROVED else RequestStatus.REJECTED) else it
-            }
-            val currentLoc = _uiState.value.partnerLocation
-            val updatedLoc = if (approved && currentLoc != null) currentLoc.copy(isPrivacyActive = true) else currentLoc
-
-            _uiState.value = _uiState.value.copy(
-                privacyRequests = updatedReqs,
-                partnerLocation = updatedLoc,
-                successMessage = if (approved) "Demo: Đã duyệt khung giờ riêng tư 🛡️" else "Demo: Đã từ chối riêng tư."
-            )
-            return
-        }
 
         viewModelScope.launch {
             try {
@@ -1923,18 +1852,6 @@ class VesperaViewModel(
 
     fun setSelectedEmotion(emotion: EmotionTag?) {
         _uiState.value = _uiState.value.copy(selectedEmotion = emotion)
-        updateSmartAdvice(emotion)
-    }
-
-    private fun updateSmartAdvice(emotion: EmotionTag?) {
-        val advice = when (emotion) {
-            EmotionTag.STUDY_STRESS -> "🤖 Cố vấn Vespera: Học sinh đang chịu áp lực học tập 📚. Lời khuyên: Phụ huynh nên gửi tin nhắn động viên và nhắc con nghỉ mắt 15 phút."
-            EmotionTag.NEED_SUPPORT -> "🆘 Cảnh báo Vespera: Học sinh đang cần hỗ trợ khẩn cấp! Hãy gọi điện hoặc liên hệ ngay với con."
-            EmotionTag.HAPPY -> "🌟 Vui vẻ: Tâm trạng con đang rất tích cực! Duy trì sự khích lệ và khen ngợi con nhé."
-            EmotionTag.NORMAL -> "💡 Cố vấn Vespera: Buổi chiều nay tiến độ học tập ổn định. Cân nhắc dành 30 phút buổi tối cho hoạt động thể thao gia đình."
-            null -> _uiState.value.smartAdvice
-        }
-        _uiState.value = _uiState.value.copy(smartAdvice = advice)
     }
 
     fun sendMessage(text: String, mediaUrl: String? = null, mediaType: String? = null) {
@@ -1944,26 +1861,6 @@ class VesperaViewModel(
 
         if (text.isBlank() && emotion == null && mediaUrl == null) return
 
-        if (_uiState.value.isGuestDemoMode) {
-            val newMsg = FamilyMessage(
-                id = "demo_msg_${System.currentTimeMillis()}",
-                pairingId = pairing.id,
-                senderId = profile.id,
-                senderName = profile.displayName,
-                senderRole = profile.role,
-                text = text.trim(),
-                emotion = emotion?.name,
-                mediaUrl = mediaUrl,
-                mediaType = mediaType,
-                isStarred = false,
-                createdAt = System.currentTimeMillis()
-            )
-            _uiState.value = _uiState.value.copy(
-                messages = _uiState.value.messages + newMsg,
-                selectedEmotion = null
-            )
-            return
-        }
 
         viewModelScope.launch {
             try {
@@ -1990,14 +1887,6 @@ class VesperaViewModel(
     fun toggleMessageStar(messageId: String, isStarred: Boolean) {
         val pairing = _uiState.value.activePairing ?: return
 
-        if (_uiState.value.isGuestDemoMode) {
-            _uiState.value = _uiState.value.copy(
-                messages = _uiState.value.messages.map {
-                    if (it.id == messageId) it.copy(isStarred = isStarred) else it
-                }
-            )
-            return
-        }
 
         viewModelScope.launch {
             try {
@@ -2009,10 +1898,6 @@ class VesperaViewModel(
     }
 
     fun signOut() {
-        if (_uiState.value.isGuestDemoMode) {
-            exitDemoMode()
-            return
-        }
         auth.signOut()
     }
 
@@ -2127,8 +2012,21 @@ class VesperaViewModel(
 
     fun connectMeshPeer(endpointId: String) {
         val name = _uiState.value.userProfile?.displayName.orEmpty().ifEmpty { "Thiết bị Gia Đình Việt" }
-        smartSosDispatcher?.meshManager?.requestConnection(endpointId, name)
-        _uiState.value = _uiState.value.copy(successMessage = "Đang gửi yêu cầu kết nối Mesh...")
+        val dispatcher = smartSosDispatcher
+        if (dispatcher == null) {
+            _uiState.value = _uiState.value.copy(
+                errorMessage = "Chưa gửi được yêu cầu kết nối: bộ phận SOS/mesh chưa khởi động " +
+                    "(mở app trên máy và cấp quyền Vị trí + thiết bị gần đó trước)."
+            )
+            return
+        }
+        dispatcher.meshManager.requestConnection(endpointId, name)
+        // requestConnection chi DAY yeu cau vao Wi-Fi P2P, khong phai bang chung
+        // ben kia da noi — chu do la `connectedPeers` (listener that).
+        _uiState.value = _uiState.value.copy(
+            successMessage = "Đã gửi yêu cầu kết nối Wi-Fi P2P. Máy kia sẽ vào danh sách " +
+                "\"Đã kết nối\" chỉ khi thực sự nối được."
+        )
     }
 
     fun sendMeshMessage(endpointId: String, text: String) {
@@ -2142,21 +2040,48 @@ class VesperaViewModel(
     }
 
     fun saveEmergencyPhoneNumber(phone: String) {
-        smartSosDispatcher?.smsManager?.saveEmergencyPhoneNumber(phone)
+        val smsManager = smartSosDispatcher?.smsManager
+        val clean = phone.trim()
+        if (smsManager == null) {
+            _uiState.value = _uiState.value.copy(
+                errorMessage = "Không lưu được số khẩn cấp: bộ phận SMS chưa khởi động, " +
+                    "mở app lại và cấp quyền Điện thoại/SMS rồi thử lại."
+            )
+            return
+        }
+        smsManager.saveEmergencyPhoneNumber(clean)
+        // `apply()` ghi khong dong bo nhung SharedPreferences phuc vu gia tri
+        // tu bo nho ngay, nen doc lai la cach duyet nhat de bao "đã lưu" co
+        // can cu.
+        val savedBack = smsManager.getEmergencyPhoneNumber()
         _uiState.value = _uiState.value.copy(
-            emergencyPhoneNumber = phone.trim(),
-            successMessage = "Đã lưu số điện thoại người thân khẩn cấp: $phone"
+            emergencyPhoneNumber = savedBack,
+            successMessage = if (savedBack == clean) "Đã lưu số điện thoại người thân khẩn cấp: $clean" else null,
+            errorMessage = if (savedBack == clean) null else
+                "Không lưu được số $clean: máy đọc lại ra \"$savedBack\" (trống hoặc khác)."
         )
     }
 
     fun saveSosSchedule(isRestricted: Boolean, startHour: Int, endHour: Int) {
-        smartSosDispatcher?.setSosAllowedSchedule(isRestricted, startHour, endHour)
+        val dispatcher = smartSosDispatcher
+        if (dispatcher == null) {
+            _uiState.value = _uiState.value.copy(
+                errorMessage = "Không lưu được khung giờ SOS: bộ phận SOS chưa khởi động."
+            )
+            return
+        }
+        dispatcher.setSosAllowedSchedule(isRestricted, startHour, endHour)
+        val (savedRestricted, savedStart, savedEnd) = dispatcher.getSosScheduleConfig()
+        val ok = savedRestricted == isRestricted && savedStart == startHour && savedEnd == endHour
         _uiState.value = _uiState.value.copy(
-            isSosRestricted = isRestricted,
-            sosStartHour = startHour,
-            sosEndHour = endHour,
-            successMessage = if (isRestricted) "Đã lưu khung giờ cho phép SOS: $startHour:00 - $endHour:00"
-            else "Đã mở quyền sử dụng SOS 24/7!"
+            isSosRestricted = savedRestricted,
+            sosStartHour = savedStart,
+            sosEndHour = savedEnd,
+            successMessage = if (!ok) null else if (savedRestricted)
+                "Đã lưu khung giờ cho phép SOS: $savedStart:00 - $savedEnd:00"
+            else "Đã lưu: SOS dùng được 24/7.",
+            errorMessage = if (ok) null else
+                "Máy chưa ghi được khung giờ SOS (đọc lại ra $savedStart:00 - $savedEnd:00)."
         )
     }
 

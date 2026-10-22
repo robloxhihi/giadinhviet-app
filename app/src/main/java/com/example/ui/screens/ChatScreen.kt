@@ -187,12 +187,15 @@ fun ChatScreen(
         }
     }
 
+    // Mau nhan nhanh. Bo hai mau cu "Con đã về đến nhà an toàn!" va "Con đang
+    // ở trường học": chung kheng mot vi tri ma app KHONG kiem chung duoc, nen
+    // bam vao la gui di mot cau co the sai. Cac mau con lai chi noi ve y dinh
+    // cua nguoi nhan.
     val quickPresets = listOf(
-        "Con đã về đến nhà an toàn!",
         "Bố mẹ sắp qua đón con nhé",
         "Con xin phép học bài thêm 30 phút",
         "Nhớ uống nước và nghỉ ngơi nhé ❤️",
-        "Con đang ở trường học"
+        "Con đang học, lát nữa con nhắn lại nhé"
     )
 
     Column(
@@ -224,9 +227,10 @@ fun ChatScreen(
                 // (may co mang), chu chua bao gio xac nhan Firestore tra ve du
                 // lieu — vay nen cu ghi "Cloud Firestore" la noi ngan ho dang
                 // dong bo trong luc khong co gi duoc doc ca.
-                val statusColor = if (uiState.isOnline && canCall) NeonEmerald else NeonAmber
+                val statusColor = if (uiState.isOnline == true && canCall) NeonEmerald else NeonAmber
                 val statusText = when {
-                    !uiState.isOnline -> "Ngoại tuyến · tin nhắn chỉ gửi được khi có mạng"
+                    uiState.isOnline == null -> "Chưa kiểm tra được kết nối mạng"
+                    uiState.isOnline == false -> "Ngoại tuyến · tin nhắn chỉ gửi được khi có mạng"
                     !canCall -> "Trực tuyến · chưa ghép nối thiết bị nào"
                     else -> "Trực tuyến · đã ghép nối với $partnerName"
                 }
@@ -351,7 +355,7 @@ fun ChatScreen(
         }
 
         // BĂNG THÔNG BÁO MẠNG & KÊNH NGOẠI TUYẾN THÔNG MINH
-        if (!uiState.isOnline) {
+        if (uiState.isOnline == false) {
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -371,7 +375,14 @@ fun ChatScreen(
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "MẤT MẠNG INTERNET • ĐÃ TỰ ĐỘNG BẬT QUÉT MESH P2P (< 50m)",
+                            // "đã tự động bật quét" + "bán kính 50m" la hai tuyen
+                            // bo khong co do luong: Wi-Fi P2P khong tra ve khoang
+                            // cach, con phe quat chi bat khi `isOfflineScanning`
+                            // that su dang chay.
+                            text = if (uiState.isOfflineScanning)
+                                "MẤT MẠNG INTERNET • ĐANG QUÉT MESH Wi-Fi P2P"
+                            else
+                                "MẤT MẠNG INTERNET • CHƯA QUÉT ĐƯỢC MESH Wi-Fi P2P",
                             style = MaterialTheme.typography.labelSmall,
                             color = NeonAmber,
                             fontWeight = FontWeight.Bold
@@ -382,7 +393,8 @@ fun ChatScreen(
 
                     if (uiState.discoveredMeshPeers.isNotEmpty()) {
                         Text(
-                            text = "Tìm thấy ${uiState.discoveredMeshPeers.size} thiết bị trong bán kính 50m:",
+                            text = "Tìm thấy ${uiState.discoveredMeshPeers.size} thiết bị Wi-Fi P2P ở gần " +
+                                "(app không đo được khoảng cách):",
                             style = MaterialTheme.typography.bodySmall,
                             color = TextPrimary
                         )

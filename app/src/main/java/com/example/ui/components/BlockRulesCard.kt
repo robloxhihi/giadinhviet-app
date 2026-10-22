@@ -68,6 +68,10 @@ import com.example.data.model.RequestStatus
 import com.example.data.model.RuleAuditEntry
 import com.example.data.model.UsageSchedule
 import com.example.data.model.UserRole
+import com.example.data.model.parseWindowCode
+import com.example.data.model.windowCode
+import com.example.data.model.windowCodeFrom
+import com.example.data.model.windowDisplay
 import com.example.service.blocker.BlockPolicy
 import com.example.service.blocker.ConsentPolicy
 import com.example.ui.theme.Premium
@@ -112,7 +116,9 @@ fun BlockRulesCard(
         blockedPackages: List<String>,
         reminderOnly: Boolean,
         allowedApps: List<String>,
-        dailyTargetMinutes: Int
+        dailyTargetMinutes: Int,
+        /** `"HH:mm-HH:mm"` = dat khung gio; `""` = khong chan theo gio. */
+        windowCode: String
     ) -> Unit,
     onApprove: () -> Unit = {},
     onReject: () -> Unit = {},
@@ -135,9 +141,17 @@ fun BlockRulesCard(
             else schedule?.isReminderOnly ?: true,
             allowed = (if (pendingOpen) schedule?.pendingAllowedApps else schedule?.allowedApps)
                 ?.toSet() ?: emptySet(),
+            // 0 = CHUA dat han muc, khong phai "120 phut". Slider o duoi
+            // duoc an khi gia tri nay <= 0 de khong crash va khong in so bịa.
             minutes = if (pendingOpen)
-                schedule?.pendingDailyTargetMinutes ?: (schedule?.dailyTargetMinutes ?: 120)
-            else schedule?.dailyTargetMinutes ?: 120
+                schedule?.pendingDailyTargetMinutes ?: (schedule?.dailyTargetMinutes ?: 0)
+            else schedule?.dailyTargetMinutes ?: 0,
+            // "" = khong co khung gio nao (may khong chan theo gio). Day la
+            // gia tri NGUYEN VEN cua phieu: neu phieu dang mo noi "xoa khung
+            // gio" thi ban nhap cung phai trong, khong duoc hien khung gio cu.
+            window = if (pendingOpen)
+                schedule?.pendingAllowedWindow.orEmpty()
+            else schedule?.windowCode().orEmpty()
         )
     }
     // Bien dung hoa ten cu cho de doc cac phan ben duoi.
@@ -149,6 +163,17 @@ fun BlockRulesCard(
     var reminderOnly by remember { mutableStateOf(serverReminderOnly) }
     var allowedSelected by remember { mutableStateOf(serverDraft.allowed) }
     var targetMinutes by remember { mutableStateOf(serverDraft.minutes) }
+    /**
+     * Hai moc cua khung gio duoc dung máy, tính bang so phut tu 00:00.
+     * `null` = chua chon. CHUA CO mac dinh nao o day: 07:00–21:30 tung la gia
+     * tri cu cua `UsageSchedule` nen moi gia dinh chua chon gi cung bi hien
+     * nhu ho da tu dat. Gio thiet ke la phai chon ca hai moc thi lop chan
+     * theo gio moi ton tai.
+     */
+    var windowStart by remember { mutableStateOf(parseWindowCode(serverDraft.window)?.first) }
+    var windowEnd by remember { mutableStateOf(parseWindowCode(serverDraft.window)?.second) }
+    val draftWindowCode = if (windowStart != null && windowEnd != null)
+        windowCodeFrom(windowStart ?: 0, windowEnd ?: 0) else ""
     var dirty by remember { mutableStateOf(false) }
 
     /**
@@ -161,9 +186,9 @@ fun BlockRulesCard(
      * Ban vua gui. "Da luu" chi duoc xac nhan khi may chủ thực sự trả về đúng
      * ban nay — neu không, o tick mat bay giay lat (nhin cu lieu cu) trong luc
      * snapshot mới chưa kip ve, va nguoi dung lai tuong bo chan bi hong.
-     * So sanh CA BON thu (app chan / che do / app mien tran / han muc), vi truoc
-     * day chi so sanh app + che do nen doi han muc phut that bai ma van bam
-     * "✓ Đã lưu".
+     * So sanh CA NAM thu (app chan / che do / app mien tran / han muc / khung
+     * gio), vi truoc day chi so sanh app + che do nen doi han muc phut that
+     * bai ma van bam "✓ Đã lưu".
      */
     var lastSubmitted by remember { mutableStateOf<RuleDraft?>(null) }
 
@@ -203,6 +228,8 @@ fun BlockRulesCard(
             reminderOnly = serverDraft.reminderOnly
             allowedSelected = serverDraft.allowed
             targetMinutes = serverDraft.minutes
+            windowStart = parseWindowCode(serverDraft.window)?.first
+            windowEnd = parseWindowCode(serverDraft.window)?.second
         }
     }
 
@@ -515,15 +542,15 @@ fun BlockRulesCard(
             // Day la cai khien nguoi dung "tich 3 app ma may chan het moi thu":
             // BlockPolicy khong chi chan danh sach da tick, ma ngoai khung gio
             // cho phep va khi vuot han muc ngay thi chan TAT CA app khong duoc
-            // mien tran. Truoc day `allowedApps` khong co lay nao trong giao
-            // dien (va bi updateBlockRules xoa im lang), nen mien tran = rong =
-            // may con bi khoa hoan toan ngoai gio ma me khong hieu vi sao.
+            // mien tran. Doan van nay phai mo ta BAN NHAP (windowCode cua card),
+            // khong mo ta luat dang chay — neu khong nguoi dung vua dat xong
+            // khung gio van thay chu "may KHÔNG chặn theo giờ".
             Spacer(Modifier.height(14.dp))
-            val s = schedule
-            val windowText = "%02d:%02d–%02d:%02d".format(
-                s?.allowedStartHour ?: 7, s?.allowedStartMinute ?: 0,
-                s?.allowedEndHour ?: 21, s?.allowedEndMinute ?: 30
-            )
+            val hasWindow = draftWindowCode.isNotBlank()
+            val windowText = windowDisplay(draftWindowCode) ?: "chưa đặt"
+            val minutesNote = if (targetMinutes > 0)
+                "Chỉ chặn khi vượt $targetMinutes phút/ngày (app ngoài danh sách “luôn được dùng”)."
+            else "Và chưa đặt hạn mức phút, nên lớp chặn này đang không có tác dụng."
             Text(
                 "Hai lớp chặn hoạt động độc lập",
                 style = MaterialTheme.typography.titleSmall,
@@ -532,12 +559,44 @@ fun BlockRulesCard(
             Spacer(Modifier.height(4.dp))
             Text(
                 text = "1) App đã tích ở trên: bị chặn mọi lúc.\n" +
-                    "2) Ngoài khung giờ $windowText hoặc khi vượt $targetMinutes phút/ngày: " +
-                    "máy chặn TẤT CẢ app chưa được cho phép. Danh sách “luôn được dùng” đang " +
-                    if (allowedSelected.isEmpty()) "trống — nghĩa là ngoài giờ, con gần như không mở được app nào."
-                    else "có ${allowedSelected.size} app — chỉ những app đó chạy được ngoài giờ.",
+                    "2) " + when {
+                        hasWindow ->
+                            "Ngoài khung giờ $windowText" +
+                                (if (targetMinutes > 0) " hoặc khi vượt $targetMinutes phút/ngày" else "") +
+                                ": máy chặn TẤT CẢ app chưa được cho phép. Danh sách “luôn được dùng” đang " +
+                                if (allowedSelected.isEmpty())
+                                    "trống — nghĩa là ngoài giờ, con gần như không mở được app nào."
+                                else
+                                    "có ${allowedSelected.size} app — chỉ những app đó chạy được ngoài giờ."
+
+                        windowStart != null || windowEnd != null ->
+                            "Khung giờ mới chọn được " +
+                                (if (windowStart != null) "mốc bắt đầu" else "mốc kết thúc") +
+                                " — chưa đủ hai mốc nên máy KHÔNG chặn theo giờ. " + minutesNote
+
+                        else -> "Khung giờ cho phép: chưa đặt, nên máy KHÔNG chặn theo giờ. " + minutesNote
+                    },
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
+            Spacer(Modifier.height(10.dp))
+            WindowEditor(
+                startMinutes = windowStart,
+                endMinutes = windowEnd,
+                onStartChange = {
+                    windowStart = it
+                    dirty = true
+                },
+                onEndChange = {
+                    windowEnd = it
+                    dirty = true
+                },
+                onClear = {
+                    windowStart = null
+                    windowEnd = null
+                    dirty = true
+                }
             )
 
             Spacer(Modifier.height(8.dp))
@@ -584,20 +643,33 @@ fun BlockRulesCard(
             // ── Han muc phut/ngay (nam o day vi chi gui duoc khi DA ghep noi) ──
             Spacer(Modifier.height(10.dp))
             Text(
-                text = "Hạn mức mỗi ngày: $targetMinutes phút",
+                text = if (targetMinutes > 0) "Hạn mức mỗi ngày: $targetMinutes phút"
+                else "Hạn mức mỗi ngày: chưa đặt — máy không chặn theo số phút",
                 style = MaterialTheme.typography.bodyMedium,
                 fontWeight = FontWeight.Bold
             )
-            Slider(
-                value = targetMinutes.toFloat(),
-                onValueChange = {
-                    targetMinutes = it.toInt()
+            // Slider cua Material3 NEM loi neu `value` nam ngoai `valueRange`,
+            // ma han muc gio day co the bang 0 (chua dat) → an nut moi bat len
+            // 30 phut la min cua thanh keo. khong co con so nao xuat hien khi
+            // chua ai chon.
+            if (targetMinutes <= 0) {
+                Spacer(Modifier.height(6.dp))
+                OutlinedButton(onClick = {
+                    targetMinutes = 30
                     dirty = true
-                },
-                valueRange = 30f..360f,
-                steps = 21,
-                modifier = Modifier.fillMaxWidth()
-            )
+                }) { Text("Đặt hạn mức phút/ngày") }
+            } else {
+                Slider(
+                    value = targetMinutes.toFloat().coerceIn(30f, 360f),
+                    onValueChange = {
+                        targetMinutes = it.toInt()
+                        dirty = true
+                    },
+                    valueRange = 30f..360f,
+                    steps = 21,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
             Text(
                 "30–360 phút. Kéo thanh này KHÔNG gửi gì cả — phải bấm nút bên dưới, " +
                     "và thay đổi chỉ chạy khi bên kia đồng ý.",
@@ -616,19 +688,24 @@ fun BlockRulesCard(
                     savedBlockedCount = selected.size,
                     countSelected = selected.size,
                     targetMinutes = targetMinutes,
+                    windowSummary = if (hasWindow) "khung giờ $windowText"
+                    else "không chặn theo giờ",
                     hasCounterparty = hasCounterparty,
                     votePending = pendingOpen,
                     voterLabel = ConsentPolicy.label(voteOwnerRole(schedule, myRole, pendingOpen)),
                     errorText = errorText,
                     onSave = {
                         // KHONG tat dirty o day: that bai duoc thi phai giu ban nhap.
-                        lastSubmitted = RuleDraft(selected, reminderOnly, allowedSelected, targetMinutes)
+                        lastSubmitted = RuleDraft(
+                            selected, reminderOnly, allowedSelected, targetMinutes, draftWindowCode
+                        )
                         saveInFlight = true
                         onUpdate(
                             selected.toList(),
                             reminderOnly,
                             allowedSelected.toList(),
-                            targetMinutes
+                            targetMinutes,
+                            draftWindowCode
                         )
                     },
                     onDiscard = {
@@ -636,6 +713,8 @@ fun BlockRulesCard(
                         reminderOnly = serverDraft.reminderOnly
                         allowedSelected = serverDraft.allowed
                         targetMinutes = serverDraft.minutes
+                        windowStart = parseWindowCode(serverDraft.window)?.first
+                        windowEnd = parseWindowCode(serverDraft.window)?.second
                         dirty = false
                         saveInFlight = false
                         lastSubmitted = null
@@ -693,17 +772,19 @@ fun BlockRulesCard(
 }
 
 /**
- * Toan bo noi quy ma the nay soan thao, gom CA BON thu: app bi chan, che do
- * chan/nhac, app mien tran va han muc phut. Dung lam ban in cua `lastSubmitted`
- * de so voi snapshot tro ve tu may chủ — chi khi khop het bon thu moi dam bao
- * "✓ Đã lưu". So sanh theo gia tri (data class) nen `Set<String>` doi chieu
- * duoc du cho thu tu khong giong nhau.
+ * Toan bo noi quy ma the nay soan thao, gom CA NAM thu: app bi chan, che do
+ * chan/nhac, app mien tran, han muc phut va khung gio duoc dung may. Dung lam
+ * ban in cua `lastSubmitted` de so voi snapshot tro ve tu may chủ — chi khi
+ * khop het nam thu moi dam bao "✓ Đã lưu". So sanh theo gia tri (data class)
+ * nen `Set<String>` doi chieu duoc du cho thu tu khong giong nhau.
  */
 private data class RuleDraft(
     val blocked: Set<String>,
     val reminderOnly: Boolean,
     val allowed: Set<String>,
-    val minutes: Int
+    val minutes: Int,
+    /** `"HH:mm-HH:mm"` hoac rong khi chua dat khung gio. */
+    val window: String
 )
 
 /** Ai la nguoi can tra loi phieu dang mo (hoac se can, neu minh goi de xuat). */
@@ -733,6 +814,8 @@ private fun SaveRow(
     countSelected: Int,
     /** Han muc phut dang soan — de banner "Da luu" noi du ca chinh sach ngay. */
     targetMinutes: Int,
+    /** Tom tat lop chan theo gio cua ban vua luu, de banner khong noi tran. */
+    windowSummary: String,
     hasCounterparty: Boolean,
     votePending: Boolean,
     voterLabel: String,
@@ -764,20 +847,24 @@ private fun SaveRow(
             Icon(Icons.Default.Save, null, Modifier.size(18.dp))
             Spacer(Modifier.width(8.dp))
             Text(
-                text = when {
-                    saveState == BlockRulesSaveState.Saving -> "Đang gửi…"
-                    hasCounterparty && countSelected == 0 ->
-                        "Gửi đề xuất • không chặn app nào • chờ $voterLabel duyệt"
-                    // Nguoi dung phai thay CHE DO ngay tren nut bam: cung
-                    // "chan 5 app" ma "chi nhac" thi may khong chan gi ca.
-                    hasCounterparty && savedIsReminderOnly && countSelected > 0 ->
-                        "Gửi đề xuất • nhắc $countSelected app (chưa chặn thật) • chờ $voterLabel duyệt"
-                    hasCounterparty ->
-                        "Gửi đề xuất • chặn thật $countSelected app • chờ $voterLabel duyệt"
-                    savedIsReminderOnly && countSelected > 0 ->
-                        "Lưu • chỉ nhắc $countSelected app, chưa chặn"
-                    countSelected == 0 -> "Lưu luật chặn (không chặn app nào)"
-                    else -> "Lưu luật chặn • chặn thật $countSelected app"
+                text = if (saveState == BlockRulesSaveState.Saving) {
+                    "Đang gửi…"
+                } else {
+                    // Chu tren nut phai noi DUNG bat dung, va phai nom ca lop
+                    // chan theo gio: cung "3 app" ma "chi nhac" hoac "ngoai
+                    // gio" thi may lam hai viec hoan toan khac nhau.
+                    val mode = when {
+                        countSelected == 0 && savedIsReminderOnly -> "không chặn app nào, chỉ nhắc"
+                        countSelected == 0 -> "không chặn app nào"
+                        savedIsReminderOnly -> "nhắc $countSelected app (chưa chặn thật)"
+                        else -> "chặn thật $countSelected app"
+                    }
+                    buildString {
+                        append(if (hasCounterparty) "Gửi đề xuất" else "Lưu nội quy")
+                        append(" • ").append(mode)
+                        append(" • ").append(windowSummary)
+                        if (hasCounterparty) append(" • chờ $voterLabel duyệt")
+                    }
                 },
                 fontWeight = FontWeight.Bold
             )
@@ -806,18 +893,18 @@ private fun SaveRow(
                 // xong thay app van chay binh thuong va tuong bo chan bi hong.
                 savedIsReminderOnly -> StatusBanner(
                     text = "\u2713 Đã lưu lúc ${formatTime(savedAtMillis)} — máy đang ở chế độ nhắc nhở, " +
-                        "chưa chặn app nào (hạn mức $targetMinutes phút/ngày). Bật “Chặn thật” ở trên " +
+                        "chưa chặn app nào (hạn mức $targetMinutes phút/ngày, $windowSummary). Bật “Chặn thật” ở trên " +
                         "nếu muốn đẩy về Home.",
                     tone = Tone.Info
                 )
                 savedBlockedCount == 0 -> StatusBanner(
                     text = "\u2713 Đã lưu lúc ${formatTime(savedAtMillis)} — hiện không có app nào bị chặn, " +
-                        "hạn mức $targetMinutes phút/ngày.",
+                        "hạn mức $targetMinutes phút/ngày, $windowSummary.",
                     tone = Tone.Ok
                 )
                 else -> StatusBanner(
                     text = "\u2713 Đã lưu lúc ${formatTime(savedAtMillis)} — chặn thật $savedBlockedCount app, " +
-                        "hạn mức $targetMinutes phút/ngày, áp dụng khi Trợ năng đang bật.",
+                        "hạn mức $targetMinutes phút/ngày, $windowSummary, áp dụng khi Trợ năng đang bật.",
                     tone = Tone.Ok
                 )
             }
@@ -835,6 +922,155 @@ private fun formatTime(millis: Long): String =
     if (millis <= 0L) "" else java.text.SimpleDateFormat("HH:mm", java.util.Locale.US).format(Date(millis))
 
 private enum class Tone { Ok, Warn, Info }
+
+/**
+ * O chon khung gio duoc dung máy — lop chan thu hai trong [BlockPolicy].
+ *
+ * Ly do dung chip thay vi dialog TimePicker: tab Cài đặt là một Column có
+ * verticalScroll, dialog de loi cham va mat vi tri cuon; do chinh xac 15 phut
+ * la du cho mot noi quy giac, va 24 + 4 o doc gon hon dial.
+ *
+ * KHONG co gia tri mac dinh. Ca hai moc deu phai do nguoi dung chon; neu chi
+ * chon mot ben thi `windowCode` cua ban nhap van rong, tuc la khong co luat
+ * ngoai gio — dung cai ma [BlockPolicy] lam (no bo qua khi field null). Truoc
+ * day giao dien khong co lay nao cho khung gio, nen 4 truong
+ * `allowedStartHour/...` trong Firestore mai mai null: gia dinh tuong da khoa
+ * ngoai gio con may thi khong chan gi theo gio ca.
+ */
+@Composable
+private fun WindowEditor(
+    startMinutes: Int?,
+    endMinutes: Int?,
+    onStartChange: (Int?) -> Unit,
+    onEndChange: (Int?) -> Unit,
+    onClear: () -> Unit
+) {
+    val both = startMinutes != null && endMinutes != null
+    Column(Modifier.fillMaxWidth()) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text("Khung giờ được dùng máy: ", style = MaterialTheme.typography.bodyMedium)
+            Text(
+                text = when {
+                    both -> "%02d:%02d → %02d:%02d".format(
+                        (startMinutes ?: 0) / 60 % 24, (startMinutes ?: 0) % 60,
+                        (endMinutes ?: 0) / 60 % 24, (endMinutes ?: 0) % 60
+                    )
+
+                    startMinutes != null -> "thiếu mốc kết thúc"
+                    endMinutes != null -> "thiếu mốc bắt đầu"
+                    else -> "chưa đặt"
+                },
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Bold,
+                color = if (both) Premium.emerald else Premium.amber
+            )
+            Spacer(Modifier.weight(1f))
+            if (startMinutes != null || endMinutes != null) {
+                TextButton(onClick = onClear) {
+                    Text("Xoá", style = MaterialTheme.typography.labelMedium)
+                }
+            }
+        }
+
+        TimeEndpointRow(
+            label = "Bắt đầu",
+            minutes = startMinutes,
+            onSelect = { onStartChange(it) }
+        )
+        Spacer(Modifier.height(6.dp))
+        TimeEndpointRow(
+            label = "Kết thúc",
+            minutes = endMinutes,
+            onSelect = { onEndChange(it) }
+        )
+        Spacer(Modifier.height(6.dp))
+        Text(
+            "Khung qua nửa đêm (ví dụ 21:00 → 06:00) được hiểu là từ tối hôm " +
+                "trước đến sáng hôm sau. Chọn ở đây mới là bản nháp trên máy này — " +
+                "chưa đổi nội quy nào cho tới khi bấm nút gửi bên dưới.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+}
+
+/**
+ * Mot moc cua khung gio: hang gio (0–23) va hang phut (le 15). Bam o nao thi
+ * giu nguyen nua kia cua gia tri dang co, nen "07" + ":30" tao ra 07:30 chu
+ * khong bi reset ve 00:00.
+ */
+@Composable
+private fun TimeEndpointRow(
+    label: String,
+    minutes: Int?,
+    onSelect: (Int) -> Unit
+) {
+    val hour = minutes?.let { it / 60 % 24 }
+    val minute = minutes?.let { it % 60 }
+    Column(Modifier.fillMaxWidth()) {
+        Text(
+            text = if (minutes == null) "$label: chưa chọn"
+            else "$label: %02d:%02d".format(hour ?: 0, minute ?: 0),
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.Bold,
+            color = if (minutes == null) MaterialTheme.colorScheme.onSurfaceVariant
+            else MaterialTheme.colorScheme.primary
+        )
+        Spacer(Modifier.height(3.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(5.dp)
+        ) {
+            (0..23).forEach { h ->
+                MiniChip(text = "%02d".format(h), selected = hour == h) {
+                    onSelect(h * 60 + (minute ?: 0))
+                }
+            }
+        }
+        Spacer(Modifier.height(3.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(5.dp)
+        ) {
+            listOf(0, 15, 30, 45).forEach { m ->
+                MiniChip(text = ":%02d".format(m), selected = minute == m) {
+                    onSelect((hour ?: 0) * 60 + m)
+                }
+            }
+        }
+    }
+}
+
+/** O chon gio/phut. Nen KIN (opaqueSurface) — sakling alpha de chong nen hoa lan. */
+@Composable
+private fun MiniChip(text: String, selected: Boolean, onClick: () -> Unit) {
+    val shape = RoundedCornerShape(8.dp)
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .clip(shape)
+            .background(
+                if (selected) Premium.emerald.copy(alpha = 0.28f) else Premium.opaqueSurface
+            )
+            .border(
+                width = 1.dp,
+                color = if (selected) Premium.emerald else MaterialTheme.colorScheme.outline.copy(alpha = 0.45f),
+                shape = shape
+            )
+            .clickable(role = Role.Button, onClick = onClick)
+            .padding(horizontal = 8.dp, vertical = 5.dp)
+    ) {
+        Text(
+            text = text,
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+            color = if (selected) Premium.emerald else MaterialTheme.colorScheme.onSurface
+        )
+    }
+}
 
 /**
  * Tro nang tiep can da bat that chua. Service chi chay khi nguoi dung tu bat

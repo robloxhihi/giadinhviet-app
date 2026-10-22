@@ -147,9 +147,6 @@ class MainActivity : ComponentActivity() {
                         onSignUp = { username, pass ->
                             viewModel.signUpWithUsername(username, pass, selectedRoleForSignUp)
                         },
-                        onEnterDemo = {
-                            viewModel.enterGuestDemoMode(selectedRoleForSignUp)
-                        },
                         selectedRole = selectedRoleForSignUp,
                         onRoleSelected = { role ->
                             selectedRoleForSignUp = role

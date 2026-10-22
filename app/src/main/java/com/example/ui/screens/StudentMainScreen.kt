@@ -98,7 +98,9 @@ fun StudentMainScreen(
     val scrollState = rememberScrollState()
 
     val userProfile = uiState.userProfile
-    val studentCode = userProfile?.studentCode?.ifEmpty { "HS-CONNECT" } ?: "HS-CONNECT"
+    // "" = tai khoan chua duoc cap ma. Truoc day the hien "HS-CONNECT" thay vi
+    // trong, va hoc sinh mang cai ma gia do i nhau dang ky.
+    val studentCode = userProfile?.studentCode.orEmpty()
     val isPaired = uiState.activePairing != null && uiState.activePairing.status == PairingStatus.PAIRED
     val parentName = uiState.activePairing?.parentName?.ifEmpty { "Phụ huynh" } ?: "Phụ huynh"
     val myLoc = uiState.myLocation
@@ -131,13 +133,32 @@ fun StudentMainScreen(
                             .background(FacebookBlue),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text(text = "H", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 19.sp)
+                        // Chu dau cua ten that; "—" khi chua co ten. Truoc day
+                        // o nay hard-code "H" ("Học sinh") nen du ten la "Bin"
+                        // van thay mot chu H lac loi.
+                        Text(
+                            text = (userProfile?.displayName?.trim()?.firstOrNull()?.uppercaseChar()?.toString())
+                                ?: "—",
+                            color = Color.White,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 19.sp
+                        )
                     }
+                    // Cham mau = ket noi cua MAY NAY do duoc that (NetworkMonitor).
+                    // Xam = chua do duoc. Truoc day no luon xanh la, khong theo
+                    // bat cu trang thai nao.
+                    val online = uiState.isOnline
                     Box(
                         modifier = Modifier
                             .size(13.dp)
                             .clip(CircleShape)
-                            .background(NeonEmerald)
+                            .background(
+                                when (online) {
+                                    true -> NeonEmerald
+                                    false -> NeonRose
+                                    null -> TextMuted
+                                }
+                            )
                             .border(2.dp, MaterialTheme.colorScheme.surface, CircleShape)
                             .align(Alignment.BottomEnd)
                     )
@@ -151,7 +172,7 @@ fun StudentMainScreen(
                         fontWeight = FontWeight.Bold
                     )
                     Text(
-                        text = "Học sinh • $studentCode",
+                        text = "Học sinh • ${studentCode.ifEmpty { "chưa có mã" }}",
                         style = MaterialTheme.typography.labelSmall,
                         color = FacebookBlue
                     )
@@ -197,16 +218,18 @@ fun StudentMainScreen(
             Column {
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     Text("MÃ KẾT NỐI HỌC SINH", style = MaterialTheme.typography.labelMedium, color = FacebookBlue, fontWeight = FontWeight.Bold)
-                    Button(
-                        onClick = {
-                            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
-                            val clip = ClipData.newPlainText("Mã học sinh", studentCode)
-                            clipboard?.setPrimaryClip(clip)
-                            Toast.makeText(context, "Đã sao chép: $studentCode", Toast.LENGTH_SHORT).show()
-                        },
-                        colors = ButtonDefaults.buttonColors(containerColor = SpaceCardElevated, contentColor = FacebookBlue)
-                    ) {
-                        Text("Sao chép", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    if (studentCode.isNotEmpty()) {
+                        Button(
+                            onClick = {
+                                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+                                val clip = ClipData.newPlainText("Mã học sinh", studentCode)
+                                clipboard?.setPrimaryClip(clip)
+                                Toast.makeText(context, "Đã sao chép: $studentCode", Toast.LENGTH_SHORT).show()
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = SpaceCardElevated, contentColor = FacebookBlue)
+                        ) {
+                            Text("Sao chép", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        }
                     }
                 }
                 Box(
@@ -218,8 +241,27 @@ fun StudentMainScreen(
                         .padding(vertical = 14.dp),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text(text = studentCode, style = MaterialTheme.typography.headlineMedium, color = TextPrimary, fontWeight = FontWeight.Bold, letterSpacing = 3.sp)
+                    Text(
+                        text = studentCode.ifEmpty {
+                            "Chưa có mã — đăng xuất rồi đăng nhập lại để máy chủ cấp mã"
+                        },
+                        style = if (studentCode.isNotEmpty()) MaterialTheme.typography.headlineMedium
+                        else MaterialTheme.typography.bodyMedium,
+                        color = if (studentCode.isNotEmpty()) TextPrimary else TextMuted,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = if (studentCode.isNotEmpty()) 3.sp else 0.sp
+                    )
                 }
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = if (studentCode.isNotEmpty())
+                        "Đưa mã này cho phụ huynh nhập để hoàn tất ghép nối."
+                    else
+                        "Mã do máy chủ cấp khi tạo tài khoản học sinh. Chưa có mã nghĩa là " +
+                            "chưa đăng nhập được — chưa ghép nối bằng mã nào.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = TextMuted
+                )
             }
         }
 
@@ -272,13 +314,12 @@ fun StudentMainScreen(
             
             // Paired: Usage Card
             val sched = uiState.usageSchedule
-            val target = sched?.dailyTargetMinutes ?: 120
-            // Doc so phut THAT tu may nay (quyen Usage Access), khong dung con
-            // so 45 co dinh ghi trong tai lieu noi quy tu luc ghep noi.
-            val used = com.example.data.model.todayUsedMinutes(
-                uiState.detailedAppUsage,
-                sched?.usedMinutes ?: 0
-            )
+            // 0 = gia dinh CHUA dat han muc, khong phai "muc tieu 120 phut".
+            val target = sched?.dailyTargetMinutes ?: 0
+            // Doc so phut THAT tu may nay (quyen Usage Access). Khong bo sung
+            // `sched.usedMinutes`: truong do khong ai ghi lai sau khi tao tai
+            // lieu noi quy nen no in het con so cua ngay ghep noi.
+            val used = com.example.data.model.todayUsedMinutes(uiState.detailedAppUsage)
             val remaining = (target - used).coerceAtLeast(0)
             
             BentoCard(modifier = Modifier.fillMaxWidth()) {
@@ -288,8 +329,15 @@ fun StudentMainScreen(
                     BentoProgressBar(usedMinutes = used, targetMinutes = target)
                     Spacer(modifier = Modifier.height(10.dp))
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        Text("Còn lại: $remaining ph", color = TextPrimary, fontWeight = FontWeight.Bold)
-                        Text("Mục tiêu: $target ph", color = TextMuted)
+                        Text(
+                            text = if (target > 0) "Còn lại: $remaining ph" else "Chưa đặt mục tiêu",
+                            color = TextPrimary,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = if (target > 0) "Mục tiêu: $target ph" else "Mục tiêu: chưa đặt",
+                            color = TextMuted
+                        )
                     }
                     Spacer(modifier = Modifier.height(8.dp))
                     Button(onClick = onRequestExtraTime, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors(containerColor = SpaceCardElevated, contentColor = NeonEmerald)) {

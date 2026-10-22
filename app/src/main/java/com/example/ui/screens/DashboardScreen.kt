@@ -121,7 +121,10 @@ fun DashboardScreen(
     val isChild = userProfile?.role == UserRole.CHILD
     val activePairing = uiState.activePairing
     val isPaired = activePairing != null && activePairing.status == PairingStatus.PAIRED
-    val studentCode = userProfile?.studentCode.orEmpty().ifEmpty { "HS-CONNECT" }
+    // khong co mac dinh: `studentCode` rong nghia la tai khoan nay chua duoc
+    // cap ma (phụ huynh, hoac ho so chua tai xong). Truoc day the hien
+    // "HS-CONNECT" khi chua co ma — nguoi dung tuong do la ma that cua minh.
+    val studentCode = userProfile?.studentCode.orEmpty()
 
     Box(modifier = Modifier.fillMaxSize()) {
         Column(
@@ -262,7 +265,8 @@ fun DashboardScreen(
                             fontWeight = FontWeight.Bold
                         )
                         Text(
-                            text = if (isChild) "Học sinh • $studentCode" else "Vai trò: Phụ huynh 🛡️",
+                            text = if (isChild) "Học sinh • ${studentCode.ifEmpty { "chưa có mã" }}"
+                            else "Vai trò: Phụ huynh 🛡️",
                             style = MaterialTheme.typography.labelSmall,
                             color = FacebookBlue
                         )
@@ -383,23 +387,37 @@ fun DashboardScreen(
                                 )
                             }
 
-                            Button(
-                                onClick = {
-                                    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
-                                    val clip = ClipData.newPlainText("Mã học sinh", studentCode)
-                                    clipboard?.setPrimaryClip(clip)
-                                    Toast.makeText(context, "Đã sao chép: $studentCode", Toast.LENGTH_SHORT).show()
-                                },
-                                shape = RoundedCornerShape(8.dp),
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = SpaceCardElevated,
-                                    contentColor = NeonCyan
-                                ),
-                                contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 2.dp)
-                            ) {
-                                Icon(imageVector = Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(14.dp))
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text("Sao chép", fontSize = 12.sp)
+                            if (studentCode.isNotEmpty()) {
+                                Button(
+                                    onClick = {
+                                        val clipboard =
+                                            context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+                                        val clip = ClipData.newPlainText("Mã học sinh", studentCode)
+                                        clipboard?.setPrimaryClip(clip)
+                                        Toast.makeText(
+                                            context,
+                                            "Đã sao chép: $studentCode",
+                                            Toast.LENGTH_SHORT
+                                        ).show()
+                                    },
+                                    shape = RoundedCornerShape(8.dp),
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = SpaceCardElevated,
+                                        contentColor = NeonCyan
+                                    ),
+                                    contentPadding = androidx.compose.foundation.layout.PaddingValues(
+                                        horizontal = 8.dp,
+                                        vertical = 2.dp
+                                    )
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.ContentCopy,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("Sao chép", fontSize = 12.sp)
+                                }
                             }
                         }
 
@@ -415,18 +433,26 @@ fun DashboardScreen(
                             contentAlignment = Alignment.Center
                         ) {
                             Text(
-                                text = studentCode,
-                                style = MaterialTheme.typography.headlineMedium,
-                                color = TextPrimary,
+                                text = studentCode.ifEmpty {
+                                    "Chưa có mã — đăng xuất rồi đăng nhập lại để cấp mã"
+                                },
+                                style = if (studentCode.isNotEmpty())
+                                    MaterialTheme.typography.headlineMedium
+                                else MaterialTheme.typography.bodyMedium,
+                                color = if (studentCode.isNotEmpty()) TextPrimary else TextSecondary,
                                 fontWeight = FontWeight.Bold,
-                                letterSpacing = 3.sp
+                                letterSpacing = if (studentCode.isNotEmpty()) 3.sp else 0.sp
                             )
                         }
 
                         Spacer(modifier = Modifier.height(8.dp))
 
                         Text(
-                            text = "Đưa mã này cho phụ huynh nhập để hoàn tất ghép nối.",
+                            text = if (studentCode.isNotEmpty())
+                                "Đưa mã này cho phụ huynh nhập để hoàn tất ghép nối."
+                            else
+                                "Mã này do máy chủ cấp khi tài khoản học sinh được tạo. " +
+                                "Chưa có nghĩa là chưa đăng nhập được — chưa ghép nối được bằng mã nào.",
                             style = MaterialTheme.typography.bodySmall,
                             color = TextSecondary
                         )
@@ -548,8 +574,10 @@ fun DashboardScreen(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            // Quick fill with this device's unique code
-                            if (myDeviceCode.isNotEmpty() && myDeviceCode != "HS-CONNECT") {
+                            // Quick fill with this device's unique code. Chi hien
+                            // khi tai khoan nay THAT SU co ma (hoc sinh); phuc
+                            // huynh thi studentCode rong nen nut bien mat.
+                            if (myDeviceCode.isNotEmpty()) {
                                 Button(
                                     onClick = {
                                         inputStudentCode = myDeviceCode
@@ -671,7 +699,7 @@ fun DashboardScreen(
                                 iconTint = FacebookBlue,
                                 title = "GIỜ DÙNG CỦA CON",
                                 value = "—",
-                                subtitle = "Mục tiêu: 120 ph",
+                                subtitle = "Chưa ghép nối — chưa có số liệu",
                                 testTag = "child_unpaired_usage_stat"
                             )
 
@@ -728,11 +756,12 @@ fun DashboardScreen(
 
                         Spacer(modifier = Modifier.height(10.dp))
 
-                        val target = uiState.usageSchedule?.dailyTargetMinutes ?: 120
+                        val target = uiState.usageSchedule?.dailyTargetMinutes ?: 0
 
                         Column {
                             Text(
-                                text = "Mục tiêu hiện tại: $target phút/ngày",
+                                text = if (target > 0) "Mục tiêu hiện tại: $target phút/ngày"
+                                else "Mục tiêu hiện tại: chưa đặt",
                                 style = MaterialTheme.typography.labelMedium,
                                 color = NeonCyan,
                                 fontWeight = FontWeight.Bold
@@ -987,7 +1016,12 @@ fun DashboardScreen(
                                 contentColor = NeonAmber
                             )
                         ) {
-                            Text("⚡ Bump (${uiState.lastBumpCount})", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            Text(
+                                text = "⚡ Chạm tay • " + bumpStateLabel(
+                                    uiState.lastBumpAt, uiState.lastBumpByName, System.currentTimeMillis()
+                                ),
+                                fontSize = 12.sp, fontWeight = FontWeight.Bold
+                            )
                         }
 
                         Button(
@@ -1025,7 +1059,9 @@ fun DashboardScreen(
                 horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 val sched = uiState.usageSchedule
-                val target = sched?.dailyTargetMinutes ?: 120
+                // 0 = CHUA dat han muc (mac dinh cua UsageSchedule), khong phai
+                // "muc tieu 0 phut" va cung khong phai "120 phut" nhu truoc day.
+                val target = sched?.dailyTargetMinutes ?: 0
                 // So phut cua NGUOI BEN KIA phai lay tu telemetry ho do phat
                 // len (`totalUsedMinutes` = tong do chinh may ho tinh), khong
                 // lay `sched.usedMinutes` — truong nay khong ai ghi lai sau khi
@@ -1043,9 +1079,12 @@ fun DashboardScreen(
                     icon = Icons.Default.HourglassTop,
                     iconTint = NeonEmerald,
                     title = "CÒN LẠI HÔM NAY",
-                    value = if (hasPartnerUsage) "$remaining ph" else "—",
-                    subtitle = if (hasPartnerUsage) "Mục tiêu: $target ph"
-                               else "Chưa nhận được giờ dùng hôm nay từ máy con",
+                    value = if (!hasPartnerUsage || target <= 0) "—" else "$remaining ph",
+                    subtitle = when {
+                        !hasPartnerUsage -> "Chưa nhận được giờ dùng hôm nay từ máy con"
+                        target <= 0 -> "Gia đình chưa đặt mục tiêu phút"
+                        else -> "Mục tiêu: $target ph"
+                    },
                     testTag = "remaining_stat_card"
                 )
 

@@ -3,18 +3,22 @@ package com.example.service.blocker
 import com.example.data.model.RequestStatus
 import com.example.data.model.UsageSchedule
 import com.example.data.model.UserRole
+import com.example.data.model.withWindowCode
+import com.example.data.model.windowCode
+import com.example.data.model.windowDisplay
 
 /**
  * Phiếu đồng thuận của nội quy gia đình: không ai được một mình đổi luật.
  *
  * Nguyên tắc: mẹ là người đặt luật, nhưng mẹ không được tự thông qua. Một
- * thay đổi (chặn thêm app, bỏ chặn, đổi hạn mức phút, chuyển "chỉ nhắc"
- * sang "chặn thật") chỉ có hiệu lực khi bên kia bấm Đồng ý. Trong lúc chờ
+ * thay đổi (chặn thêm app, bỏ chặn, đổi hạn mức phút, đổi khung giờ được dùng
+ * máy, chuyển "chỉ nhắc" sang "chặn thật") chỉ có hiệu lực khi bên kia bấm
+ * Đồng ý. Trong lúc chờ
  * duyệt, luật cũ vẫn áp dụng như cũ — đó là lý do phần "xin đổi" nằm ở
  * trường riêng thay vì ghi đè lên `blockedPackages`:
  * - đề xuất không làm mất hiệu lực của luật cũ (không có khoảng trống
  *   "máy không chặn gì cả" trong lúc chờ duyệt);
- * - nếu bị từ chối thì luật cũ vẫn nguyên, không phải hoàn tro.
+ * - nếu bị từ chối thì luật cũ vẫn nguyên, không phải hoàn trả.
  *
  * File này thuần Kotlin, không chạm Firestore/Android, nên chạy được bằng
  * unit test trên máy tính (xem ConsentPolicyTest.kt).
@@ -52,17 +56,22 @@ object ConsentPolicy {
         allowedApps: List<String> = base.allowedApps,
         reminderOnly: Boolean = base.isReminderOnly,
         dailyTargetMinutes: Int = base.dailyTargetMinutes,
+        /** Khung gio ma ban nay muon may chay: `""` = khong chan theo gio. */
+        windowCode: String = base.windowCode(),
         now: Long = System.currentTimeMillis()
     ): ProposeResult {
         val blocked = blockedPackages.distinct()
         val allowed = allowedApps.distinct()
         val pending = base.changeStatus == RequestStatus.PENDING
 
-        if (pending && matchesPending(base, blocked, allowed, reminderOnly, dailyTargetMinutes)) {
+        if (pending && matchesPending(
+                base, blocked, allowed, reminderOnly, dailyTargetMinutes, windowCode
+            )
+        ) {
             return ProposeResult(ProposeOutcome.NO_CHANGE, base)
         }
 
-        if (matchesActive(base, blocked, allowed, reminderOnly, dailyTargetMinutes)) {
+        if (matchesActive(base, blocked, allowed, reminderOnly, dailyTargetMinutes, windowCode)) {
             // Đề xuất trùng với luật đang chạy: bản chất là rút phiếu đang mở.
             return if (pending) {
                 ProposeResult(ProposeOutcome.WITHDRAWN, cleared(base, byRole, now))
@@ -74,14 +83,16 @@ object ConsentPolicy {
         if (!hasCounterparty) {
             return ProposeResult(
                 ProposeOutcome.APPLIED,
-                cleared(base, byRole, now).copy(
-                    blockedPackages = blocked,
-                    allowedApps = allowed,
-                    isReminderOnly = reminderOnly,
-                    dailyTargetMinutes = dailyTargetMinutes,
-                    isActive = true,
-                    changeStatus = RequestStatus.APPROVED
-                )
+                cleared(base, byRole, now)
+                    .withWindowCode(windowCode)
+                    .copy(
+                        blockedPackages = blocked,
+                        allowedApps = allowed,
+                        isReminderOnly = reminderOnly,
+                        dailyTargetMinutes = dailyTargetMinutes,
+                        isActive = true,
+                        changeStatus = RequestStatus.APPROVED
+                    )
             )
         }
 
@@ -94,6 +105,7 @@ object ConsentPolicy {
                 pendingAllowedApps = allowed,
                 pendingIsReminderOnly = reminderOnly,
                 pendingDailyTargetMinutes = dailyTargetMinutes,
+                pendingAllowedWindow = windowCode,
                 proposedAt = now,
                 respondedAt = 0L
             )
@@ -124,7 +136,7 @@ object ConsentPolicy {
         return if (accept) {
             RespondResult(
                 RespondOutcome.APPROVED,
-                kept.copy(
+                kept.withWindowCode(base.pendingAllowedWindow).copy(
                     blockedPackages = base.pendingBlockedPackages,
                     allowedApps = base.pendingAllowedApps,
                     isReminderOnly = base.pendingIsReminderOnly ?: base.isReminderOnly,
@@ -207,6 +219,8 @@ object ConsentPolicy {
         val blocked = if (pending) s.pendingBlockedPackages else s.blockedPackages
         val reminder = if (pending) s.pendingIsReminderOnly ?: s.isReminderOnly else s.isReminderOnly
         val minutes = if (pending) s.pendingDailyTargetMinutes ?: s.dailyTargetMinutes else s.dailyTargetMinutes
+        val activeCode = s.windowCode()
+        val code = if (pending) s.pendingAllowedWindow else activeCode
 
         val parts = buildList {
             add(
@@ -229,27 +243,41 @@ object ConsentPolicy {
             ) {
                 add(if (s.pendingIsReminderOnly == true) "chuyển về chỉ nhắc" else "chuyển sang chặn thật")
             }
+            // Khung gio duoc noi ra moi lan vi "khong chan theo gio" la cai ma
+            // gia dinh hay hieu nham thanh "bo chan da chay".
+            add(
+                if (pending && code != activeCode) {
+                    "khung giờ: ${windowLabel(activeCode)} → ${windowLabel(code)}"
+                } else {
+                    "khung giờ: ${windowLabel(code)}"
+                }
+            )
         }
         return parts.joinToString(" • ")
     }
+
+    /** Chu khung gio ngan gon, khong bịa gia tri khi chua dat. */
+    private fun windowLabel(code: String): String = windowDisplay(code) ?: "chưa đặt"
 
     // ── helpers ───────────────────────────────────────────────────────────
 
     private fun matchesActive(
         s: UsageSchedule, blocked: List<String>, allowed: List<String>,
-        reminderOnly: Boolean, minutes: Int
+        reminderOnly: Boolean, minutes: Int, windowCode: String
     ) = s.blockedPackages.toSet() == blocked.toSet() &&
         s.allowedApps.toSet() == allowed.toSet() &&
         s.isReminderOnly == reminderOnly &&
-        s.dailyTargetMinutes == minutes
+        s.dailyTargetMinutes == minutes &&
+        s.windowCode() == windowCode
 
     private fun matchesPending(
         s: UsageSchedule, blocked: List<String>, allowed: List<String>,
-        reminderOnly: Boolean, minutes: Int
+        reminderOnly: Boolean, minutes: Int, windowCode: String
     ) = s.pendingBlockedPackages.toSet() == blocked.toSet() &&
         s.pendingAllowedApps.toSet() == allowed.toSet() &&
         s.pendingIsReminderOnly == reminderOnly &&
-        s.pendingDailyTargetMinutes == minutes
+        s.pendingDailyTargetMinutes == minutes &&
+        s.pendingAllowedWindow == windowCode
 
     /** Xóa hết phần xin đổi, giữ nguyên phần luật đang chạy, dong phieu lai. */
     private fun cleared(s: UsageSchedule, actorRole: UserRole?, now: Long) = s.copy(
@@ -259,6 +287,7 @@ object ConsentPolicy {
         pendingAllowedApps = emptyList(),
         pendingIsReminderOnly = null,
         pendingDailyTargetMinutes = null,
+        pendingAllowedWindow = "",
         respondedAt = now
     )
 }

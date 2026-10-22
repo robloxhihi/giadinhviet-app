@@ -23,11 +23,14 @@ import java.nio.charset.StandardCharsets
 private const val TAG = "OfflineMeshManager"
 private const val SERVICE_ID = "com.example.vespera.mesh"
 
+/**
+ * Mot thiet bi P2P tim thay. Khong co truong "khoang cach": Nearby Connections
+ * / Wi-Fi P2P khong tra ve met nao, nen con so 50m cu dung ra chi la bịa.
+ */
 data class MeshPeer(
     val endpointId: String,
     val deviceName: String,
-    val isConnected: Boolean = false,
-    val distanceEstimate: String = "< 50m"
+    val isConnected: Boolean = false
 )
 
 data class MeshMessage(

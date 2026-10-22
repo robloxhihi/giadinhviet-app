@@ -16,8 +16,8 @@ import android.view.accessibility.AccessibilityEvent
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
+import com.example.data.FirestoreDb
 import com.example.data.model.UsageSchedule
-import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.ListenerRegistration
 import java.util.Calendar
 import java.util.concurrent.Executors
@@ -166,7 +166,7 @@ class AppBlockerService : AccessibilityService() {
             return
         }
         watchedUid = uid
-        val db = FirebaseFirestore.getInstance()
+        val db = FirestoreDb.instance()
 
         userReg = db.collection("users").document(uid)
             .addSnapshotListener { userSnap, err ->
@@ -192,7 +192,7 @@ class AppBlockerService : AccessibilityService() {
 
     private fun attachScheduleListener(pairingId: String) {
         scheduleReg?.remove()
-        scheduleReg = FirebaseFirestore.getInstance()
+        scheduleReg = FirestoreDb.instance()
             .collection("pairings").document(pairingId)
             .collection("schedules").document(SCHEDULE_DOC)
             .addSnapshotListener { snap, err ->

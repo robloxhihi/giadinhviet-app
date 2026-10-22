@@ -6,7 +6,7 @@ import com.google.firebase.database.DatabaseError
 import com.google.firebase.database.DatabaseReference
 import com.google.firebase.database.FirebaseDatabase
 import com.google.firebase.database.ValueEventListener
-import com.google.firebase.firestore.FirebaseFirestore
+import com.example.data.FirestoreDb
 import com.google.firebase.firestore.ListenerRegistration
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -129,7 +129,7 @@ class SignalingClient(
 
     private fun listenToFirestoreFallback() {
         try {
-            val firestore = FirebaseFirestore.getInstance()
+            val firestore = FirestoreDb.instance()
             firestoreListener = firestore.collection("calls").document(roomId)
                 .addSnapshotListener { snapshot, error ->
                     if (error != null || snapshot == null || !snapshot.exists()) return@addSnapshotListener
@@ -180,7 +180,7 @@ class SignalingClient(
 
         rtdbRef?.updateChildren(callPayload)
         try {
-            FirebaseFirestore.getInstance().collection("calls").document(roomId).set(callPayload)
+            FirestoreDb.instance().collection("calls").document(roomId).set(callPayload)
         } catch (e: Exception) {
             Log.d(TAG, "Firestore sendOffer error: ${e.message}")
         }
@@ -198,7 +198,7 @@ class SignalingClient(
 
         rtdbRef?.updateChildren(updatePayload)
         try {
-            FirebaseFirestore.getInstance().collection("calls").document(roomId).update(updatePayload)
+            FirestoreDb.instance().collection("calls").document(roomId).update(updatePayload)
         } catch (e: Exception) {
             Log.d(TAG, "Firestore sendAnswer error: ${e.message}")
         }
@@ -214,7 +214,7 @@ class SignalingClient(
         rtdbRef?.child(targetNode)?.push()?.setValue(candidateData)
 
         try {
-            FirebaseFirestore.getInstance().collection("calls").document(roomId)
+            FirestoreDb.instance().collection("calls").document(roomId)
                 .collection(targetNode).add(candidateData)
         } catch (e: Exception) {
             Log.d(TAG, "Firestore candidate error: ${e.message}")
@@ -225,7 +225,7 @@ class SignalingClient(
         val endPayload = mapOf("status" to "ended")
         rtdbRef?.updateChildren(endPayload)
         try {
-            FirebaseFirestore.getInstance().collection("calls").document(roomId).update(endPayload)
+            FirestoreDb.instance().collection("calls").document(roomId).update(endPayload)
         } catch (e: Exception) {
             Log.d(TAG, "Firestore endCall error: ${e.message}")
         }

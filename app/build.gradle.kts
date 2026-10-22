@@ -20,8 +20,8 @@ android {
     // nguoi dung cai xong khong kiem tra duoc may dang chay ban nao (man hinh
     // "Thong tin ung dung" cua Android hien chinh chuoi nay). Giu thang bang
     // so tag phat hanh; versionCode tang thi cai de chim ban cu, khong phai go.
-    versionCode = 34
-    versionName = "34.0"
+    versionCode = 35
+    versionName = "35.0"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }
@@ -143,7 +143,6 @@ dependencies {
   implementation(libs.okhttp)
   implementation(libs.play.services.location)
   implementation(libs.play.services.nearby)
-  implementation(libs.socket.io.client)
   implementation(libs.retrofit)
   testImplementation(libs.androidx.compose.ui.test.junit4)
   testImplementation(libs.androidx.core)

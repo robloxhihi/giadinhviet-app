@@ -3,6 +3,7 @@ package com.example.data.repository
 import android.content.Context
 import android.util.Log
 import com.example.R
+import com.example.data.FirestoreDb
 import com.example.data.model.ExtraTimeRequest
 import com.example.data.model.FamilyMessage
 import com.example.data.model.LocationData
@@ -20,6 +21,7 @@ import com.example.data.model.UserRole
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
+import com.google.firebase.firestore.SetOptions
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
@@ -31,24 +33,10 @@ private const val TAG = "VesperaRepository"
 class VesperaRepository(private val db: FirebaseFirestore, private val auth: FirebaseAuth, private val context: Context? = null) {
 
     constructor(context: Context) : this(
-        try {
-            val resId = context.resources.getIdentifier("firestore_database_id", "string", context.packageName)
-            if (resId != 0) {
-                val dbId = context.getString(resId)
-                if (dbId.isNotBlank()) FirebaseFirestore.getInstance(dbId) else FirebaseFirestore.getInstance()
-            } else {
-                FirebaseFirestore.getInstance()
-            }
-        } catch (e: Exception) {
-            FirebaseFirestore.getInstance()
-        },
+        FirestoreDb.instance(),
         FirebaseAuth.getInstance(),
         context
     )
-
-    private fun requireUserId(): String {
-        return auth.currentUser?.uid ?: "guest_${System.currentTimeMillis()}"
-    }
 
     /**
      * Observe or get UserProfile safely without throwing
@@ -84,13 +72,19 @@ class VesperaRepository(private val db: FirebaseFirestore, private val auth: Fir
         }
     }
 
+    /**
+     * Ghi ho so len may chu. NEM ngoai le khi ghi that bai: truoc day loi bi
+     * `Log.w` an, nen man hinh van bao "Đã cập nhật thông tin tài khoản!" du
+     * document chua bao gio duoc viet.
+     */
     suspend fun saveUserProfile(profile: UserProfile) {
-        val uid = profile.id.ifEmpty { auth.currentUser?.uid ?: "user_${System.currentTimeMillis()}" }
-        try {
-            db.collection("users").document(uid).set(profile.copy(id = uid)).await()
-        } catch (e: Exception) {
-            Log.w(TAG, "saveUserProfile error", e)
+        // Khong tu sinh uid: `user_<dong ho>` tao ra mot document `users/` ma
+        // khong co tai khoan Firebase nao dung ten, khong tim lai duoc.
+        val uid = profile.id.ifEmpty { auth.currentUser?.uid.orEmpty() }
+        if (uid.isEmpty()) {
+            throw IllegalStateException("Máy chưa đăng nhập nên chưa lưu được hồ sơ lên máy chủ.")
         }
+        db.collection("users").document(uid).set(profile.copy(id = uid)).await()
     }
 
     /**
@@ -220,6 +214,16 @@ class VesperaRepository(private val db: FirebaseFirestore, private val auth: Fir
     /**
      * Accept pairing request and create permanent Pairing
      */
+    /**
+     * Chap nhan ghep noi. Khong an loi nua: `parent`/`child` phai biet neu
+     * ghi that bai, vi truoc day du toan bo khoi ghi bi `Log.w` nuot va man
+     * hinh van bao "Ghép nối thành công".
+     *
+     * KHONG tao kem "Lịch sinh hoạt chuẩn 120 phút, 07:00 - 21:30" nua: do la
+     * luat bi bia ra cho mot gia dinh chua tung chon gi. Noi quy chi ton tai
+     * sau khi co nguoi thao va luu o man BlockRules (`saveSchedule` dung
+     * `set()` nen lan luu dau tien tu tao document).
+     */
     suspend fun acceptPairingRequest(request: PairingRequest, childProfile: UserProfile) {
         val pairingId = "pair_${request.parentId}_${request.childId}"
         val pairing = Pairing(
@@ -234,98 +238,67 @@ class VesperaRepository(private val db: FirebaseFirestore, private val auth: Fir
             updatedAt = System.currentTimeMillis()
         )
 
-        try {
-            db.collection("pairings").document(pairingId).set(pairing).await()
-            db.collection("pairing_requests").document(request.id).update(
-                "status", RequestStatus.APPROVED.name
-            ).await()
-            db.collection("users").document(request.childId).update(
-                mapOf(
-                    "pairedWith" to request.parentId,
-                    "activePairingId" to pairingId
-                )
-            ).await()
-            db.collection("users").document(request.parentId).update(
-                mapOf(
-                    "pairedWith" to request.childId,
-                    "activePairingId" to pairingId
-                )
-            ).await()
-
-            // Rotate child code to invalidate old one
-            rotateStudentCode(request.childId)
-
-            val defaultSchedule = UsageSchedule(
-                id = "default_sched",
-                pairingId = pairingId,
-                title = "Lịch sinh hoạt chuẩn",
-                dailyTargetMinutes = 120,
-                // 0 chu khong phai 45: khong co duong nao ghi truong nay ve
-                // sau, nen con so 45 se nam lai trong tai lieu va duoc hien
-                // len nhu "hom nay da dung 45 phut" — du hom do may chua mo.
-                usedMinutes = 0,
-                allowedStartHour = 7,
-                allowedStartMinute = 0,
-                allowedEndHour = 21,
-                allowedEndMinute = 30,
-                daysOfWeek = "T2, T3, T4, T5, T6, T7, CN",
-                isReminderOnly = true,
-                isActive = true
+        db.collection("pairings").document(pairingId).set(pairing).await()
+        db.collection("pairing_requests").document(request.id).update(
+            "status", RequestStatus.APPROVED.name
+        ).await()
+        db.collection("users").document(request.childId).update(
+            mapOf(
+                "pairedWith" to request.parentId,
+                "activePairingId" to pairingId
             )
-            db.collection("pairings").document(pairingId)
-                .collection("schedules").document("default_sched").set(defaultSchedule).await()
-        } catch (e: Exception) {
-            Log.w(TAG, "acceptPairingRequest error", e)
-        }
+        ).await()
+        db.collection("users").document(request.parentId).update(
+            mapOf(
+                "pairedWith" to request.childId,
+                "activePairingId" to pairingId
+            )
+        ).await()
+
+        // Rotate child code to invalidate old one
+        rotateStudentCode(request.childId)
     }
 
     suspend fun savePairing(pairing: Pairing) {
-        try {
-            db.collection("pairings").document(pairing.id).set(pairing).await()
-            db.collection("users").document(pairing.childId).update(
-                mapOf(
-                    "pairedWith" to pairing.parentId,
-                    "activePairingId" to pairing.id
-                )
-            ).await()
-            db.collection("users").document(pairing.parentId).update(
-                mapOf(
-                    "pairedWith" to pairing.childId,
-                    "activePairingId" to pairing.id
-                )
-            ).await()
-        } catch (e: Exception) {
-            Log.w(TAG, "savePairing error", e)
-        }
+        db.collection("pairings").document(pairing.id).set(pairing).await()
+        db.collection("users").document(pairing.childId).update(
+            mapOf(
+                "pairedWith" to pairing.parentId,
+                "activePairingId" to pairing.id
+            )
+        ).await()
+        db.collection("users").document(pairing.parentId).update(
+            mapOf(
+                "pairedWith" to pairing.childId,
+                "activePairingId" to pairing.id
+            )
+        ).await()
     }
 
     suspend fun rejectPairingRequest(requestId: String) {
-        try {
-            db.collection("pairing_requests").document(requestId).update(
-                "status", RequestStatus.REJECTED.name
-            ).await()
-        } catch (e: Exception) {
-            Log.w(TAG, "rejectPairingRequest error", e)
-        }
+        db.collection("pairing_requests").document(requestId).update(
+            "status", RequestStatus.REJECTED.name
+        ).await()
     }
 
+    /**
+     * Huy ghep noi tren may chu TRUOC, roi moi xoa trang thai local. Neu ghi
+     * that bai thi hai ben van con noi voi nhau, hon la mot ben nghi "đã hủy"
+     * trong khi ben kia con thay "đã ghép nối".
+     */
     suspend fun unpair(pairingId: String, parentId: String, childId: String) {
-        try {
-            db.collection("pairings").document(pairingId).update(
-                "status", PairingStatus.UNPAIRED.name,
-                "updatedAt", System.currentTimeMillis()
-            ).await()
-            db.collection("users").document(parentId).update(
-                "activePairingId", "",
-                "pairedWith", ""
-            ).await()
-            db.collection("users").document(childId).update(
-                "activePairingId", "",
-                "pairedWith", ""
-            ).await()
-        } catch (e: Exception) {
-            Log.w(TAG, "unpair error", e)
-        }
+        db.collection("pairings").document(pairingId).update(
+            "status", PairingStatus.UNPAIRED.name,
+            "updatedAt", System.currentTimeMillis()
+        ).await()
+        db.collection("users").document(parentId).update(
+            "activePairingId", "",
+            "pairedWith", ""
+        ).await()
+        db.collection("users").document(childId).update(
+            "activePairingId", "",
+            "pairedWith", ""
+        ).await()
     }
 
     fun observePairing(pairingId: String): Flow<Pairing?> = callbackFlow {
@@ -718,27 +691,37 @@ class VesperaRepository(private val db: FirebaseFirestore, private val auth: Fir
             ).await()
     }
 
-    suspend fun updateDailyTargetMinutes(pairingId: String, newTargetMinutes: Int) {
-        try {
-            db.collection("pairings").document(pairingId)
-                .collection("schedules").document("default_sched")
-                .update("dailyTargetMinutes", newTargetMinutes).await()
-        } catch (e: Exception) {
-            Log.w(TAG, "updateDailyTargetMinutes error", e)
-        }
-    }
+    /** Khong an loi: `update()` len document khong ton tai phai cho UI biet. */
+    suspend fun updateDailyTargetMinutes(pairingId: String, newTargetMinutes: Int) =
+        db.collection("pairings").document(pairingId)
+            .collection("schedules").document("default_sched")
+            .update("dailyTargetMinutes", newTargetMinutes).await()
 
 
     suspend fun requestExtraTime(request: ExtraTimeRequest) {
-        try {
-            val reqId = request.id.ifEmpty { UUID.randomUUID().toString() }
-            db.collection("pairings").document(request.pairingId)
-                .collection("extra_time").document(reqId)
-                .set(request.copy(id = reqId)).await()
-        } catch (e: Exception) {
-            Log.w(TAG, "requestExtraTime error", e)
-        }
+        val reqId = request.id.ifEmpty { UUID.randomUUID().toString() }
+        db.collection("pairings").document(request.pairingId)
+            .collection("extra_time").document(reqId)
+            .set(request.copy(id = reqId)).await()
     }
+
+    /**
+     * Ghi mot "chạm tay" (Zenly Bump) len document ghep noi. KHONG chan
+     * exception: neu khong ghi duoc thi nguoi dung phai thay "chua gui duoc",
+     * khong duoc rung may minh roi bao la ben kia da rung.
+     */
+    suspend fun sendBump(pairingId: String, atMillis: Long, role: UserRole, actorName: String) =
+        db.collection("pairings").document(pairingId)
+            .update(
+                mapOf(
+                    "lastBumpAt" to atMillis,
+                    "lastBumpByRole" to role.name,
+                    "lastBumpByName" to actorName,
+                    "updatedAt" to System.currentTimeMillis()
+                )
+            ).await()
+
+
 
     fun observeExtraTimeRequests(pairingId: String): Flow<List<ExtraTimeRequest>> = callbackFlow {
         if (pairingId.isEmpty()) {
@@ -760,56 +743,64 @@ class VesperaRepository(private val db: FirebaseFirestore, private val auth: Fir
         awaitClose { listener.remove() }
     }
 
+    /**
+     * Duyet phieu xin them phut. Phieu duoc ghi TRUOC va loi ghi phieu phai
+     * nem ra ngoai (truoc day `Log.w` an het nen "Đã duyệt" hiện ra du khong
+     * co gi len may chu). Cong them phut vao han muc la buoc thu hai: neu no
+     * that bai thi bao ro rang phe duyet da ghi nhung han muc chua doi, de
+     * nguoi dung khong tuong "con 30 phut nua" trong khi may van chan.
+     */
     suspend fun respondToExtraTime(pairingId: String, requestId: String, approved: Boolean, minutesToAdd: Int) {
-        try {
-            db.collection("pairings").document(pairingId)
-                .collection("extra_time").document(requestId)
-                .update(
-                    mapOf(
-                        "status" to if (approved) RequestStatus.APPROVED.name else RequestStatus.REJECTED.name,
-                        "respondedAt" to System.currentTimeMillis()
-                    )
-                ).await()
+        db.collection("pairings").document(pairingId)
+            .collection("extra_time").document(requestId)
+            .update(
+                mapOf(
+                    "status" to if (approved) RequestStatus.APPROVED.name else RequestStatus.REJECTED.name,
+                    "respondedAt" to System.currentTimeMillis()
+                )
+            ).await()
 
-            if (approved && minutesToAdd > 0) {
-                val schedRef = db.collection("pairings").document(pairingId)
-                    .collection("schedules").document("default_sched")
-                // Doc that bai thi cung khong duoc lam mat ket qua da duyet o
-                // tren: phieu extra_time da mang tinh APPROVED.
-                val snap = runCatching { schedRef.get().await() }.getOrNull()
-                if (snap != null && snap.exists()) {
-                    val data = snap.data.orEmpty()
-                    // `getLong()` nem exception neu Firestore luu truong nay
-                    // kieu Double/Int khac — doc qua map de ep kieu an toan.
-                    val currentTarget = (data["dailyTargetMinutes"] as? Number)?.toLong() ?: 120L
-                    val updates = mutableMapOf<String, Any>(
-                        "dailyTargetMinutes" to currentTarget + minutesToAdd
-                    )
-                    // Neu dang co phieu noi quy mo (ben kia chua duyet) va phieu
-                    // do cung doi han muc: cong them vao CA phieu. Neu khong, khi
-                    // bam Dong y, `pendingDailyTargetMinutes` de len ban vua
-                    // tang — so phut xin them bi xoa im lang.
-                    val pendingTarget = (data["pendingDailyTargetMinutes"] as? Number)?.toLong()
-                    if (data["changeStatus"] == RequestStatus.PENDING.name && pendingTarget != null) {
-                        updates["pendingDailyTargetMinutes"] = pendingTarget + minutesToAdd
-                    }
-                    schedRef.update(updates).await()
-                }
+        if (!approved || minutesToAdd <= 0) return
+
+        val schedRef = db.collection("pairings").document(pairingId)
+            .collection("schedules").document("default_sched")
+        val failure = runCatching {
+            val snap = schedRef.get().await()
+            val data = snap.data.orEmpty()
+            if (!snap.exists()) {
+                throw IllegalStateException("chưa có lịch")
             }
-        } catch (e: Exception) {
-            Log.w(TAG, "respondToExtraTime error", e)
+            // `getLong()` nem exception neu Firestore luu truong nay
+            // kieu Double/Int khac — doc qua map de ep kieu an toan.
+            // Thieu truong = CHUA dat han muc (0), khong phai "120 phut".
+            val currentTarget = (data["dailyTargetMinutes"] as? Number)?.toLong() ?: 0L
+            val updates = mutableMapOf<String, Any>(
+                "dailyTargetMinutes" to currentTarget + minutesToAdd
+            )
+            // Neu dang co phieu noi quy mo (ben kia chua duyet) va phieu
+            // do cung doi han muc: cong them vao CA phieu. Neu khong, khi
+            // bam Dong y, `pendingDailyTargetMinutes` de len ban vua
+            // tang — so phut xin them bi xoa im lang.
+            val pendingTarget = (data["pendingDailyTargetMinutes"] as? Number)?.toLong()
+            if (data["changeStatus"] == RequestStatus.PENDING.name && pendingTarget != null) {
+                updates["pendingDailyTargetMinutes"] = pendingTarget + minutesToAdd
+            }
+            schedRef.update(updates).await()
+        }.exceptionOrNull()
+        if (failure != null) {
+            throw IllegalStateException(
+                "Đã ghi phiếu duyệt, nhưng CHƯA cộng thêm $minutesToAdd phút vào hạn mức " +
+                    "(gia đình chưa có lịch hoặc máy chủ từ chối ghi). Tạo lịch ở màn Nội quy rồi thử lại.",
+                failure
+            )
         }
     }
 
     suspend fun requestPrivacyHours(request: PrivacyRequest) {
-        try {
-            val reqId = request.id.ifEmpty { UUID.randomUUID().toString() }
-            db.collection("pairings").document(request.pairingId)
-                .collection("privacy_requests").document(reqId)
-                .set(request.copy(id = reqId)).await()
-        } catch (e: Exception) {
-            Log.w(TAG, "requestPrivacyHours error", e)
-        }
+        val reqId = request.id.ifEmpty { UUID.randomUUID().toString() }
+        db.collection("pairings").document(request.pairingId)
+            .collection("privacy_requests").document(reqId)
+            .set(request.copy(id = reqId)).await()
     }
 
     fun observePrivacyRequests(pairingId: String): Flow<List<PrivacyRequest>> = callbackFlow {
@@ -832,36 +823,36 @@ class VesperaRepository(private val db: FirebaseFirestore, private val auth: Fir
         awaitClose { listener.remove() }
     }
 
+    /**
+     * Duyet phieu "gio trong quyen rieng". Khong an loi nua. Ghi `isPrivacyActive`
+     * bang merge: truoc day `update()` len document vi tri chua ton tai nem
+     * NOT_FOUND bi bat, nen phieu duoc duyet ma may con van bi theo doi.
+     */
     suspend fun respondToPrivacyRequest(pairingId: String, requestId: String, childId: String, approved: Boolean) {
-        try {
-            db.collection("pairings").document(pairingId)
-                .collection("privacy_requests").document(requestId)
-                .update(
-                    mapOf(
-                        "status" to if (approved) RequestStatus.APPROVED.name else RequestStatus.REJECTED.name,
-                        "respondedAt" to System.currentTimeMillis()
-                    )
-                ).await()
+        db.collection("pairings").document(pairingId)
+            .collection("privacy_requests").document(requestId)
+            .update(
+                mapOf(
+                    "status" to if (approved) RequestStatus.APPROVED.name else RequestStatus.REJECTED.name,
+                    "respondedAt" to System.currentTimeMillis()
+                )
+            ).await()
 
-            if (approved) {
-                db.collection("locations").document(childId).update(
-                    "isPrivacyActive", true,
-                    "updatedAt", System.currentTimeMillis()
-                ).await()
-            }
-        } catch (e: Exception) {
-            Log.w(TAG, "respondToPrivacyRequest error", e)
+        if (approved && childId.isNotEmpty()) {
+            db.collection("locations").document(childId).set(
+                mapOf(
+                    "isPrivacyActive" to true,
+                    "updatedAt" to System.currentTimeMillis()
+                ),
+                SetOptions.merge()
+            ).await()
         }
     }
 
     suspend fun saveAgreement(agreement: ScreenTimeAgreement) {
-        try {
-            db.collection("pairings").document(agreement.pairingId)
-                .collection("agreements").document(agreement.id)
-                .set(agreement).await()
-        } catch (e: Exception) {
-            Log.w(TAG, "saveAgreement error", e)
-        }
+        db.collection("pairings").document(agreement.pairingId)
+            .collection("agreements").document(agreement.id)
+            .set(agreement).await()
     }
 
     fun observeAgreements(pairingId: String): Flow<List<ScreenTimeAgreement>> = callbackFlow {
@@ -884,26 +875,22 @@ class VesperaRepository(private val db: FirebaseFirestore, private val auth: Fir
         awaitClose { listener.remove() }
     }
 
+    /**
+     * Gui tinn nhan gia dinh. Loi PHAI nem ra ngoai: thu vien `try/catch` +
+     * `Log.w` khien hop thoai mat tin nhan sau khi bam Gui ma khong bao gio
+     * noi la chua gui duoc (listener echo chi phat lai khi ghi thanh cong).
+     */
     suspend fun sendMessage(message: FamilyMessage) {
-        try {
-            val msgId = message.id.ifEmpty { UUID.randomUUID().toString() }
-            db.collection("pairings").document(message.pairingId)
-                .collection("messages").document(msgId)
-                .set(message.copy(id = msgId)).await()
-        } catch (e: Exception) {
-            Log.w(TAG, "sendMessage error", e)
-        }
+        val msgId = message.id.ifEmpty { UUID.randomUUID().toString() }
+        db.collection("pairings").document(message.pairingId)
+            .collection("messages").document(msgId)
+            .set(message.copy(id = msgId)).await()
     }
 
-    suspend fun toggleMessageStar(pairingId: String, messageId: String, isStarred: Boolean) {
-        try {
-            db.collection("pairings").document(pairingId)
-                .collection("messages").document(messageId)
-                .update("isStarred", isStarred).await()
-        } catch (e: Exception) {
-            Log.w(TAG, "toggleMessageStar error", e)
-        }
-    }
+    suspend fun toggleMessageStar(pairingId: String, messageId: String, isStarred: Boolean) =
+        db.collection("pairings").document(pairingId)
+            .collection("messages").document(messageId)
+            .update("isStarred", isStarred).await()
 
     fun observeMessages(pairingId: String): Flow<List<FamilyMessage>> = callbackFlow {
         if (pairingId.isEmpty()) {

@@ -121,7 +121,11 @@ class DailyUsageStore(context: Context) {
         val history = recent(8).filter { it.day != t.day }.take(7).reversed()
         val sb = StringBuilder()
         sb.append("HÔM NAY (").append(t.label).append("):\n")
-        sb.append("- Phút dùng máy: ").append(t.usedMinutes).append(" / hạn mức ").append(t.quotaMinutes).append("\n")
+        // quotaMinutes = 0 la "gia dinh CHUA dat han muc". Ghi "/ 0" se khien
+        // AI ket luan con da vuot muc khi chua co muc nao.
+        sb.append("- Phút dùng máy: ").append(t.usedMinutes)
+            .append(if (t.quotaMinutes > 0) " / hạn mức ${t.quotaMinutes}" else " (chưa đặt hạn mức)")
+            .append("\n")
         sb.append("- Số lần bộ chặn giữ lại: ").append(t.blockedAttempts)
             .append(" (").append(t.distinctBlockedApps).append(" ứng dụng khác nhau)\n")
         sb.append("- Ứng dụng dùng nhiều nhất: ").append(t.topApps).append("\n")
@@ -132,7 +136,8 @@ class DailyUsageStore(context: Context) {
             sb.append("\n7 NGÀY TRƯỚC (mới nhất bên phải):\n")
             history.forEach { r ->
                 sb.append("- ").append(r.label)
-                    .append(": ").append(r.usedMinutes).append("ph/").append(r.quotaMinutes)
+                    .append(": ").append(r.usedMinutes).append("ph")
+                    .append(if (r.quotaMinutes > 0) "/${r.quotaMinutes}" else "/chưa đặt hạn mức")
                     .append(", bộ chặn giữ ").append(r.blockedAttempts).append(" lần")
                     .append("\n")
             }

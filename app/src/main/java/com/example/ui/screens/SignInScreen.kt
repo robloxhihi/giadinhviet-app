@@ -78,7 +78,6 @@ fun SignInScreen(
     onSignInClick: () -> Unit,
     onSignIn: (String, String) -> Unit,
     onSignUp: (String, String) -> Unit,
-    onEnterDemo: () -> Unit = {},
     selectedRole: UserRole,
     onRoleSelected: (UserRole) -> Unit
 ) {
@@ -181,12 +180,7 @@ fun SignInScreen(
                 )
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // Direct Demo Button
-
-
-            Spacer(modifier = Modifier.height(14.dp))
+            Spacer(modifier = Modifier.height(30.dp))
 
             // Error Display
             if (errorMessage != null) {
