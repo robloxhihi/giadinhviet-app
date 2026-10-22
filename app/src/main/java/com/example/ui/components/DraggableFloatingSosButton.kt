@@ -641,10 +641,12 @@ fun SosBottomSheetContent(
                 Spacer(modifier = Modifier.height(10.dp))
                 // Noi TRUOC ket qua de nguoi dung khong tuong bam xong la may
                 // tu goi: 113 tren may chua cap quyen goi thi chi mo ban quay so.
+                // Toa do KHONG di SMS toi tong dai (ma ngan thoai chi), no di
+                // toi so nguoi than da luu — noi dung phai khop voi loi ap lam.
                 Text(
-                    text = "Bấm một số: app gửi SMS toạ độ cho tổng đài rồi " +
-                        (if (hasCallPermission) "gọi thẳng." else "mở bàn quay số — bấm Gọi để kết nối.") +
-                        " " + SosPlan.REDIRECTING_TO_RESCUE,
+                    text = "Bấm một số: app " +
+                        (if (hasCallPermission) "gọi thẳng tổng đài." else "mở bàn quay số — bấm Gọi để kết nối.") +
+                        " Toạ độ được gửi SMS cho số người thân đã lưu. " + SosPlan.REDIRECTING_TO_RESCUE,
                     style = MaterialTheme.typography.bodySmall,
                     color = TextSecondary
                 )

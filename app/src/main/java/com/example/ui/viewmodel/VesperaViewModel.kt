@@ -2105,7 +2105,8 @@ class VesperaViewModel(
         )
 
         viewModelScope.launch {
-            // BUOC 2 — lay vi tri roi gửi SMS toa do toi tong dai. startCall =
+            // BUOC 2 — lay vi tri roi gui SMS toa do toi SO NGUOI THAN (tong
+            // dai chi duoc goi, ma ngan khong nhan SMS). startCall =
             // false vi ban quay so DA mo o buoc 1, mo lan hai la chen len cuoc
             // goi dang ket noi.
             val (loc, position) = resolveSosPosition(name)

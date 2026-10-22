@@ -64,7 +64,7 @@ object GeminiClient {
             var lastError = "Không gọi được Gemini."
             for (model in MODELS) {
                 for (attempt in 1..2) {
-                    when (val outcome = once(apiKey, model, history, question, stats)) {
+                    when (val outcome = once(apiKey, model, history, question, stats, report)) {
                         is Call.Ok -> return@withContext Result.success(outcome.text)
                         is Call.Retryable -> {
                             lastError = outcome.message
@@ -84,8 +84,15 @@ object GeminiClient {
         data class Fatal(val message: String) : Call()
     }
 
-    private suspend fun once(apiKey: String, model: String, history: List<ChatTurn>, question: String, stats: String): Call {
-        val body = mapAdapter.toJson(buildBody(history, question, stats))
+    private suspend fun once(
+        apiKey: String,
+        model: String,
+        history: List<ChatTurn>,
+        question: String,
+        stats: String,
+        report: Boolean
+    ): Call {
+        val body = mapAdapter.toJson(buildBody(history, question, stats, report))
         return try {
             val conn = (java.net.URL("$BASE$model:generateContent").openConnection() as java.net.HttpURLConnection).apply {
                 requestMethod = "POST"
@@ -156,7 +163,12 @@ object GeminiClient {
      * duoc payload (role, systemInstruction, ngan sach token) ma khong can
      * goi mang.
      */
-    fun buildBody(history: List<ChatTurn>, question: String, stats: String): Map<String, Any> {
+    fun buildBody(
+        history: List<ChatTurn>,
+        question: String,
+        stats: String,
+        report: Boolean = false
+    ): Map<String, Any> {
         val contents = history
             .filter { it.role == "user" || it.role == "model" }
             .map { mapOf("role" to it.role, "parts" to listOf(mapOf("text" to it.text))) }

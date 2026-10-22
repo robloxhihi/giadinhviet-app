@@ -62,7 +62,7 @@ class SosPlanTest {
             SosPlan.MISSING_NUMBER_FOR_SHARE, SosPlan.UNKNOWN_POSITION,
             SosPlan.channelLabel(SosPlan.CallChannel.ZALO),
             SosPlan.channelLabel(SosPlan.CallChannel.PLAIN_CALL),
-            SosPlan.familySmsBody(hanoi), SosPlan.hotlineSmsBody("113", hanoi),
+            SosPlan.familySmsBody(hanoi),
             SosPlan.speechText(hanoi), SosPlan.speechUnavailableMessage(false).orEmpty()
         )
         all.forEach { text ->
@@ -153,15 +153,6 @@ class SosPlanTest {
         assertTrue("Phai co so do toa do: $body", body.contains("21.0123"))
         assertTrue("Phai co link ban do: $body", body.contains("maps.google.com"))
         assertTrue("Phai noi ro la cuu nan: $body", body.contains("CỨU NẠN"))
-    }
-
-    @Test
-    fun smsTongDaiCungDuBaY() {
-        val body = SosPlan.hotlineSmsBody("113", hanoi)
-        listOf("Vĩ độ", "Kinh độ", "Địa điểm").forEach {
-            assertTrue("SMS tong dai thieu $it: $body", body.contains(it))
-        }
-        assertTrue("SMS tong dai phai de ten tong dai: $body", body.contains("113"))
     }
 
     /**

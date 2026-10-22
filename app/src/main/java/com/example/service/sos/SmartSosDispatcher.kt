@@ -270,13 +270,18 @@ class SmartSosDispatcher(
     }
 
     /**
-     * Gửi SOS tới Lực lượng Cứu hộ (112, 115, 114, 113) — kèm mở cuộc gọi khẩn cấp.
+     * Bam tong dai cuu ho (112, 115, 114, 113): MO CUOC GOI, con toa do thi
+     * gui SMS toi SO NGUOI THAN DA LUU — khong bao gio gui SMS toi chinh
+     * tong dai.
      *
-     * THU TU CO NHAT: MO CUOC GOI TRUOC, roi mới gửi SMS. Ban cu gui SMS truoc:
-     * `dispatchSms` cho nha mang xac nhan toi 20 giay, nen bam 113 tren may co
-     * quyen SMS nhung tong dai khong bao gio tra loi SEND_SMS la NGAY DIEN 20
-     * GIAY roi ban quay so moi mo — khong phai "mo cuoc goi khuan cap" ma la
-     * may treo. Cuu nan thi cuoc goi phai di truong.
+     * 112/113/114/115 la ma ngan chi phuc vu THOAI. Ban cu dung o day tung
+     * gui SMS toa do loi goi: tin nhan do khong den tay ai cua tong dai,
+     * `dispatchSms` lai cho nha mang xac nhan toi 20 giay, nen nguoi dung bam
+     * 113 bi ket trong mot man hinh "dang gui SMS" trong khi dang can noi.
+     * Toa do chi co gia tri khi no den tay nguoi that — so nguoi than trong
+     * Cai dat.
+     *
+     * THU TU VAN LA GOI TRUOC, SMS SAU: cuu nan thi cuoc goi phai di truong.
      */
     suspend fun sendSosToRescueForce(
         hotline: String,
@@ -290,8 +295,7 @@ class SmartSosDispatcher(
         startCall: Boolean = true
     ): SosDispatchResult {
         val startedRealCall = if (startCall) smsManager.makeDirectEmergencyCall(hotline) else false
-        val result = smsManager.sendEmergencySmsToRescue(
-            hotline = hotline,
+        val result = smsManager.sendEmergencySmsToFamily(
             latitude = location.latitude,
             longitude = location.longitude,
             senderName = senderName,
@@ -303,24 +307,37 @@ class SmartSosDispatcher(
             "${SosPlan.REDIRECTING_TO_RESCUE} — đang gọi trực tiếp $hotline…"
         else
             "${SosPlan.REDIRECTING_TO_RESCUE} — đã mở bàn phím gọi $hotline (bấm gọi để kết nối)."
-        // Báo đúng nội dung đã gửi cho tổng đài: chỉ nói "kèm tọa độ" khi SMS thật có tọa độ hợp lệ.
+        // Báo đúng nội dung đã gửi: chi noi "kèm tọa độ" khi SMS that co toa do hop le.
         val locNote = if (result.locationIncluded) "tọa độ cứu nạn" else "SMS cứu nạn KHÔNG kèm vị trí GPS (ghi rõ không xác định được vị trí)"
+        // SMS di den so nguoi than, khong phai tong dai — noi ro de khong ai
+        // tuong tong dai da nhan duoc toa do.
+        val smsTargetNote = if (result.isSuccess || result.status == SmsStatus.QUEUED)
+            "đã gửi $locNote tới số người thân đã lưu"
+        else
+            "KHÔNG gửi được SMS tới số người thân: ${result.errorMessage ?: "lỗi không rõ"}"
 
-        return when (result.status) {
-            SmsStatus.SENT -> SosDispatchResult(
+        return when {
+            result.status == SmsStatus.SENT -> SosDispatchResult(
                 isSuccess = true,
                 channel = SosChannelUsed.FALLBACK_SMS,
-                detailMessage = "Đã gửi SMS $locNote tới $hotline. $callNote"
+                detailMessage = "$callNote — $smsTargetNote."
             )
-            SmsStatus.QUEUED -> SosDispatchResult(
+            result.status == SmsStatus.QUEUED -> SosDispatchResult(
                 isSuccess = true,
                 channel = SosChannelUsed.FALLBACK_SMS,
-                detailMessage = "SMS $locNote tới $hotline đang chờ nhà mạng xác nhận. $callNote"
+                detailMessage = "$callNote — $smsTargetNote, đang chờ nhà mạng xác nhận."
+            )
+            // Cuoc goi van duoc mo nen tong van de isSuccess = true; chi la
+            // khong duoc noi gian toa do da den noi dan.
+            startedRealCall -> SosDispatchResult(
+                isSuccess = true,
+                channel = SosChannelUsed.FALLBACK_SMS,
+                detailMessage = "$callNote — $smsTargetNote."
             )
             else -> SosDispatchResult(
-                isSuccess = true, // cuộc gọi vẫn được mở; chỉ SMS lỗi
+                isSuccess = false,
                 channel = SosChannelUsed.FALLBACK_SMS,
-                detailMessage = "$callNote (Không gửi được SMS: ${result.errorMessage ?: "lỗi không rõ"})"
+                detailMessage = "Chưa mở được cuộc gọi $hotline và $smsTargetNote."
             )
         }
     }

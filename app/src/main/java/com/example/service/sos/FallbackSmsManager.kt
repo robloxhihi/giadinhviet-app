@@ -181,29 +181,6 @@ class FallbackSmsManager(private val context: Context) {
         return dispatchSms(targetPhone, "[GĐ VIỆT CHAT] $senderName: $messageText")
     }
 
-    suspend fun sendEmergencySmsToRescue(
-        hotline: String,
-        latitude: Double,
-        longitude: Double,
-        senderName: String,
-        details: String = "Cần cứu hộ khẩn cấp tại vị trí này!",
-        accuracyMeters: Float = 0f,
-        fixTimeMillis: Long = 0L
-    ): SmsSendResult {
-        val hasFix = hasPlausibleFix(latitude, longitude)
-        val locPart = if (!hasFix) {
-            noFixLabel()
-        } else {
-            "Toa do: https://maps.google.com/?q=%.6f,%.6f".format(latitude, longitude) +
-                    (if (accuracyMeters > 0f)
-                        " ±${FixPrecision.honestAccuracyMeters(accuracyMeters).toInt()}m" else "") +
-                    (if (fixTimeMillis > 0L) " (lay luc ${fmtTime(fixTimeMillis)})" else "")
-        }
-        val body = "[SOS CUU HO $hotline] $senderName can cuu ho! $locPart. " +
-                "Dien thoai: ${senderPhoneOrUnknown()}. $details"
-        return dispatchSms(hotline, body, locationIncluded = hasFix)
-    }
-
     /**
      * Gọi khẩn cấp: `ACTION_CALL` khi quyen CALL_PHONE DA duoc cap that luc bam,
      * nguoc lai `ACTION_DIAL`.

@@ -106,18 +106,24 @@ class SosBrandingRegressionTest {
     }
 
     /**
-     * (4) Thu tu cuu 113: MO BAN QUAY SO TRUOC, SMS toa do di sau. Dao nguoc
-     * lai thi nguoi dung bam 113 va cho toi 20 giay.
+     * (4) Thu tu cuu 113: MO BAN QUAY SO TRUOC, toa do di SMS SAU — va SMS do
+     * phai den SO NGUOI THAN, khong den tong dai. 112/113/114/115 la ma ngan
+     * thoai: SMS toa do gui den do khong den tay ai, lai con cho xac nhan toi
+     * 20 giay nen nguoi dung bam 113 bi ket giua man hinh.
      */
     @Test
-    fun goiTongDaiXTruocKhiGuiSms() {
+    fun goiTongDaiXTruocRoiToaDoDiSoNguoiThan() {
         val dispatcher = readUtf8(projectFile(sosService + "SmartSosDispatcher.kt"))
         val body = dispatcher.substringAfter("suspend fun sendSosToRescueForce")
         val callAt = body.indexOf("makeDirectEmergencyCall")
-        val smsAt = body.indexOf("sendEmergencySmsToRescue")
+        val smsAt = body.indexOf("sendEmergencySmsToFamily")
         assertTrue("Không còn mở cuộc gọi trong sendSosToRescueForce", callAt >= 0)
-        assertTrue("Không còn gửi SMS cứu hộ", smsAt >= 0)
+        assertTrue("Không còn gửi SMS toạ độ cho người thân", smsAt >= 0)
         assertTrue("Phai mo cuoc goi TRUOC khi gui SMS toa do", callAt < smsAt)
+        assertTrue(
+            "Khong duoc gui SMS toi chinh tong dai (toa do phai ve so nguoi than)",
+            !body.contains("sendEmergencySmsToRescue")
+        )
         assertTrue(
             "Phai co duong bat tuy khi ben goi da mo ban quay so truoc do",
             dispatcher.contains("startCall: Boolean")

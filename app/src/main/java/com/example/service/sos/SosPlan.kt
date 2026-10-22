@@ -223,25 +223,6 @@ object SosPlan {
         }
     }
 
-    /**
-     * Tin ngan gui tong dai: SMS den 113 thuong bi gioi han do dai va khong ai
-     * doc du mot doan dai o tong dai. Van du bo ba toa do - kinh do - dia diem.
-     */
-    fun hotlineSmsBody(hotline: String, position: Position): String {
-        val name = position.senderName.ifBlank { "Người dân" }
-        return buildString {
-            append("[SOS $hotline] $name cần cứu nạn. ")
-            if (position.hasFix) {
-                append("$LATITUDE_LABEL ${plainLatitude(position)}, $LONGITUDE_LABEL ${plainLongitude(position)}. ")
-                append("$ADDRESS_LABEL ${readableAddress(position)}. ")
-                append("https://maps.google.com/?q=%.6f,%.6f".format(position.latitude, position.longitude))
-            } else {
-                append("$LATITUDE_LABEL ${UNKNOWN_POSITION}, $LONGITUDE_LABEL ${UNKNOWN_POSITION}, ")
-                append("$ADDRESS_LABEL ${UNKNOWN_POSITION}.")
-            }
-        }
-    }
-
     // ── (4) Doc bang Tieng Viet sau 2 giay ────────────────────────────────
 
     /**

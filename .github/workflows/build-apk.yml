@@ -181,3 +181,18 @@ jobs:
           Cai dat -> Tro nang tiep can -> Gia Dinh Viet.
 
           Trang gioi thieu: https://giadinhviet-9eud03puq7u.qoder.website
+
+    # SHA-1/SHA-256 tu dong vao Firebase: chu ky (can cho "Dang nhap Google")
+    # va hash cua chinh file APK (de web/app doi chieu file tai ve).
+    # Chay khi co FIREBASE_SA_JSON; khong co secret thi in mot thong bao roi
+    # bo qua — build va release van xanh, khong gia nan da ghi duoc.
+    - name: Ghi SHA cua ban APK vao Firebase
+      if: startsWith(github.ref, 'refs/tags/v')
+      env:
+        FIREBASE_SA_JSON: ${{ secrets.FIREBASE_SA_JSON }}
+      run: |
+        KT_OUT="$(keytool -list -v -keystore debug.keystore -storepass android 2>/dev/null)"
+        CERT_SHA1="$(printf '%s\n' "$KT_OUT" | sed -n 's/^[[:space:]]*SHA1: //p' | head -1)"
+        CERT_SHA256="$(printf '%s\n' "$KT_OUT" | sed -n 's/^[[:space:]]*SHA256: //p' | head -1)"
+        echo "Chu ky debug: SHA1=${CERT_SHA1:-<khong doc duoc>}"
+        CERT_SHA1="$CERT_SHA1" CERT_SHA256="$CERT_SHA256" node scripts/firebase-release-attest.mjs GiaDinhViet.apk "$GITHUB_REF_NAME"
