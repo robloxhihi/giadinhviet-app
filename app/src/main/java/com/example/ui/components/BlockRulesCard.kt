@@ -771,6 +771,7 @@ private fun SaveRow(
                 text = "Đang ghi xuống máy chủ…",
                 tone = Tone.Info
             )
+            BlockRulesSaveState.Saved -> when {
                 // "Áp dụng ngay" la sai khi may dang o che do nhac nho hoac
                 // chua bat Tro nang — day chinh la ly do nguoi dung bam tich
                 // xong thay app van chay binh thuong va tuong bo chan bi hong.
