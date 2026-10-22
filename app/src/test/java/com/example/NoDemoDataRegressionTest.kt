@@ -469,4 +469,54 @@ class NoDemoDataRegressionTest {
         val screen = stripComments(readUtf8(projectFile("src/main/java/com/example/ui/screens/ScreenTimeScreen.kt")))
         assertTrue("Danh thiếp phải nói rõ dữ liệu còn mới", screen.contains("isLive = partnerLoc.updatedAt > 0L"))
     }
+
+    // ── 19. Ket luan cua mang/GPS khong duoc bi xoa khi dang xuat ───────────
+
+    /**
+     * `NetworkMonitor` chi phat mot lan khi gia tri THAY DOI. tren BlueStacks
+     * mang da "Online" tu truoc luc app mo, con lan goi dau tien cua
+     * `addAuthStateListener` (Firebase 24.x) lai den TREM cac collector trong
+     * `init` — nen mot `VesperaUiState()` tron ven o nhanh dang xuat xoa mat
+     * ket luan mang VINH VIEN: khung chat bao "Chưa kiểm tra được kết nối mạng"
+     * tren may van co mang, khong bao gio tu hoi lai. Reset phai copy.
+     */
+    @Test
+    fun logoutResetKeepsMonitorVerdicts() {
+        val vm = stripComments(readUtf8(projectFile("src/main/java/com/example/ui/viewmodel/VesperaViewModel.kt")))
+        assertTrue("Phải giữ kết luận mạng khi đăng xuất", vm.contains("isOnline = keep.isOnline"))
+        assertTrue("Phải giữ kết luận VPN khi đăng xuất", vm.contains("isVpnActive = keep.isVpnActive"))
+        assertTrue("Phải giữ kết luận dịch vụ định vị",
+            vm.contains("isLocationServicesEnabled = keep.isLocationServicesEnabled"))
+        assertTrue("Phải giữ các quyền đã đọc", vm.contains("permissionSnapshot = keep.permissionSnapshot"))
+        assertTrue("Không còn dựng UiState trắng ở nhánh đăng xuất",
+            !vm.contains("VesperaUiState(isAuthenticated = false)"))
+    }
+
+    /**
+     * O nhap key AI la noi dan chuoi mo duoc tien. Hien ro key thi khong kiem
+     * tra duoc nhung bi quay man hinh/doi mat ke ben thu duoc; mac dinh phai
+     * che va co nut bo che khi nguoi dung muon xem lai.
+     */
+    @Test
+    fun aiKeyFieldMasksTheKeyByDefault() {
+        val chat = stripComments(readUtf8(projectFile("src/main/java/com/example/ui/screens/AiChatScreen.kt")))
+        assertTrue("Khoá AI phải nhập dạng che", chat.contains("PasswordVisualTransformation()"))
+        assertTrue("Phải có nút hiện/ẩn khoá", chat.contains("var keyVisible by remember { mutableStateOf(false) }"))
+    }
+
+    /**
+     * O dang nhap hoi TEN tai khoan, nguoi dung hay dan ca email da dang ky.
+     * Noi thuong ra `me@giadinhviet.vn@giadinhviet.vn` va Firebase bao "The
+     * email address is badly formatted" — loi do khong he noi sai o dau. Hai
+     * duong dang nhap/dang ky phai qua cung mot ham gop duoi bi.
+     */
+    @Test
+    fun usernameEmailSuffixIsNeverDoubled() {
+        val vm = stripComments(readUtf8(projectFile("src/main/java/com/example/ui/viewmodel/VesperaViewModel.kt")))
+        val joined = Regex("val email = \"\\$username@giadinhviet\\.vn\"").findAll(vm).count()
+        assertTrue("Còn chỗ tự nối đuôi email mà không kiểm tra: $joined", joined == 0)
+        val shared = Regex("val email = emailForUsername\\(username\\)").findAll(vm).count()
+        assertTrue("Cả đăng nhập lẫn đăng ký phải dùng chung một hàm ghép", shared == 2)
+        assertTrue("Phải gỡ đuôi thừa trước khi nối", vm.contains("name.endsWith(EMAIL_SUFFIX, ignoreCase = true)"))
+    }
 }

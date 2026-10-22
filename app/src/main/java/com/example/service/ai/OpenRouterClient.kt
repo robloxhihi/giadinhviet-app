@@ -9,9 +9,11 @@ import kotlinx.coroutines.withContext
  * Goi OpenRouter (`https://openrouter.ai/api/v1/chat/completions`) bang
  * HttpURLConnection — cung kieu goi nhu `GeminiClient`, khong them dependency.
  *
- * Dung cho nhung model Google khong co: DeepSeek va GLM bang `*-free`
- * (khong ton tien). `model` lay nguyen chuoi cua OpenRouter, vi du
- * `deepseek/deepseek-v4-flash-free`.
+ * Dung cho nhung model Google khong co: DeepSeek va GLM. `model` lay nguyen
+ * chuoi cua OpenRouter da duoc doi chieu voi `GET /api/v1/models`, vi du
+ * `deepseek/deepseek-v4-flash`. Chu y: cac id duoi `*-free` ma co dang ban
+ * tra phi (nhung id nay khong ton tai tren danh muc ngay 2026-10-22), nen
+ * dung doan la co ban mien phi — phai lay id that trong danh muc.
  *
  * Key di bang `Authorization: Bearer`, khong nam trong URL (URL de bi ghi vao
  * log tai lieu mang). Payload dung dung `AiPrompt.system` nhu Gemini de moi

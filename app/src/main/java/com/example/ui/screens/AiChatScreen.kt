@@ -25,6 +25,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.DeleteSweep
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -48,6 +50,8 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -102,6 +106,7 @@ fun AiChatScreen(
     val model = AiModels.find(modelId)
     var key by remember(modelId) { mutableStateOf(AiModels.keyFor(context, model)) }
     var keyDraft by remember { mutableStateOf("") }
+    var keyVisible by remember { mutableStateOf(false) }
     var showStats by remember { mutableStateOf(false) }
 
     val stats = remember(turns.size, busy) { usage.summaryForAi() }
@@ -246,6 +251,21 @@ fun AiChatScreen(
                         },
                         modifier = Modifier.fillMaxWidth().testTag("ai_key_field"),
                         singleLine = true,
+                        // An key khi go: key AI mo duoc tien va duoc doc truyen
+                        // tay, ma man hinh nhap key cung hay bi chup lai.
+                        visualTransformation = if (keyVisible)
+                            VisualTransformation.None else PasswordVisualTransformation(),
+                        trailingIcon = {
+                            IconButton(onClick = { keyVisible = !keyVisible }) {
+                                Icon(
+                                    imageVector = if (keyVisible) Icons.Default.VisibilityOff
+                                    else Icons.Default.Visibility,
+                                    contentDescription = if (keyVisible) "Ẩn khoá" else "Hiện khoá",
+                                    tint = TextMuted,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                        },
                         shape = RoundedCornerShape(18.dp),
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedBorderColor = NeonCyan,

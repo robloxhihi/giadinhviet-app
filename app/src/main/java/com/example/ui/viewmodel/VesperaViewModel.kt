@@ -64,6 +64,10 @@ import java.util.UUID
 
 private const val TAG = "VesperaViewModel"
 
+// Ten tai khoan trong o dang nhap chi la phia truoc `@`; duoi nay app noi vao
+// truoc khi goi Firebase.
+private const val EMAIL_SUFFIX = "@giadinhviet.vn"
+
 data class VesperaUiState(
     val isLoading: Boolean = false,
     val isAuthenticated: Boolean = false,
@@ -290,7 +294,29 @@ class VesperaViewModel(
                 startObservingUserData(user.uid)
             } else {
                 stopAllObservers()
-                _uiState.value = VesperaUiState(isAuthenticated = false)
+                // `NetworkMonitor` chi phat mot lan khi gia tri THAY DOI, nen
+                // reset ca VesperaUiState() khi chu ket noi van la "Online" se
+                // xoa mat ket luan mang va khong bao gio co lai nua — khung
+                // chat dung im bao "Chưa kiểm tra được kết nối mạng" tren may
+                // van co mang. Giu lai cac ket luan do may tu do: mang, VPN,
+                // dinh vi, quyen, mau giao dien.
+                val keep = _uiState.value
+                _uiState.value = VesperaUiState(
+                    isAuthenticated = false,
+                    isDarkMode = keep.isDarkMode,
+                    colorTheme = keep.colorTheme,
+                    hasUsagePermission = keep.hasUsagePermission,
+                    hasLocationPermission = keep.hasLocationPermission,
+                    hasSmsPermission = keep.hasSmsPermission,
+                    hasNotificationPermission = keep.hasNotificationPermission,
+                    hasOverlayPermission = keep.hasOverlayPermission,
+                    hasBackgroundLocationPermission = keep.hasBackgroundLocationPermission,
+                    hasCallPermission = keep.hasCallPermission,
+                    isLocationServicesEnabled = keep.isLocationServicesEnabled,
+                    isVpnActive = keep.isVpnActive,
+                    permissionSnapshot = keep.permissionSnapshot,
+                    isOnline = keep.isOnline
+                )
             }
         }
 
@@ -920,8 +946,19 @@ class VesperaViewModel(
         }
     }
 
+    /**
+     * O dang nhap chi hoi ten tai khoản, nhung nguoi dung hay dan ca email
+     * da dang ky. Noi thuong ra `me@giadinhviet.vn@giadinhviet.vn` va
+     * Firebase bao "The email address is badly formatted" — loi do khong he
+     * noi sai o dau, nen phai go bo duoi bi thua truoc khi noi.
+     */
+    private fun emailForUsername(raw: String): String {
+        val name = raw.trim()
+        return if (name.endsWith(EMAIL_SUFFIX, ignoreCase = true)) name else "$name$EMAIL_SUFFIX"
+    }
+
     fun signInWithUsername(username: String, pass: String, selectedRole: UserRole) {
-        val email = "$username@giadinhviet.vn"
+        val email = emailForUsername(username)
         if (username.isBlank() || pass.isBlank()) {
             _uiState.value = _uiState.value.copy(errorMessage = "Vui lòng nhập đầy đủ tên tài khoản và mật khẩu.")
             return
@@ -970,7 +1007,7 @@ class VesperaViewModel(
     }
 
     fun signUpWithUsername(username: String, pass: String, selectedRole: UserRole) {
-        val email = "$username@giadinhviet.vn"
+        val email = emailForUsername(username)
         if (username.isBlank() || pass.isBlank()) {
             _uiState.value = _uiState.value.copy(errorMessage = "Vui lòng nhập đầy đủ tên tài khoản và mật khẩu.")
             return
