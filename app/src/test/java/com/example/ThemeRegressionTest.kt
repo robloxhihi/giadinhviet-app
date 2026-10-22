@@ -19,6 +19,11 @@ class ThemeRegressionTest {
 
     private fun read(rel: String): String = projectFile("src/main/java/com/example/$rel").readText()
 
+    /** Bo comment de chu giai thich khong bi tinh la code that. */
+    private fun code(src: String): String = src
+        .replace(Regex("/\\*[\\s\\S]*?\\*/"), "")
+        .replace(Regex("//[^\\n]*"), "")
+
     private val themeApi = read("ui/theme/Theme.kt")
     private val palettes = read("ui/theme/PremiumTheme.kt")
     private val tokens = read("ui/theme/Color.kt")
@@ -76,21 +81,23 @@ class ThemeRegressionTest {
      */
     @Test
     fun nenKhongConVeLaiMoiFrame() {
+        val code = code(palettes)
         assertFalse(
             "Nen van con rememberInfiniteTransition — app rung khi cuon",
-            palettes.contains("rememberInfiniteTransition")
+            code.contains("rememberInfiniteTransition")
         )
-        assertFalse("Nen van con animateFloat", palettes.contains("animateFloat"))
+        assertFalse("Nen van con animateFloat", code.contains("animateFloat"))
     }
 
     @Test
     fun anhNenDuocGiaiMaNgoaiMainTo() {
+        val code = code(palettes)
         assertFalse(
             "painterResource giai ma anh lon ngay trong frame dau",
-            palettes.contains("painterResource")
+            code.contains("painterResource")
         )
-        assertTrue("Phai co ham giai ma bat dong bo", palettes.contains("fun asyncWallpaper("))
-        assertTrue("Phai giai ma tren Dispatchers.IO", palettes.contains("withContext(Dispatchers.IO)"))
-        assertTrue("Phai dung RGB_565 de giam nua bo nho", palettes.contains("Bitmap.Config.RGB_565"))
+        assertTrue("Phai co ham giai ma bat dong bo", code.contains("fun asyncWallpaper("))
+        assertTrue("Phai giai ma tren Dispatchers.IO", code.contains("withContext(Dispatchers.IO)"))
+        assertTrue("Phai dung RGB_565 de giam nua bo nho", code.contains("Bitmap.Config.RGB_565"))
     }
 }
