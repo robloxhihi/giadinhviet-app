@@ -245,7 +245,7 @@ fun AiChatScreen(
                         placeholder = {
                             Text(
                                 if (model.provider == AiModel.Provider.OPENROUTER)
-                                    "Dán khoá openrouter.ai vào đây" else "Dán khoá AI Studio vào đây",
+                                    "Dán khoá orcarouter.ai vào đây" else "Dán khoá AI Studio vào đây",
                                 color = TextMuted, fontSize = 13.sp
                             )
                         },

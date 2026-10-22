@@ -333,25 +333,36 @@ class FixRegressionTest {
     fun modelPickerSendsToTheModelUserChose() {
         val models = projectFile("src/main/java/com/example/service/ai/AiModels.kt").readText()
         listOf(
-            "deepseek/deepseek-v4.1-flash",
-            "deepseek/deepseek-v4-flash",
-            "z-ai/glm-5.3-flash"
+            "deepseek/deepseek-v4-flash-free",
+            "deepseek/deepseek-v4.1-flash-free",
+            "z-ai/glm-5.3-flash-free"
         ).forEach { id ->
             assertTrue("Bo chon model phai co $id", models.contains("\"$id\""))
         }
-        // OpenRouter dung duoi `:free` cho ban khong tien; `...-free` la doan
-        // ten nguoi dung che tu chu UI, goi thang no thi API tra 404 va model
-        // do khong bao gio tra loi — dung ten co that trong catalog.
-        assertTrue("Khong duoc co ten model dang `-free`", !models.contains("-free\""))
+        // Orcarouter dung hau to `-free` cho ban khong tien (KHONG phai `:free`
+        // nhu OpenRouter). Truoc day phat biểu ngươc lại — rằng `-free` la ten
+        // bịa — va chinh phat biểu đó là lý do danh muc model trong app chi toan
+        // model dem tien. Do lai tren `GET /v1/models` cua orcarouter.ai.
+        assertTrue("Phai co model duoi `-free` cua Orcarouter", models.contains("-free\""))
         assertTrue("Gemini van phai o trong bo chon", models.contains("AiModel.Provider.GEMINI"))
         assertTrue("Chon model phai luu lai tren may", models.contains("FIELD_SELECTED"))
         assertTrue("Goi dung model duoc chon, khong thu lan luot",
             models.contains("OpenRouterClient.chat(apiKey, model.id"))
 
         val chat = projectFile("src/main/java/com/example/service/ai/OpenRouterClient.kt").readText()
-        assertTrue("Key OpenRouter phai di bang header Bearer",
+        assertTrue("Phai goi dung host Orcarouter, khong phai OpenRouter",
+            chat.contains("https://www.orcarouter.ai/v1/chat/completions"))
+        assertTrue("Cam goi nham host OpenRouter", !chat.contains("https://openrouter.ai/"))
+        assertTrue("Key Orcarouter phai di bang header Bearer",
             chat.contains("setRequestProperty(\"Authorization\", \"Bearer \$apiKey\")"))
-        assertTrue("Cam dua key vao URL", !chat.contains("openrouter.ai/api/v1/chat/completions?"))
+        assertTrue("Cam dua key vao URL", !chat.contains("orcarouter.ai/v1/chat/completions?"))
+        // Model `-free` cua Orcarouter la model suy ly: chung an token vao
+        // `reasoning_content` truoc khi tra `content`. max_tokens nho thi API
+        // van 200 ma `content` rong = chat trang xoan.
+        assertTrue("max_tokens phai du lon cho model suy ly",
+            Regex("\"max_tokens\" to (\\d{4,})").containsMatchIn(chat))
+        assertTrue("Phai phao khi noi dung trong",
+            chat.contains("trả về nội dung trống") || chat.contains("bị cắt vì quá dài"))
         assertTrue("Phai chay tren IO thread", chat.contains("withContext(Dispatchers.IO)"))
         assertTrue("Cung mot khuon trinh bay cho moi model", chat.contains("AiPrompt.system(stats)"))
         assertTrue("Lich su Gemini phai doi sang ngon ngu OpenRouter",

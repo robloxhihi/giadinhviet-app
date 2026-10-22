@@ -6,14 +6,25 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 
 /**
- * Goi OpenRouter (`https://openrouter.ai/api/v1/chat/completions`) bang
+ * Goi Orcarouter (`https://www.orcarouter.ai/v1/chat/completions`) bang
  * HttpURLConnection — cung kieu goi nhu `GeminiClient`, khong them dependency.
  *
+ * Ten object van giu `OpenRouterClient` vi doi ten no keo theo ba noi test dang
+ * mo filepath; dieu quan trong da duoc sua: host that la orcarouter.ai, chu
+ * khong phai openrouter.ai. Goi nham host thi key that bi tu choi 401
+ * "Invalid API key" va moi luong AI cua app che't — day la loi da phat hien khi
+ * do lai vao ngay 2026-10-22.
+ *
  * Dung cho nhung model Google khong co: DeepSeek va GLM. `model` lay nguyen
- * chuoi cua OpenRouter da duoc doi chieu voi `GET /api/v1/models`, vi du
- * `deepseek/deepseek-v4-flash`. Chu y: cac id duoi `*-free` ma co dang ban
- * tra phi (nhung id nay khong ton tai tren danh muc ngay 2026-10-22), nen
- * dung doan la co ban mien phi — phai lay id that trong danh muc.
+ * chuoi id cua Orcarouter da doi chieu voi `GET https://www.orcarouter.ai/v1/models`
+ * (209 model ngay 2026-10-22). Ban mien phi mang hau to `-free`, KHONG phai
+ * `:free` nhu OpenRouter — dung sai dau phay la API khong hieu ten do.
+ *
+ * Lu y ky thuat: cac model `-free` cua Orcarouter la MODEL SUY LY, chung tra
+ * `reasoning_content` truoc roi moi den `content`. Da do: `tencent/hy3-free` voi
+ * max_tokens = 300 dung het 300 token cho phan suy ly, tra `content` rong voi
+ * `finish_reason: length` trong van HTTP 200. Vi vay `max_tokens` o day phai du
+ * lon va `handle` phao ra khi noi dung trong, khong duoc im lang tra chat trang.
  *
  * Key di bang `Authorization: Bearer`, khong nam trong URL (URL de bi ghi vao
  * log tai lieu mang). Payload dung dung `AiPrompt.system` nhu Gemini de moi
@@ -22,7 +33,7 @@ import kotlinx.coroutines.withContext
  */
 object OpenRouterClient {
 
-    private const val ENDPOINT = "https://openrouter.ai/api/v1/chat/completions"
+    private const val ENDPOINT = "https://www.orcarouter.ai/v1/chat/completions"
 
     private val moshi = Moshi.Builder().build()
     private val mapAdapter = moshi.adapter(Map::class.java)
@@ -37,12 +48,12 @@ object OpenRouterClient {
         if (!AiKey.isUsable(apiKey)) {
             return Result.failure(
                 GeminiClient.AiException(
-                    "Chưa có khoá OpenRouter. Nhập khoá để gọi ${model}."
+                    "Chưa có khoá Orcarouter. Nhập khoá để gọi ${model}."
                 )
             )
         }
         return withContext(Dispatchers.IO) {
-            var lastError = "Không gọi được OpenRouter."
+            var lastError = "Không gọi được Orcarouter."
             for (attempt in 1..2) {
                 when (val outcome = once(apiKey, model, history, question, stats)) {
                     is Call.Ok -> return@withContext Result.success(outcome.text)
@@ -80,7 +91,7 @@ object OpenRouterClient {
                 setRequestProperty("Content-Type", "application/json; charset=UTF-8")
                 setRequestProperty("Authorization", "Bearer $apiKey")
                 setRequestProperty("User-Agent", "VesperaFamilySafe")
-                // OpenRouter dung hai header nay de dem thong ke ung dung;
+                // Orcarouter dung hai header nay de dem thong ke ung dung;
                 // khong co thi van goi duoc, co thi khong bi tu choi.
                 setRequestProperty("X-Title", "Gia Dinh Viet")
             }
@@ -91,7 +102,7 @@ object OpenRouterClient {
             conn.disconnect()
             handle(code, raw)
         } catch (e: java.io.IOException) {
-            Call.Retryable("Không kết nối được tới OpenRouter (${e.javaClass.simpleName}). Kiểm tra Internet rồi thử lại.")
+            Call.Retryable("Không kết nối được tới Orcarouter (${e.javaClass.simpleName}). Kiểm tra Internet rồi thử lại.")
         } catch (e: Exception) {
             Call.Fatal("Không đọc được phản hồi AI: ${e.javaClass.simpleName}")
         }
@@ -113,9 +124,9 @@ object OpenRouterClient {
         val error = json?.get("error") as? Map<*, *>
         val detail = (error?.get("message") as? String)?.take(220).orEmpty()
         val friendly = when (code) {
-            401, 403 -> "Khoá OpenRouter không dùng được. Kiểm tra lại khoá (HTTP $code)."
-            402 -> "Tài khoản OpenRouter hết hạn mức cho model này, hoặc model miễn phí đã hết suất trong ngày."
-            404 -> "Model không tồn tại trên OpenRouter, hoặc khoá này không được dùng model đó."
+            401, 403 -> "Khoá Orcarouter không dùng được. Kiểm tra lại khoá (HTTP $code)."
+            402 -> "Tài khoản Orcarouter hết hạn mức cho model này, hoặc model miễn phí đã hết suất trong ngày."
+            404 -> "Model không tồn tại trên Orcarouter, hoặc khoá này không được dùng model đó."
             429 -> "Đã gọi hơi nhiều trong vài phút. Chờ một chút rồi gửi lại."
             else -> "Máy chủ AI trả lỗi HTTP $code."
         }
@@ -127,7 +138,7 @@ object OpenRouterClient {
 
     /** Tach rieng de test doi chieu duoc payload ma khong goi mang. */
     fun buildBody(model: String, history: List<ChatTurn>, question: String, stats: String): Map<String, Any> {
-        // `ChatTurn` luu theo ngon ngu cua Gemini ("model"); OpenRouter goi
+        // `ChatTurn` luu theo ngon ngu cua Gemini ("model"); Orcarouter goi
         // tro ly la "assistant", nen phai doi ngay khi don — neu khong lich su
         // chat bi hieu thanh mot chuoi tin nhan cua cung mot phia.
         val messages = mutableListOf<Map<String, Any>>(
@@ -141,7 +152,7 @@ object OpenRouterClient {
             "model" to model,
             "messages" to messages,
             "temperature" to 0.7,
-            "max_tokens" to 900,
+            "max_tokens" to 1600,
             "stream" to false
         )
     }
