@@ -30,7 +30,7 @@ private fun PremiumPalette.toColorScheme() = if (isDark) {
         onPrimary = TextOnAccent,
         primaryContainer = DarkPrimaryContainer,
         onPrimaryContainer = DarkOnPrimaryContainer,
-        secondary = cyan,
+        secondary = accent,
         onSecondary = Color(0xFF04202B),
         secondaryContainer = Color(0x332E7DF7),
         onSecondaryContainer = textPrimary,
@@ -58,7 +58,7 @@ private fun PremiumPalette.toColorScheme() = if (isDark) {
         onPrimary = TextOnAccent,
         primaryContainer = Color(0xFFDCE9FF),
         onPrimaryContainer = Color(0xFF123A7A),
-        secondary = cyan,
+        secondary = accent,
         onSecondary = TextOnAccent,
         secondaryContainer = Color(0x332E7DF7),
         onSecondaryContainer = textPrimary,
@@ -80,33 +80,16 @@ private fun PremiumPalette.toColorScheme() = if (isDark) {
     )
 }
 
-/** Re-tints the active skin so the "Giao diện" picker keeps working. */
-private fun PremiumPalette.tinted(accent: Color, accentBright: Color, secondary: Color): PremiumPalette =
-    copy(
-        primary = accent,
-        primaryBright = accentBright,
-        cyan = secondary,
-        primaryGradient = listOf(accentBright, accent),
-        accentGradient = listOf(secondary, accentBright)
-    )
-
-fun premiumPaletteFor(darkTheme: Boolean, colorTheme: String): PremiumPalette {
-    val base = if (darkTheme) SpaceNightPalette else DreamyNaturePalette
-    return when (colorTheme) {
-        "emerald" -> base.tinted(Color(0xFF12A150), Color(0xFF3BD27C), Color(0xFF3BD27C))
-        "sunset" -> base.tinted(Color(0xFFE8734A), Color(0xFFFF9E6B), Color(0xFFFBBF24))
-        "purple" -> base.tinted(Color(0xFF7C5CFF), Color(0xFFA88BFF), Color(0xFF4CC9F0))
-        else -> base
-    }
-}
+/** Chỉ còn hai giao diện: tối hoặc sáng. */
+fun premiumPaletteFor(darkTheme: Boolean): PremiumPalette =
+    if (darkTheme) SpaceNightPalette else DreamyNaturePalette
 
 @Composable
 fun MyApplicationTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
-    colorTheme: String = "blue",
     content: @Composable () -> Unit
 ) {
-    val palette = remember(darkTheme, colorTheme) { premiumPaletteFor(darkTheme, colorTheme) }
+    val palette = remember(darkTheme) { premiumPaletteFor(darkTheme) }
     val colorScheme = remember(palette) { palette.toColorScheme() }
 
     CompositionLocalProvider(LocalPremiumPalette provides palette) {

@@ -143,7 +143,7 @@ fun InsightsScreen(
                     strokeWidth = 12.dp,
                     colors = when {
                         focusScore == null -> listOf(TextMuted, TextMuted)
-                        focusScore >= 75f -> listOf(Premium.emerald, Premium.cyan)
+                        focusScore >= 75f -> listOf(Premium.emerald, Premium.accent)
                         focusScore >= 50f -> Premium.primaryGradient
                         else -> listOf(Premium.amber, Premium.rose)
                     }
@@ -199,7 +199,7 @@ fun InsightsScreen(
                         "Chưa đặt mục tiêu phút/ngày — soạn ở màn Nội quy"
                     else "Mục tiêu mỗi ngày: $target phút",
                     icon = Icons.Default.Schedule,
-                    tint = Premium.cyan
+                    tint = Premium.accent
                 )
                 Spacer(modifier = Modifier.height(16.dp))
                 WeeklyBarChart(

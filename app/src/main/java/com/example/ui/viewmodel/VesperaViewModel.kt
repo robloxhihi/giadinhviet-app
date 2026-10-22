@@ -74,7 +74,6 @@ data class VesperaUiState(
     val isIosPreviewMode: Boolean = false,
     val isBackgroundServiceRunning: Boolean = false,
     val isDarkMode: Boolean = true,
-    val colorTheme: String = "blue",
     val focusSessionMinutesRemaining: Int = 0,
     /** Giay con lai cua phien Pomodoro — dong ho phai nhay tung giay. */
     val focusSessionSecondsRemaining: Int = 0,
@@ -304,7 +303,6 @@ class VesperaViewModel(
                 _uiState.value = VesperaUiState(
                     isAuthenticated = false,
                     isDarkMode = keep.isDarkMode,
-                    colorTheme = keep.colorTheme,
                     hasUsagePermission = keep.hasUsagePermission,
                     hasLocationPermission = keep.hasLocationPermission,
                     hasSmsPermission = keep.hasSmsPermission,
@@ -2019,10 +2017,6 @@ class VesperaViewModel(
 
     fun setDarkMode(enabled: Boolean) {
         _uiState.value = _uiState.value.copy(isDarkMode = enabled)
-    }
-
-    fun setColorTheme(themeName: String) {
-        _uiState.value = _uiState.value.copy(colorTheme = themeName)
     }
 
     fun dismissSosAlert() {

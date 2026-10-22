@@ -170,7 +170,7 @@ fun LocationHistoryScreen(
         }
 
         // ── Route trace ───────────────────────────────────────────────────
-        GlassCard(modifier = Modifier.fillMaxWidth(), glow = Premium.cyan, contentPadding = 0.dp) {
+        GlassCard(modifier = Modifier.fillMaxWidth(), glow = Premium.accent, contentPadding = 0.dp) {
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -185,7 +185,7 @@ fun LocationHistoryScreen(
                         )
                     )
             ) {
-                val accentCyan = Premium.cyan
+                val accentInk = Premium.accent
                 val accentViolet = Premium.violet
                 val accentEmerald = Premium.emerald
                 Canvas(modifier = Modifier.fillMaxSize()) {
@@ -239,7 +239,7 @@ fun LocationHistoryScreen(
                     )
                     drawPath(
                         path = path,
-                        brush = Brush.horizontalGradient(listOf(accentCyan, accentViolet)),
+                        brush = Brush.horizontalGradient(listOf(accentInk, accentViolet)),
                         style = Stroke(width = 5f, cap = StrokeCap.Round)
                     )
                     points.forEachIndexed { index, point ->
@@ -401,7 +401,7 @@ fun LocationHistoryScreen(
                         title = "Địa điểm quen thuộc",
                         subtitle = "Xếp hạng theo tần suất ghé thăm",
                         icon = Icons.Default.Place,
-                        tint = Premium.cyan
+                        tint = Premium.accent
                     )
                     Spacer(modifier = Modifier.height(12.dp))
                     val maxCount = frequentPlaces.first().second.coerceAtLeast(1)
@@ -428,7 +428,7 @@ fun LocationHistoryScreen(
                         }
                         GradientProgressBar(
                             progress = count.toFloat() / maxCount.toFloat(),
-                            colors = listOf(Premium.cyan, Premium.violet),
+                            colors = listOf(Premium.accent, Premium.violet),
                             height = 6.dp
                         )
                         Spacer(modifier = Modifier.height(6.dp))

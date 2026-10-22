@@ -88,8 +88,7 @@ class MainActivity : ComponentActivity() {
         setContent {
             val uiState by viewModel.uiState.collectAsStateWithLifecycle()
             MyApplicationTheme(
-                darkTheme = uiState.isDarkMode,
-                colorTheme = uiState.colorTheme
+                darkTheme = uiState.isDarkMode
             ) {
                 val context = LocalContext.current
                 var selectedRoleForSignUp by remember { mutableStateOf(UserRole.PARENT) }

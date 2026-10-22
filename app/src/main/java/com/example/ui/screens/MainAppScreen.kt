@@ -233,7 +233,6 @@ fun MainAppScreen(
                         onUnpair = { viewModel.unpairConnection() },
                         onSignOut = { viewModel.signOut() },
                         onToggleDarkMode = { enabled -> viewModel.setDarkMode(enabled) },
-                        onColorThemeSelected = { theme -> viewModel.setColorTheme(theme) },
                         onToggleIosPreview = { viewModel.toggleIosPreviewMode() },
                         onSaveEmergencyPhone = { phone -> viewModel.saveEmergencyPhoneNumber(phone) },
                         onSaveSosSchedule = { restricted, startH, endH -> viewModel.saveSosSchedule(restricted, startH, endH) },

@@ -17,13 +17,14 @@ import androidx.compose.ui.graphics.Color
 val FacebookBlue = Color(0xFF2E7DF7)
 val OceanBlue = Color(0xFF2563EB)
 val OceanDeepBlue = Color(0xFF1D4ED8)
-val OceanAzure = Color(0xFF38BDF8)
 
 /** Accents tuned to stay legible on the deep-space AND the dreamy-nature skin.
  *  "Gemstone" tier: saturated neon has been muted to deep-jewel tones that
  *  remain distinguishable from each other on the near-black backdrop. */
 val NeonViolet = Color(0xFF7C6FC0)
-val NeonCyan = Color(0xFF3E93B4)
+// Ten token giu nguyen vi 109 cho tren toan app dang goi den no; ban 40.0 chi
+// doi gia tri sang xanh duong bien, sau khi chu ho go bo accent ngoc lam.
+val NeonCyan = OceanBlue
 val NeonEmerald = Color(0xFF2E9268)
 val NeonAmber = Color(0xFFC79346)
 val NeonRose = Color(0xFFC26178)
@@ -32,17 +33,6 @@ val NeonRose = Color(0xFFC26178)
  *  primary action colour; gold is reserved for high-end highlights and rims. */
 val ChampagneGold = Color(0xFFC8A96A)
 val ChampagneGoldBright = Color(0xFFD4B478)
-
-// Alternate palettes (kept for backwards compatibility with older screens)
-val EmeraldPrimary = Color(0xFF1FB25A)
-val SunsetPrimary = Color(0xFFE8734A)
-val PurplePrimary = Color(0xFF7C5CFF)
-
-// Emotion & status accents
-val EmotionHappy = NeonEmerald
-val EmotionNormal = FacebookBlue
-val EmotionStudyStress = NeonCyan
-val EmotionNeedSupport = NeonRose
 
 val TextOnAccent = Color(0xFFFFFFFF)
 

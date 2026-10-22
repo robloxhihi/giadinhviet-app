@@ -93,7 +93,6 @@ fun SettingsScreen(
     onUnpair: () -> Unit,
     onSignOut: () -> Unit,
     onToggleDarkMode: (Boolean) -> Unit,
-    onColorThemeSelected: (String) -> Unit,
     onToggleIosPreview: () -> Unit = {},
     onSaveEmergencyPhone: (String) -> Unit = { _ -> },
     onSaveSosSchedule: (Boolean, Int, Int) -> Unit = { _, _, _ -> },
@@ -432,58 +431,6 @@ fun SettingsScreen(
                     )
                 }
 
-                Spacer(modifier = Modifier.height(14.dp))
-                HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
-                Spacer(modifier = Modifier.height(14.dp))
-
-                Text(
-                    text = "MÀU SẮC CHỦ ĐẠO (XANH BIỂN & HÀI HÒA)",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.primary,
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = 1.sp
-                )
-                Spacer(modifier = Modifier.height(10.dp))
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    val palettes = listOf(
-                        Triple("blue", "Xanh biển", Color(0xFF0284C7)),
-                        Triple("emerald", "Ngọc bích", Color(0xFF10B981)),
-                        Triple("purple", "Lam ngọc", Color(0xFF0369A1))
-                    )
-                    palettes.forEach { (code, name, color) ->
-                        val isSelected = uiState.colorTheme == code
-                        Box(
-                            modifier = Modifier
-                                .weight(1f)
-                                .clip(RoundedCornerShape(12.dp))
-                                .background(if (isSelected) color.copy(alpha = 0.2f) else SpaceCardElevated)
-                                .border(1.5.dp, if (isSelected) color else SpaceCardBorder, RoundedCornerShape(12.dp))
-                                .clickable { onColorThemeSelected(code) }
-                                .padding(vertical = 10.dp, horizontal = 6.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(10.dp)
-                                        .clip(CircleShape)
-                                        .background(color)
-                                )
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text(
-                                    text = name,
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = if (isSelected) color else TextSecondary,
-                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
-                                )
-                            }
-                        }
-                    }
-                }
             }
         }
 
