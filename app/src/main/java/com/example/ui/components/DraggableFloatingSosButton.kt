@@ -567,7 +567,7 @@ fun SosBottomSheetContent(
                             fontWeight = FontWeight.Bold
                         )
                         Text(
-                            text = "Gửi SMS định dạng khẩn cấp & Mở cuộc gọi cứu nạn",
+                            text = "Gọi tổng đài cứu nạn — toạ độ gửi SMS cho số người thân đã lưu",
                             style = MaterialTheme.typography.bodySmall,
                             color = TextSecondary
                         )
