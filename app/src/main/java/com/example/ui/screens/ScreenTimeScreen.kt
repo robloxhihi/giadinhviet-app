@@ -39,6 +39,11 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -51,6 +56,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.model.UserRole
+import kotlinx.coroutines.delay
 import com.example.ui.components.BentoCard
 import com.example.ui.components.BentoProgressBar
 import com.example.ui.components.BentoStatCard
@@ -80,6 +86,9 @@ fun ScreenTimeScreen(
     onToggleBackgroundService: () -> Unit,
     onStartFocusSession: () -> Unit = {},
     onStopFocusSession: () -> Unit = {},
+    /** Ba me mo/tat gio hoc tap trung tren may con (ghi len pairings/{id}). */
+    onStartFamilyStudy: (Int) -> Unit = {},
+    onStopFamilyStudy: () -> Unit = {},
     // "Phong hoc tap trung" da bi cat theo yeu cau. Nut o cuoi the Tap trung
     // cua tab bay gio mo "Thau hieu thoi gian" - man overlay duy nhat con lai
     // cua Screen Time.
@@ -280,6 +289,122 @@ fun ScreenTimeScreen(
                             // chỉnh lịch" ngay tai day la het: noi quy soan o
                             // ben kia, va co the dang co phieu cho duyet.
                             Text("Mở Nội quy ứng dụng trong Cài đặt")
+                        }
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(14.dp))
+
+        // ── Giờ học tập trung THẬT — ba me bam, may con chan app ───────────
+        // Khac voi the Pomodoro ben duoi: no ghi len `pairings/{id}` va bo chan
+        // cua may con doc duoc, nen no chan that. Dong ho dem phai tu chay:
+        // Firestore chi goi listener khi co ghi, khong goi khi giay tro qua.
+        val study = uiState.activePairing?.studySession()
+        var studyNow by remember { mutableStateOf(System.currentTimeMillis()) }
+        LaunchedEffect(study?.until) {
+            while (study != null && study.until > studyNow) {
+                delay(1_000L)
+                studyNow = System.currentTimeMillis()
+            }
+        }
+        val studyRunning = study != null && study.until > studyNow
+        BentoCard(
+            modifier = Modifier.fillMaxWidth(),
+            borderColor = if (studyRunning) NeonEmerald else SpaceCardBorder
+        ) {
+            Column {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Default.School,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp),
+                            tint = if (studyRunning) NeonEmerald else NeonCyan
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Giờ học tập trung",
+                            style = MaterialTheme.typography.titleSmall,
+                            color = if (studyRunning) NeonEmerald else NeonCyan,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(if (studyRunning) NeonEmerald.copy(alpha = 0.2f) else SpaceCardElevated)
+                            .padding(horizontal = 8.dp, vertical = 2.dp)
+                    ) {
+                        Text(
+                            text = if (studyRunning)
+                                "Đang chặn • còn ${(study!!.until - studyNow) / 60_000L} phút"
+                            else if (isChild) "Chưa có giờ học" else "Sẵn sàng",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = if (studyRunning) NeonEmerald else TextSecondary,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Text(
+                    text = when {
+                        studyRunning -> {
+                            val ai = study!!.byName.trim().ifBlank { "Ba mẹ" }
+                            if (isChild)
+                                "$ai đang giữ máy đến hết giờ. Mở app ngoài danh sách cho phép " +
+                                    "sẽ bị đưa về màn hình chính."
+                            else
+                                "Đang chạy, do $ai bắt đầu. Máy con chặn thật khi đã bật Tro năng."
+                        }
+                        isChild ->
+                            "Ba hoặc mẹ bấm nút này ở máy của họ thì máy con vào giờ học."
+                        else ->
+                            "Bấm là máy con chặn ngay mọi app ngoài danh sách cho phép — " +
+                                "không cần hai bên duyệt phiếu như Nội quy."
+                    },
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = TextSecondary
+                )
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                if (isChild) {
+                    if (!studyRunning) {
+                        Text(
+                            text = "Chưa có giờ học nào được gửi từ máy ba mẹ.",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = TextMuted
+                        )
+                    }
+                } else if (studyRunning) {
+                    OutlinedButton(
+                        onClick = onStopFamilyStudy,
+                        modifier = Modifier.fillMaxWidth().testTag("stop_family_study_btn"),
+                        shape = RoundedCornerShape(12.dp),
+                        border = BorderStroke(1.dp, NeonRose.copy(alpha = 0.7f))
+                    ) {
+                        Text("Kết thúc giờ học sớm", color = NeonRose, fontWeight = FontWeight.Bold)
+                    }
+                } else {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        listOf(25, 45, 60).forEach { minutes ->
+                            OutlinedButton(
+                                onClick = { onStartFamilyStudy(minutes) },
+                                modifier = Modifier.weight(1f)
+                                    .testTag("start_family_study_${minutes}m"),
+                                shape = RoundedCornerShape(12.dp),
+                                border = BorderStroke(1.dp, NeonCyan.copy(alpha = 0.6f))
+                            ) {
+                                Text("${minutes}'", color = NeonCyan, fontWeight = FontWeight.Bold)
+                            }
                         }
                     }
                 }

@@ -475,6 +475,60 @@ class VesperaViewModel(
         }
     }
 
+    /**
+     * Ba me mo mot gio "hoc tap trung" tren may con. Khac voi dong ho Pomodoro
+     * o man nay: no ghi len `pairings/{id}` va bo chan cua may con doc duoc
+     * that, nen no chan duoc ung dung — voi dieu kien may con da bat Tro nang.
+     */
+    fun startFamilyStudy(minutes: Int) {
+        val pairing = _uiState.value.activePairing
+        val profile = _uiState.value.userProfile
+        if (pairing == null || pairing.status != PairingStatus.PAIRED) {
+            _uiState.value = _uiState.value.copy(
+                errorMessage = "Chưa ghép nối với máy con nào nên không gửi được giờ học. " +
+                    "Hai máy phải nhập mã ghép nối ở màn Tổng quan trước."
+            )
+            return
+        }
+        viewModelScope.launch {
+            try {
+                repository.startStudySession(
+                    pairingId = pairing.id,
+                    minutes = minutes,
+                    actorName = profile?.displayName.orEmpty().ifBlank { "Ba mẹ" }
+                )
+                _uiState.value = _uiState.value.copy(
+                    successMessage = "🎯 Đã gửi giờ học $minutes phút sang máy con. " +
+                        "Máy con chỉ chặn thật khi đã bật Tro năng; tắt Tro năng thì nó nhắc thôi."
+                )
+            } catch (e: Exception) {
+                Log.w(TAG, "startFamilyStudy: khong ghi duoc", e)
+                _uiState.value = _uiState.value.copy(
+                    errorMessage = "Không bật được giờ học: máy không ghi được lên máy chủ " +
+                        "(mất mạng hoặc quyền Firestore). Máy con vẫn dùng bình thường."
+                )
+            }
+        }
+    }
+
+    fun stopFamilyStudy() {
+        val pairing = _uiState.value.activePairing ?: return
+        viewModelScope.launch {
+            try {
+                repository.stopStudySession(pairing.id)
+                _uiState.value = _uiState.value.copy(
+                    successMessage = "Đã tắt giờ học tập trung trên máy con."
+                )
+            } catch (e: Exception) {
+                Log.w(TAG, "stopFamilyStudy: khong ghi duoc", e)
+                _uiState.value = _uiState.value.copy(
+                    errorMessage = "Không tắt được giờ học: máy không ghi được lên máy chủ. " +
+                        "Giờ học sẽ tự hết khi đếm về 0."
+                )
+            }
+        }
+    }
+
     /** Rung theo kieu Zenly: ngan - ngat - dai. */
     private fun vibrateForBump(ctx: Context) {
         try {

@@ -17,6 +17,7 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
 import com.example.data.FirestoreDb
+import com.example.data.model.StudySession
 import com.example.data.model.UsageSchedule
 import com.google.firebase.firestore.ListenerRegistration
 import java.util.Calendar
@@ -47,7 +48,14 @@ class AppBlockerService : AccessibilityService() {
     }
 
     private var schedule: UsageSchedule? = null
+
+    /**
+     * Phien hoc tap trung ba me bat tu xa. Doc tu document `pairings/{id}`
+     * chu khong tu `schedules/default_sched`: xem ly do trong `StudySession`.
+     */
+    private var study: StudySession? = null
     private var userReg: ListenerRegistration? = null
+    private var studyReg: ListenerRegistration? = null
     private var scheduleReg: ListenerRegistration? = null
     private var watchedPairingId: String? = null
 
@@ -120,7 +128,17 @@ class AppBlockerService : AccessibilityService() {
         if (ev.eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) return
 
         val pkg = ev.packageName?.toString() ?: return
-        val s = schedule ?: return
+        // Truoc day `val s = schedule ?: return` — may chua co noi quy thi bo
+        // chan nghi het moi thu, ke ca khi ba me vua bam "hoc tap trung". Phien
+        // hoc nam o document khac nen phai duoc xet ca khi schedule = null.
+        val s = schedule
+        val studyNow = study
+        if (s == null && studyNow == null) return
+        if (studyNow != null && !studyNow.isActive()) {
+            // Het gio tren may ba me thi may con cung phai dung chan, khong
+            // cho no treo o trang thai "dang hoc" vi listener khong kip ve.
+            study = null
+        }
 
         // So phut hom nay lay tu bo nho dem (xem usedMinutesToday) — day KHONG
         // phai lan doc dien.
@@ -131,7 +149,8 @@ class AppBlockerService : AccessibilityService() {
             schedule = s,
             ownPackage = packageName,
             usedMinutesToday = used,
-            now = nowCal
+            now = nowCal,
+            study = study
         ) ?: return
 
         val now = System.currentTimeMillis()
@@ -178,8 +197,11 @@ class AppBlockerService : AccessibilityService() {
                 if (pairingId.isEmpty()) {
                     scheduleReg?.remove()
                     scheduleReg = null
+                    studyReg?.remove()
+                    studyReg = null
                     watchedPairingId = null
                     schedule = null
+                    study = null
                     Log.i(TAG, "Chua ghep noi — chua ap dung chan nao")
                     return@addSnapshotListener
                 }
@@ -191,6 +213,7 @@ class AppBlockerService : AccessibilityService() {
     }
 
     private fun attachScheduleListener(pairingId: String) {
+        attachStudyListener(pairingId)
         scheduleReg?.remove()
         scheduleReg = FirestoreDb.instance()
             .collection("pairings").document(pairingId)
@@ -209,12 +232,43 @@ class AppBlockerService : AccessibilityService() {
             }
     }
 
+    /**
+     * Nghe chinh document ghep noi de lay phien hoc. Doc bang cot phang
+     * (`studyUntil` / `studyByName`) chu khong `toObject(Pairing::class)`:
+     * document do con co truong `status` dang enum va cac truong cua ben kia,
+     * doc ca object thi mot truong la kieu cung lam mat ca phien hoc.
+     */
+    private fun attachStudyListener(pairingId: String) {
+        studyReg?.remove()
+        studyReg = FirestoreDb.instance()
+            .collection("pairings").document(pairingId)
+            .addSnapshotListener { snap, err ->
+                if (err != null) {
+                    Log.w(TAG, "Doc phien hoc that bai: ${err.message}")
+                    return@addSnapshotListener
+                }
+                val until = when (val v = snap?.get("studyUntil")) {
+                    is Number -> v.toLong()
+                    else -> 0L
+                }
+                val by = snap?.getString("studyByName").orEmpty()
+                study = if (until > System.currentTimeMillis()) {
+                    StudySession(until = until, byName = by)
+                } else null
+                Log.i(TAG, if (study != null)
+                    "Phien hoc dang chay den $until (boi '$by')"
+                else "Khong co phien hoc dang chay")
+            }
+    }
+
     private fun stopListening() {
         userReg?.remove(); userReg = null
         scheduleReg?.remove(); scheduleReg = null
+        studyReg?.remove(); studyReg = null
         watchedPairingId = null
         watchedUid = null
         schedule = null
+        study = null
     }
 
     private fun startAuthWatcher() {

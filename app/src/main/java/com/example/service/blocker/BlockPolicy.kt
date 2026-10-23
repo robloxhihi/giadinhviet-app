@@ -1,5 +1,6 @@
 package com.example.service.blocker
 
+import com.example.data.model.StudySession
 import com.example.data.model.UsageSchedule
 import java.util.Calendar
 
@@ -68,17 +69,39 @@ object BlockPolicy {
     /**
      * Tra ve ly do ngan bang tieng Viet neu ung dung bi chan,
      * hoac null neu duoc phep chay.
+     *
+     * `study` la phien hoc tap trung ba me bat tu xa. No duoc xet TRUOC cac
+     * canh bao cua noi quy (tat / chi nhac nho / lech ngay) vi ban chat cua
+     * no la: ba me bam nut thi may phai dung chan ngay, khong doi hoi ai do
+     * phai vao bat lai noi quy. Danh sach `allowedApps` cua noi quy van la
+     * danh sach mien chan — do la cho ba me cho phep tu truoc.
      */
     fun blockReason(
         pkg: String?,
         schedule: UsageSchedule?,
         ownPackage: String,
         usedMinutesToday: Int,
-        now: Calendar = Calendar.getInstance()
+        now: Calendar = Calendar.getInstance(),
+        study: StudySession? = null
     ): String? {
         if (pkg.isNullOrBlank()) return null
         if (isSelf(pkg, ownPackage)) return null
         if (isNeverBlocked(pkg)) return null
+
+        val studyActive = study != null && study.isActive(now.timeInMillis)
+        if (studyActive) {
+            val mienChan = schedule?.allowedApps
+                ?.any { it.equals(pkg, ignoreCase = true) } == true
+            if (!mienChan) {
+                val ai = study!!.byName.trim().takeIf { it.isNotEmpty() }
+                return if (ai != null)
+                    "Đang giờ học tập trung do $ai bắt đầu — còn " +
+                        "${study.minutesLeft(now.timeInMillis)} phút."
+                else
+                    "Đang giờ học tập trung — còn " +
+                        "${study.minutesLeft(now.timeInMillis)} phút."
+            }
+        }
 
         // Chua bat che do chan thi coi nhu nhac nho.
         if (schedule == null || !schedule.isActive || schedule.isReminderOnly) return null

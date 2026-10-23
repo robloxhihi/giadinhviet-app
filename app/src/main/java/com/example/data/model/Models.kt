@@ -70,8 +70,18 @@ data class Pairing(
      */
     val lastBumpAt: Long = 0L,
     val lastBumpByRole: UserRole? = null,
-    val lastBumpByName: String = ""
-)
+    val lastBumpByName: String = "",
+    /**
+     * Phien "hoc tap trung" do ba me bat. Ba cot phang vi ly do o [StudySession];
+     * doc thanh object bang [studySession].
+     */
+    val studyUntil: Long = 0L,
+    val studyByName: String = "",
+    val studyStartedAt: Long = 0L
+) {
+    fun studySession(): StudySession =
+        StudySession(until = studyUntil, byName = studyByName, startedAt = studyStartedAt)
+}
 
 data class PairingRequest(
     val id: String = "",
@@ -197,6 +207,39 @@ data class UsageSchedule(
     val proposedAt: Long = 0L,
     val respondedAt: Long = 0L
 )
+
+/**
+ * Mot phien "hoc tap trung" ma ba me bat tu may cua ho.
+ *
+ * Nam TREN DOCUMENT `pairings/{id}`, khong phai trong `UsageSchedule`, vi hai
+ * ly do that:
+ *
+ * 1. `UsageSchedule` la noi quy hai cung — moi lan doi phai qua phieu dong
+ *    thuan. Mot phien hoc thi ba me phai bat duoc NGAY, nen no di qua con
+ *    duong dong thuan do.
+ * 2. `pairings/{id}` la document ma may hoc sinh DA nghe listener san
+ *    (`users/{uid}.activePairingId` -> `pairings/{id}`), va rules dang chay
+ *    tren production da cho thanh vien cap nhat no. Them `schedules/` hay
+ *    collection moi thi can deploy rules lai — thu ma may nay khong lam
+ *    duoc. Do day la choan duy nhat ship duoc ma khong doi rules.
+ *
+ * Ba truong la ba cot phang (khong phai object long) vi Firestore bo qua truong
+ * null khi doc POJO cu; cot phang co mac dinh thi document cu khong co truong
+ * van doc duoc binh thuong.
+ */
+data class StudySession(
+    /** Mốc thời gian kết thúc, epoch ms. 0 = khong co phien nao dang chay. */
+    val until: Long = 0L,
+    /** Ten nguoi bat, in ra man hinh con de chau biet ai dang giu may. */
+    val byName: String = "",
+    val startedAt: Long = 0L
+) {
+    fun isActive(nowMillis: Long = System.currentTimeMillis()): Boolean = until > nowMillis
+
+    /** Phut con lai, lam tron xuong — 0 khi het gio. */
+    fun minutesLeft(nowMillis: Long = System.currentTimeMillis()): Int =
+        if (!isActive(nowMillis)) 0 else ((until - nowMillis) / 60_000L).toInt()
+}
 
 /**
  * Dang khung gio dang chay thanh mot chuoi de so sanh va gui trong phieu.

@@ -204,6 +204,8 @@ fun MainAppScreen(
                         onToggleBackgroundService = { viewModel.toggleBackgroundService(context) },
                         onStartFocusSession = { viewModel.startFocusSession(25) },
                         onStopFocusSession = { viewModel.stopFocusSession() },
+                        onStartFamilyStudy = { viewModel.startFamilyStudy(it) },
+                        onStopFamilyStudy = { viewModel.stopFamilyStudy() },
                         onOpenInsights = { overlayScreen = "insights" },
                         onProposeAgreement = { viewModel.proposeAgreement(it) },
                         onRespondToAgreement = { agr, accept -> viewModel.respondToAgreement(agr, accept) },

@@ -768,6 +768,45 @@ class VesperaRepository(private val db: FirebaseFirestore, private val auth: Fir
                 )
             ).await()
 
+    /**
+     * Ba me bat mot phien "hoc tap trung" tren may con.
+     *
+     * Ghi thang vao `pairings/{id}` — KHONG đi qua phieu dong thuan nhu
+     * UsageSchedule, vi bam nut thi phai co hieu luc ngay. Cung vi vay no nam
+     * o document ma rules production da cho thanh vien cap nhat, nen ship
+     * duoc ma khong can deploy rules lai (khac voi `agreements` /
+     * `rule_audit` dang bi 403).
+     *
+     * Khong bat loi: that bai ghi phai den duoc mat nguoi dung, de ho khong
+     * tuong rang may con dang bi chan trong khi that ra khong.
+     */
+    suspend fun startStudySession(pairingId: String, minutes: Int, actorName: String) {
+        if (pairingId.isEmpty()) error("Chưa ghép nối nên không gửi được phiên học.")
+        val now = System.currentTimeMillis()
+        val safeMinutes = minutes.coerceIn(1, 240)
+        db.collection("pairings").document(pairingId)
+            .update(
+                mapOf(
+                    "studyUntil" to (now + safeMinutes * 60_000L),
+                    "studyByName" to actorName,
+                    "studyStartedAt" to now
+                )
+            ).await()
+    }
+
+    /** May nao cung co dung duoc — con noi quy thi duoc quyet dinh lai. */
+    suspend fun stopStudySession(pairingId: String) {
+        if (pairingId.isEmpty()) error("Chưa ghép nối nên không dừng được phiên học.")
+        db.collection("pairings").document(pairingId)
+            .update(
+                mapOf(
+                    "studyUntil" to 0L,
+                    "studyByName" to "",
+                    "studyStartedAt" to 0L
+                )
+            ).await()
+    }
+
 
 
     fun observeExtraTimeRequests(pairingId: String): Flow<List<ExtraTimeRequest>> = callbackFlow {
