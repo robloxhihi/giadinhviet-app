@@ -294,47 +294,6 @@ fun AiChatScreen(
                 }
             }
             Spacer(modifier = Modifier.height(14.dp))
-        } else {
-            // Da co khoa tren may nay thi van phai co duong go no. Tu ban 39.0
-            // tro ve truoc, the nhap khoa an han sau khi luu, nen mot khoa nhap
-            // sai (hoac khoa gia) khong the nao xoac duoc ngoai viec xoa du lieu
-            // ung dung.
-            GlassCard(modifier = Modifier.fillMaxWidth()) {
-                Column {
-                    // Noi dung phai khop voi nguon cua khoa: tu ban 41.0 key
-                    // Orcarouter di SAN trong ban cai (BuildConfig tu repo
-                    // secret), khong phai nguoi dung luu tay tren may. Noi
-                    // "da luu tren may nay" khi khong phai vay la mot tuyen bo
-                    // sai ve phia nguoi dung.
-                    val manualKeyOnDevice = when (model.provider) {
-                        AiModel.Provider.OPENROUTER -> AiKey.enteredOpenRouter(context).isNotBlank()
-                        AiModel.Provider.GEMINI -> AiKey.entered(context).isNotBlank()
-                    }
-                    Text(
-                        text = if (manualKeyOnDevice)
-                            "Đang dùng ${AiModels.keyLabel(model)} đã lưu trên máy này."
-                        else
-                            "Đang dùng ${AiModels.keyLabel(model)} đi kèm trong bản cài đặt này.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = TextSecondary
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    GlassButton(
-                        text = "Gỡ khoá đã nhập",
-                        onClick = {
-                            if (model.provider == AiModel.Provider.OPENROUTER)
-                                AiKey.clearOpenRouter(context) else AiKey.clear(context)
-                            keyDraft = ""
-                            key = AiModels.keyFor(context, model)
-                        },
-                        modifier = Modifier.fillMaxWidth().testTag("ai_clear_key_btn"),
-                        tint = Premium.rose,
-                        height = 38.dp,
-                        fontSize = 12
-                    )
-                }
-            }
-            Spacer(modifier = Modifier.height(14.dp))
         }
 
         // ── So lieu that app do duoc — nguon cua moi cau tra loi ───────────

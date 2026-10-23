@@ -5,10 +5,12 @@ import org.junit.Test
 import java.io.File
 
 /**
- * Hồi quy cho chỗ hỏng phát hiện lúc kiểm bản 39.0 trên BlueStacks: một khi
- * khoá AI đã lưu hợp lệ thì thẻ nhập khoá biến mất vĩnh viễn, và
- * `AiKey.clear` / `AiKey.clearOpenRouter` không được bất kỳ chỗ nào gọi —
- * nghĩa là không có đường gỡ khoá sai khỏi máy.
+ * Hồi quy cho chỗ hỏng phát hiện lúc kiểm bản 39.0 trên BlueStacks: thẻ nhập
+ * khoá phải luôn che ký tự khi gõ, vì màn hình này hay bị chụp lại.
+ *
+ * Lưu ý bản 48.0: nút "Gỡ khoá đã nhập" đã bỏ theo yêu cầu, nên không còn test
+ * nào bắt buộc đường gỡ khoá. Hệ quả thật: nhập sai khoá Gemini thì chỉ còn cách
+ * xoá dữ liệu ứng dụng.
  */
 class AiKeyRegressionTest {
 
@@ -17,14 +19,6 @@ class AiKeyRegressionTest {
         val file = candidates.firstOrNull { it.exists() }
             ?: error("Không tìm thấy tệp nguồn: $relative")
         return String(file.readBytes(), Charsets.UTF_8)
-    }
-
-    @Test
-    fun khoaDaLuuCoTheBoKhoiMay() {
-        val screen = source("src/main/java/com/example/ui/screens/AiChatScreen.kt")
-        assertTrue("Vẫn không có đường gỡ khoá OpenRouter", screen.contains("AiKey.clearOpenRouter(context)"))
-        assertTrue("Vẫn không có đường gỡ khoá Gemini", screen.contains("AiKey.clear(context)"))
-        assertTrue("Không có nút gỡ khoá để kiểm trên máy", screen.contains("testTag(\"ai_clear_key_btn\")"))
     }
 
     @Test

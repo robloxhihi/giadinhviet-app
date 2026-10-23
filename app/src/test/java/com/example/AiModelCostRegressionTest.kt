@@ -68,11 +68,15 @@ class AiModelCostRegressionTest {
 
     @Test
     fun isFreeKhongDemNhamModelTraPhi() {
-        assertFalse("DeepSeek V4 Flash trả phí vẫn bị tính là miễn phí",
+        // Hai id tra phi da bi xoai khoi bang chon. Chung khong duoc con song
+        // duong nao trong app: doc `isFree` cua chung phai ra true vi `find`
+        // roi ve model mien phi mac dinh, khong phai vi chung duoc thang tay.
+        assertTrue("Id tra phi cu phai roi ve model mien phi, khong phai Gemini khong khoa",
             AiModels.isFree(AiModels.find("deepseek/deepseek-v4-flash")))
-        assertTrue("Gemini phải được tính là miễn phí", AiModels.isFree(AiModels.find("gemini")))
-        // Id la roi ve mac dinh (Gemini), khong duoc thanh model tra phi.
-        assertTrue("Id lạ phải rơi về model miễn phí", AiModels.isFree(AiModels.find("khong-ton-tai")))
+        assertTrue("Gemini phai duoc tinh la mien phi", AiModels.isFree(AiModels.find("gemini")))
+        assertTrue("Id la phai roi ve model mien phi", AiModels.isFree(AiModels.find("khong-ton-tai")))
+        assertTrue("Mac dinh khong duoc la Gemini (ban cai khong co khoa Gemini)",
+            AiModels.default.provider == AiModel.Provider.OPENROUTER)
     }
 
     @Test
@@ -84,11 +88,9 @@ class AiModelCostRegressionTest {
             "deepseek/deepseek-v4-flash-free",
             "deepseek/deepseek-v4.1-flash-free",
             "z-ai/glm-5.3-flash-free",
-            "orcarouter/free",
-            "deepseek/deepseek-v4-flash",
-            "z-ai/glm-5.3-flash"
+            "orcarouter/free"
         ).forEach { assertTrue("Thiếu model `$it` trong bảng chọn", ids.contains(it)) }
-        assertTrue("Danh sach Orcarouter phat sinh them ten chua do: $ids", ids.size <= 6)
+        assertTrue("Danh sach Orcarouter phat sinh them ten chua do: $ids", ids.size <= 4)
     }
 
     /**
@@ -109,15 +111,6 @@ class AiModelCostRegressionTest {
             src.contains("getString(FIELD_SELECTED_V2, defaultOpenRouter.id)"))
         assertTrue("Gia tri rong cung phai roi ve model mien phi",
             src.contains("ifBlank { defaultOpenRouter.id }"))
-    }
-
-    @Test
-    fun chuVeNguonKeyPhaiDungSuThat() {
-        val screen = source("src/main/java/com/example/ui/screens/AiChatScreen.kt")
-        assertTrue("Phai phan biet key nhap tay voi key cua ban cai",
-            screen.contains("AiKey.enteredOpenRouter(context).isNotBlank()"))
-        assertTrue("Thieu cau mo key di san trong ban cai",
-            screen.contains("đi kèm trong bản cài đặt này"))
     }
 
     private fun source(relative: String): String {

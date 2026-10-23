@@ -92,28 +92,23 @@ object AiModels {
             note = "Orcarouter · 0 đồng. Hệ thống tự picking model miễn phí đang nhàn nhất.",
             free = true
         ),
-        // Hai model tra phi giu lai cho ai can chat luong cao, nhung ghi ro
-        // TRAO PHI va lay gia tu chinh `pricing` cua orcarouter (ty My phan
-        // trieu token), khong phai gia tu mot nha cung cap khac.
-        AiModel(
-            id = "deepseek/deepseek-v4-flash",
-            label = "DeepSeek V4 Flash (trả phí)",
-            provider = AiModel.Provider.OPENROUTER,
-            note = "TRẢ PHÍ Orcarouter · 0,22 US$ mỗi triệu token hỏi, 0,66 mỗi triệu token trả lời."
-        ),
-        AiModel(
-            id = "z-ai/glm-5.3-flash",
-            label = "GLM 5.3 Flash (trả phí)",
-            provider = AiModel.Provider.OPENROUTER,
-            note = "TRẢ PHÍ Orcarouter · 0,15 US$ mỗi triệu token hỏi, 0,50 mỗi triệu token trả lời."
-        )
+        // Chi con model MIEN PHI. Hai model tra phi (deepseek/deepseek-v4-flash
+        // va z-ai/glm-5.3-flash) da go theo yeu cau ngay 2026-10-23 — giu lai la
+        // bang model dem tien cua nguoi dung trong khi bon thu mien phi da do
+        // chay that.
     )
-
-    val default: AiModel get() = all.first()
 
     /** Model Orcarouter mac dinh: bao luu la thu da DO MIEN PHI, khong phai thu tra phi. */
     val defaultOpenRouter: AiModel
         get() = all.first { it.provider == AiModel.Provider.OPENROUTER && it.free }
+
+    /**
+     * Mac dinh cua app. Khong phai `all.first()` nua: thu nhat trong bang la
+     * Gemini, ma Gemini khong co khoa trong ban cai (repo thieu secret
+     * `GEMINI_API_KEY`), nen roi ve no la chat im lang. Roi ve model Orcarouter
+     * mien phi la thu duy nhat da do goi duoc bang khoa di san.
+     */
+    val default: AiModel get() = defaultOpenRouter
 
     /** True khi model nay khong tieu ton tien cua user. */
     fun isFree(model: AiModel): Boolean = model.free
