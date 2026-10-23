@@ -2,6 +2,7 @@ package com.example.service
 
 import android.Manifest
 import android.app.AppOpsManager
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -28,8 +29,50 @@ object PermissionManager {
         val rationale: String,
         val granted: Boolean,
         val kind: Kind,
-        val required: Boolean = true
+        val required: Boolean = true,
+        /**
+         * RUNTIME + chua duoc cap + nguoi dung da chon "Don't ask again" o hop thoai
+         * he thong. requestPermissions khi do tra loi NGAY, khong hien hop thoai, nen
+         * loi duyet duy con lai la man hinh Thong tin ung dung
+         * (ACTION_APPLICATION_DETAILS_SETTINGS).
+         */
+        val permanentlyDenied: Boolean = false
     )
+
+    /** Ten lop day du cua AccessibilityService chan ung dung (khop AndroidManifest). */
+    private const val ACCESSIBILITY_SERVICE_CLASS = "com.example.service.blocker.AppBlockerService"
+
+    // ── Theo doi "tu choi vinh vien" ───────────────────────────────────────
+    // Only touched from the main thread (launcher callbacks and snapshot readers).
+    private val permanentlyDeniedPermissions = mutableSetOf<String>()
+    private var requestSettledCounter = 0
+
+    /**
+     * MainActivity goi SAU moi khi nguoi dung tra loi hop thoai quyen runtime.
+     * [showRationale] phai la Activity::shouldShowRequestPermissionRationale — chi
+     * Android moi biet nguoi dung chon "Tu choi" hay "Khong hoi nua".
+     * Tu choi mot lan (con rationale) = van xin lai duoc; tu choi ma khong con
+     * rationale = "Don't ask again" -> danh dau vinh vien. Quyen duoc cap thi xoa dau.
+     */
+    fun recordRequestOutcome(results: Map<String, Boolean>, showRationale: (String) -> Boolean) {
+        requestSettledCounter++
+        results.forEach { (permission, granted) ->
+            if (granted || showRationale(permission)) {
+                permanentlyDeniedPermissions.remove(permission)
+            } else {
+                permanentlyDeniedPermissions.add(permission)
+            }
+        }
+    }
+
+    fun isPermanentlyDenied(permission: String): Boolean =
+        permanentlyDeniedPermissions.contains(permission)
+
+    /**
+     * Bo dem "hop thoai quyen da duoc tra loi" — luong "Cap tat ca" dung no de biet
+     * nguoi dung da xong hop thoai he thong ma khong can doan thoi gian.
+     */
+    fun runtimeRequestSettledCount(): Int = requestSettledCounter
 
     // ── Runtime permissions cần cho toàn bộ chức năng ──────────────────────
     fun runtimePermissions(): List<String> {
@@ -61,6 +104,11 @@ object PermissionManager {
     fun isGranted(context: Context, permission: String): Boolean =
         ContextCompat.checkSelfPermission(context, permission) == PackageManager.PERMISSION_GRANTED
 
+    /** Vi tri foreground (FINE hoac COARSE) — dieu kien tien quyet cua quyen nen tren Android 10+. */
+    fun hasForegroundLocation(context: Context): Boolean =
+        isGranted(context, Manifest.permission.ACCESS_FINE_LOCATION) ||
+                isGranted(context, Manifest.permission.ACCESS_COARSE_LOCATION)
+
     // ── Special access ─────────────────────────────────────────────────────
     fun hasUsageAccess(context: Context): Boolean {
         val appOps = context.getSystemService(Context.APP_OPS_SERVICE) as? AppOpsManager ?: return false
@@ -85,6 +133,30 @@ object PermissionManager {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             isGranted(context, Manifest.permission.ACCESS_BACKGROUND_LOCATION)
         } else true
+
+    /**
+     * Trang thai THAT cua dich vu tro nang (AccessibilityService) chan ung dung.
+     * Doc truc tiep tu Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES — danh sach
+     * cac dich vu duoc bat, phan cach nhau bang dau ':' — va so sanh voi chinh
+     * ComponentName cua app. KHONG tin bat ky co so duoc luu tru nao.
+     */
+    fun hasAccessibilityEnabled(context: Context): Boolean {
+        val enabled = try {
+            Settings.Secure.getString(
+                context.contentResolver,
+                Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
+            )
+        } catch (e: Exception) {
+            null
+        } ?: return false
+        // unflattenFromString tu chuan hoa dang viet tat ".TenLoai" ma mot so OEM luu.
+        val pkg = context.packageName
+        return enabled.split(':').any { entry ->
+            val parsed = ComponentName.unflattenFromString(entry) ?: return@any false
+            parsed.packageName == pkg &&
+                parsed.className.equals(ACCESSIBILITY_SERVICE_CLASS, ignoreCase = true)
+        }
+    }
 
     /**
      * Dịch vụ định vị CỦA MÁY có đang bật không — khác hẳn quyền của app.
@@ -131,6 +203,24 @@ object PermissionManager {
             Uri.parse("package:${context.packageName}")
         ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
 
+    /**
+     * Man hinh Thong tin ung dung — loi duy nhat con lai khi quyen runtime bi
+     * "Don't ask again" (requestPermissions khi do khong hien hop thoai nao).
+     */
+    fun appDetailsIntent(context: Context): Intent =
+        Intent(
+            Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+            Uri.parse("package:${context.packageName}")
+        ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+
+    /**
+     * AccessibilityService: Android cam code tu bat — nut chi MO man hinh Tro nang
+     * de nguoi dung tu bat; trang thai duoc doc lai that tu Settings.Secure.
+     */
+    fun accessibilitySettingsIntent(): Intent =
+        Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+
     /** Màn hình bật/tắt dịch vụ định vị của máy (không phải quyền của app). */
     @Suppress("DEPRECATION")
     fun locationServicesIntent(): Intent =
@@ -150,15 +240,15 @@ object PermissionManager {
     fun snapshot(context: Context): List<PermissionItem> {
         val items = mutableListOf<PermissionItem>()
 
-        val locFine = isGranted(context, Manifest.permission.ACCESS_FINE_LOCATION) ||
-                isGranted(context, Manifest.permission.ACCESS_COARSE_LOCATION)
+        val locFine = hasForegroundLocation(context)
         items += PermissionItem(
             "location", "Vị trí (GPS)", "Định vị thời gian thực và gửi tọa độ khi khẩn cấp.",
             locFine, Kind.RUNTIME
         )
         items += PermissionItem(
             "background_location", "Vị trí khi chạy nền",
-            "Cập nhật vị trí liên tục ngay cả khi đóng ứng dụng (giám sát an toàn 24/7).",
+            "Cập nhật vị trí liên tục ngay cả khi đóng ứng dụng (giám sát an toàn 24/7). " +
+                "Android 10 trở lên chỉ cấp được qua hộp thoại hệ thống và sau khi Vị trí (GPS) đã được chấp thuận — bấm nút để mở hộp thoại xin quyền nền.",
             hasBackgroundLocation(context), Kind.SPECIAL, required = false
         )
         items += PermissionItem(
@@ -182,6 +272,12 @@ object PermissionManager {
             hasUsageAccess(context), Kind.SPECIAL
         )
         items += PermissionItem(
+            "accessibility", "Trợ năng (chặn ứng dụng)",
+            "Quyền quan trọng nhất để chặn ứng dụng theo lịch hoạt động. " +
+                "Android cấm ứng dụng tự bật quyền này — bấm nút chỉ mở màn hình Trợ năng để bạn tự bật Gia Đình Việt.",
+            hasAccessibilityEnabled(context), Kind.SPECIAL
+        )
+        items += PermissionItem(
             "overlay", "Hiển thị trên ứng dụng khác",
             "Nút SOS nổi luôn hiện trên mọi màn hình để gọi cứu trợ tức thì.",
             hasOverlay(context), Kind.SPECIAL, required = false
@@ -199,7 +295,14 @@ object PermissionManager {
             "Cho phép dịch vụ giám sát chạy liên tục, không bị hệ thống tạm dừng.",
             isIgnoringBatteryOptimizations(context), Kind.SPECIAL, required = false
         )
-        return items
+        // Danh dau "tu choi vinh vien" (Don't ask again) cho cac quyen runtime chua cap.
+        // Trang thai granted luon doc truc tiep tu Android; co so nay chi bo sung loi duyet,
+        // va duoc xoa khi quyen duoc cap o bat ky dau.
+        return items.map { item ->
+            if (item.kind == Kind.RUNTIME && !item.granted &&
+                runtimePermissionsFor(item.id).any { isPermanentlyDenied(it) }
+            ) item.copy(permanentlyDenied = true) else item
+        }
     }
 
     fun allRequiredGranted(context: Context): Boolean =

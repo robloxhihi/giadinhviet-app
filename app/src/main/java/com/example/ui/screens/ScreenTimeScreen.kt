@@ -60,8 +60,6 @@ import kotlinx.coroutines.delay
 import com.example.ui.components.BentoCard
 import com.example.ui.components.BentoProgressBar
 import com.example.ui.components.BentoStatCard
-import com.example.ui.components.IosDynamicIslandPill
-import com.example.ui.theme.DialogSurface
 import com.example.ui.theme.FacebookBlue
 import com.example.ui.theme.NeonAmber
 import com.example.ui.theme.NeonCyan
@@ -84,12 +82,10 @@ fun ScreenTimeScreen(
     onRequestExtraTimeClick: () -> Unit,
     onEditScheduleClick: () -> Unit,
     onToggleBackgroundService: () -> Unit,
-    onStartFocusSession: () -> Unit = {},
-    onStopFocusSession: () -> Unit = {},
     /** Ba me mo/tat gio hoc tap trung tren may con (ghi len pairings/{id}). */
     onStartFamilyStudy: (Int) -> Unit = {},
     onStopFamilyStudy: () -> Unit = {},
-    // "Phong hoc tap trung" da bi cat theo yeu cau. Nut o cuoi the Tap trung
+    // "Phong hoc tap trung" da bi cat theo yeu cau. Nut duoi the Tap trung
     // cua tab bay gio mo "Thau hieu thoi gian" - man overlay duy nhat con lai
     // cua Screen Time.
     onOpenInsights: () -> Unit = {},
@@ -167,46 +163,6 @@ fun ScreenTimeScreen(
                     }
                 }
             }
-        }
-
-        if (uiState.isIosPreviewMode && uiState.activePairing != null) {
-            val partnerLoc = uiState.partnerLocation
-            val partnerName = if (isChild) uiState.activePairing.parentName
-                              else uiState.activePairing.childName
-            if (partnerLoc != null) {
-                // Pill nhận batteryPct/appMins kiểu Int nên "chưa có dữ liệu" không nhét
-                // vào ô pin được — máy con chưa gửi số thì tách sang khung bên dưới.
-                IosDynamicIslandPill(
-                    partnerName = partnerName,
-                    safeZone = partnerLoc.currentSafeZone.ifEmpty { "Chưa xác định được khu vực" },
-                    batteryPct = partnerLoc.batteryLevel,
-                    isCharging = partnerLoc.isCharging,
-                    activeApp = partnerLoc.topActiveApp,
-                    appMins = partnerLoc.topActiveAppMinutes,
-                    // "Live" phai la ping vua den, khong phai hang trang tri:
-                    // diem cu hon 5 phut thi den chuyen sang mau cho doi.
-                    isLive = partnerLoc.updatedAt > 0L &&
-                        System.currentTimeMillis() - partnerLoc.updatedAt < 5 * 60_000L
-                )
-            } else {
-                // Khung pill thật về giao diện nhưng ghi rõ trạng thái rỗng, không bịa 80% pin.
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(32.dp))
-                        .background(DialogSurface)
-                        .border(1.dp, SpaceCardBorder, RoundedCornerShape(32.dp))
-                        .padding(horizontal = 16.dp, vertical = 10.dp)
-                ) {
-                    Text(
-                        text = "$partnerName • Chưa có dữ liệu pin/ứng dụng từ máy con",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = TextMuted,
-                        fontSize = 11.sp
-                    )
-                }
-            }
-            Spacer(modifier = Modifier.height(14.dp))
         }
 
         // Header
@@ -298,9 +254,9 @@ fun ScreenTimeScreen(
         Spacer(modifier = Modifier.height(14.dp))
 
         // ── Giờ học tập trung THẬT — ba me bam, may con chan app ───────────
-        // Khac voi the Pomodoro ben duoi: no ghi len `pairings/{id}` va bo chan
-        // cua may con doc duoc, nen no chan that. Dong ho dem phai tu chay:
-        // Firestore chi goi listener khi co ghi, khong goi khi giay tro qua.
+        // The nay ghi len `pairings/{id}` va bo chan cua may con doc duoc, nen
+        // no chan that. Dong ho dem phai tu chay: Firestore chi goi listener khi
+        // co ghi, khong goi khi giay tro qua.
         val study = uiState.activePairing?.studySession()
         var studyNow by remember { mutableStateOf(System.currentTimeMillis()) }
         LaunchedEffect(study?.until) {
@@ -413,112 +369,23 @@ fun ScreenTimeScreen(
 
         Spacer(modifier = Modifier.height(14.dp))
 
-        // Pomodoro Focus Study Mode Card
-        BentoCard(
-            modifier = Modifier.fillMaxWidth(),
-            borderColor = if (uiState.isFocusSessionActive) NeonCyan else SpaceCardBorder
+        // Nut mo "Thau hieu thoi gian" - tung la loi vao "Phong hoc tap
+        // trung" (da bi cat). Viet bang Icons.Insights (extended) de
+        // khong phai them import moi.
+        OutlinedButton(
+            onClick = onOpenInsights,
+            modifier = Modifier.fillMaxWidth().testTag("open_insights_btn"),
+            shape = RoundedCornerShape(12.dp),
+            border = BorderStroke(1.dp, NeonCyan.copy(alpha = 0.6f))
         ) {
-            Column {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(text = "🎯", fontSize = 16.sp)
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = "Chế độ học tập Pomodoro",
-                            style = MaterialTheme.typography.titleSmall,
-                            color = NeonCyan,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(if (uiState.isFocusSessionActive) NeonCyan.copy(alpha = 0.2f) else SpaceCardElevated)
-                            .padding(horizontal = 8.dp, vertical = 2.dp)
-                    ) {
-                        Text(
-                            text = if (uiState.isFocusSessionActive)
-                                "Đang học • còn ${formatFocusClock(uiState.focusSessionSecondsRemaining)}"
-                            else "Sẵn sàng",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = if (uiState.isFocusSessionActive) NeonCyan else TextSecondary,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                Text(
-                    text = if (uiState.isFocusSessionActive)
-                        // Dong ho dem that, nhung BO CHAN khong doc
-                        // `isFocusSessionActive`: no chi theo dung Nội quy da
-                        // bat. Noi "se nhac neu ban tho ra choi game" la hen
-                        // mot hanh vi chua he duoc lap trinh.
-                        "Đồng hồ đang chạy thật — còn ${formatFocusClock(uiState.focusSessionSecondsRemaining)}. " +
-                            "Đây chỉ là nháp giờ của riêng bạn: máy không tự chặn hay tự nhắc khi bạn mở app khác."
-                    else
-                        "Đồng hồ Pomodoro 25 phút giúp bạn giữ nhịp học; nó không chặn ứng dụng nào cả.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = TextSecondary
-                )
-
-                if (uiState.isFocusSessionActive) {
-                    Spacer(modifier = Modifier.height(10.dp))
-                    val totalMin = uiState.focusSessionTotalMinutes.coerceAtLeast(1)
-                    BentoProgressBar(
-                        usedMinutes = (totalMin - uiState.focusSessionMinutesRemaining).coerceIn(0, totalMin),
-                        targetMinutes = totalMin
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(10.dp))
-
-                Button(
-                    onClick = {
-                        if (uiState.isFocusSessionActive) onStopFocusSession() else onStartFocusSession()
-                    },
-                    modifier = Modifier.fillMaxWidth().testTag("toggle_focus_mode_btn"),
-                    shape = RoundedCornerShape(12.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = if (uiState.isFocusSessionActive) SpaceCardElevated else NeonCyan,
-                        contentColor = if (uiState.isFocusSessionActive) NeonRose else Color.Black
-                    )
-                ) {
-                    Text(
-                        text = if (uiState.isFocusSessionActive)
-                            "Kết thúc phiên học tập"
-                        else "Bắt đầu 25 phút tập trung 🎯",
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                // Nut mo "Thau hieu thoi gian" - tung la loi vao "Phong hoc tap
-                // trung" (da bi cat). Viet bang Icons.Insights (extended) de
-                // khong phai them import moi.
-                OutlinedButton(
-                    onClick = onOpenInsights,
-                    modifier = Modifier.fillMaxWidth().testTag("open_insights_btn"),
-                    shape = RoundedCornerShape(12.dp),
-                    border = BorderStroke(1.dp, NeonCyan.copy(alpha = 0.6f))
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Insights,
-                        contentDescription = null,
-                        modifier = Modifier.size(18.dp),
-                        tint = NeonCyan
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("Thấu hiểu thời gian • biểu đồ • gợi ý", color = NeonCyan)
-                }
-            }
+            Icon(
+                imageVector = Icons.Default.Insights,
+                contentDescription = null,
+                modifier = Modifier.size(18.dp),
+                tint = NeonCyan
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Text("Thấu hiểu thời gian • biểu đồ • gợi ý", color = NeonCyan)
         }
 
         Spacer(modifier = Modifier.height(16.dp))
@@ -954,11 +821,5 @@ fun DetailedAppUsageRow(app: com.example.data.model.DetailedAppUsage) {
             )
         }
     }
-}
-
-/** "12:05" — dong ho Pomodoro phai nhay duoc tung giay tren man hinh. */
-private fun formatFocusClock(totalSeconds: Int): String {
-    val s = totalSeconds.coerceAtLeast(0)
-    return "%02d:%02d".format(s / 60, s % 60)
 }
 

@@ -70,15 +70,8 @@ private const val EMAIL_SUFFIX = "@giadinhviet.vn"
 data class VesperaUiState(
     val isLoading: Boolean = false,
     val isAuthenticated: Boolean = false,
-    val isIosPreviewMode: Boolean = false,
     val isBackgroundServiceRunning: Boolean = false,
     val isDarkMode: Boolean = true,
-    val focusSessionMinutesRemaining: Int = 0,
-    /** Giay con lai cua phien Pomodoro — dong ho phai nhay tung giay. */
-    val focusSessionSecondsRemaining: Int = 0,
-    /** Tong so phut cua phien dang chay, de ve thanh tien do. */
-    val focusSessionTotalMinutes: Int = 25,
-    val isFocusSessionActive: Boolean = false,
     val authUserId: String? = null,
     val userProfile: UserProfile? = null,
     val activePairing: Pairing? = null,
@@ -203,7 +196,6 @@ class VesperaViewModel(
     private var agreementJob: Job? = null
     private var auditJob: Job? = null
     private var messagesJob: Job? = null
-    private var focusJob: Job? = null
 
     /**
      * PairingID da thuc su co snapshot noi quy chay ve tu Firestore.
@@ -350,79 +342,6 @@ class VesperaViewModel(
     }
 
     /**
-     * Toggle iOS UI Preview Mode (Apple Dynamic Island & Bento Glass)
-     */
-    fun toggleIosPreviewMode() {
-        val next = !_uiState.value.isIosPreviewMode
-        _uiState.value = _uiState.value.copy(
-            isIosPreviewMode = next,
-            successMessage = if (next)
-                "🍏 Đã đổi SANG giao diện kiểu iOS (Dynamic Island & Bento). Đây là bộ áo, app vẫn chạy trên Android."
-            else
-                "Đã đổi lại giao diện Android chuẩn."
-        )
-    }
-
-    /**
-     * Start Pomodoro Focus Mode Study Session
-     *
-     * Dong ho phai chay that: truoc day `focusSessionMinutesRemaining` chi duoc
-     * gan khi bat va khi tat, nen the hinh luc nao cung ding "25 phut" — nguoi
-     * dung bao "dong ho dem nguoc thuc su ko hoat dong". Gio day co ticker dem
-     * tung giay trong ViewModel, chay du cho o man hinh khac.
-     */
-    fun startFocusSession(minutes: Int = 25) {
-        val totalSeconds = minutes.coerceAtLeast(1) * 60
-        _uiState.value = _uiState.value.copy(
-            isFocusSessionActive = true,
-            focusSessionMinutesRemaining = minutes,
-            focusSessionTotalMinutes = minutes,
-            focusSessionSecondsRemaining = totalSeconds,
-            // Pomodoro chi la dong ho dem nguoc. Bo chan (AppBlockService)
-            // KHONG doc truong `isFocusSessionActive` nao ca — do vay that
-            // may bao "Vespera sẽ phát cảnh báo nếu mở mạng xã hội" la het
-            // noi dung cua mot tinh nang khong ton tai.
-            successMessage = "🎯 Đồng hồ phiên tập trung $minutes phút đang chạy. " +
-                "Máy chỉ chặn ứng dụng theo Nội quy mà gia đình đã bật — phiên này không tự chặn gì thêm."
-        )
-        startFocusTicker()
-    }
-
-    private fun startFocusTicker() {
-        focusJob?.cancel()
-        focusJob = viewModelScope.launch {
-            while (true) {
-                delay(1000L)
-                val left = _uiState.value.focusSessionSecondsRemaining - 1
-                if (left <= 0) {
-                    _uiState.value = _uiState.value.copy(
-                        isFocusSessionActive = false,
-                        focusSessionSecondsRemaining = 0,
-                        focusSessionMinutesRemaining = 0,
-                        successMessage = "✅ Hết giờ! Phiên tập trung đã hoàn thành."
-                    )
-                    break
-                }
-                _uiState.value = _uiState.value.copy(
-                    focusSessionSecondsRemaining = left,
-                    focusSessionMinutesRemaining = (left + 59) / 60
-                )
-            }
-        }
-    }
-
-    fun stopFocusSession() {
-        focusJob?.cancel()
-        focusJob = null
-        _uiState.value = _uiState.value.copy(
-            isFocusSessionActive = false,
-            focusSessionMinutesRemaining = 0,
-            focusSessionSecondsRemaining = 0,
-            successMessage = "Đã kết thúc phiên học tập tập trung."
-        )
-    }
-
-    /**
      * Gio cua lan chạm tay ma MAY NAY da rung. Listener cua document ghep noi
      * dua lan nay tra ve chinh no, nen phai co moc so de khong rung lan thu hai.
      * -1 = CHUA nhan snapshot nao: moc dau tien chi duoc ghi lai chu khong rung,
@@ -476,9 +395,9 @@ class VesperaViewModel(
     }
 
     /**
-     * Ba me mo mot gio "hoc tap trung" tren may con. Khac voi dong ho Pomodoro
-     * o man nay: no ghi len `pairings/{id}` va bo chan cua may con doc duoc
-     * that, nen no chan duoc ung dung — voi dieu kien may con da bat Tro nang.
+     * Ba me mo mot gio "hoc tap trung" tren may con. Luu len `pairings/{id}`
+     * va bo chan cua may con doc duoc that, nen no chan duoc ung dung — voi
+     * dieu kien may con da bat Tro nang.
      */
     fun startFamilyStudy(minutes: Int) {
         val pairing = _uiState.value.activePairing

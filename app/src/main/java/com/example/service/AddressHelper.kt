@@ -80,6 +80,32 @@ object AddressHelper {
      * trong khi minSdk = 24 → buộc phải giữ và suppressing cảnh báo.
      */
     @Suppress("DEPRECATION")
+    /**
+     * Nhãn đường mà Google trả về cho một điểm chưa được bản đồ hoá.
+     *
+     * Đây KHÔNG phải lỗi định vị: toạ độ vẫn đúng, chỉ cái tên thì không ai đặt.
+     * Nhưng in ra "Đường Chưa Đặt Tên, Huyện X, Tỉnh Y" trong một card có viền
+     * xanh trông y như một địa chỉ đã xác minh — phụ huynh đọc rồi tin con đang ở
+     * một con đường thật. Vì vậy card phải hỏi hàm này và nói rõ ràng.
+     *
+     * So sánh không phân biệt hoa thường và bỏ dấu gạch nối/_space_ để bắt được
+     * cả "Unnamed Road", "UNNAMED-ROAD", "đường chưa đặt tên".
+     */
+    fun isUnmappedRoadLabel(address: String): Boolean {
+        val norm = address.lowercase(Locale.US)
+            .replace('-', ' ').replace('_', ' ')
+            .let { Regex("\\s+").replace(it, " ") }
+            .trim()
+        if (norm.isEmpty()) return false
+        if (norm == DEFAULT_ADDRESS.lowercase(Locale.US)) return true
+        return UNMAPPED_ROAD_MARKERS.any { marker -> norm.contains(marker) }
+    }
+
+    private val UNMAPPED_ROAD_MARKERS = listOf(
+        "chưa đặt tên", "không đặt tên", "chưa có tên", "không có tên",
+        "unnamed road", "unnamed street", "no name", "noname", "đường không tên"
+    )
+
     private fun reverseGeocode(context: Context, latitude: Double, longitude: Double): String? {
         return try {
             val geocoder = Geocoder(context, Locale("vi", "VN"))

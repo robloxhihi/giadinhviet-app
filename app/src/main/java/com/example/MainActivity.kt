@@ -6,7 +6,6 @@ import android.os.Build
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
-import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
@@ -46,6 +45,40 @@ class MainActivity : ComponentActivity() {
                 return VesperaViewModel(repository, telemetryHelper, applicationContext) as T
             }
         }
+    }
+
+    // Launcher xin quyen runtime (dung cho ca luong onboarding, "Cap tat ca" lan
+    // Trung tam quyen). Dang ky o cap activity de openSpecialPermission cung goi duoc.
+    private val permissionsLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { results ->
+        // Phan biet "tu choi" voi "tu choi vinh vien" (Don't ask again) — chi Android
+        // moi tra loi duoc dieu nay, qua shouldShowRequestPermissionRationale.
+        PermissionManager.recordRequestOutcome(results) { shouldShowRequestPermissionRationale(it) }
+        val locationGranted = results[Manifest.permission.ACCESS_FINE_LOCATION] == true ||
+                results[Manifest.permission.ACCESS_COARSE_LOCATION] == true
+        if (locationGranted) {
+            com.example.service.VesperaTelemetryService.start(applicationContext)
+            viewModel.broadcastSelfTelemetry()
+        }
+        // Đọc lại trạng thái THẬT ngay sau khi người dùng trả lời hộp thoại hệ thống.
+        viewModel.refreshPermissions()
+        viewModel.refreshUsageStats()
+    }
+
+    // ACCESS_BACKGROUND_LOCATION phai xin RIENG, chi sau khi foreground location
+    // da duoc chap thuan (Android 10+); xin chung lo voi foreground bi fail tham.
+    private val backgroundLocationLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        PermissionManager.recordRequestOutcome(
+            mapOf(Manifest.permission.ACCESS_BACKGROUND_LOCATION to granted)
+        ) { shouldShowRequestPermissionRationale(it) }
+        if (granted) {
+            com.example.service.VesperaTelemetryService.start(applicationContext)
+            viewModel.broadcastSelfTelemetry()
+        }
+        viewModel.refreshPermissions()
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -93,22 +126,9 @@ class MainActivity : ComponentActivity() {
                 val context = LocalContext.current
                 var selectedRoleForSignUp by remember { mutableStateOf(UserRole.PARENT) }
 
-                // Launcher xin quyền runtime (dùng cho cả luồng onboarding lẫn Trung tâm quyền)
-                val permissionsLauncher = rememberLauncherForActivityResult(
-                    ActivityResultContracts.RequestMultiplePermissions()
-                ) { permissions ->
-                    val locationGranted = permissions[Manifest.permission.ACCESS_FINE_LOCATION] == true ||
-                            permissions[Manifest.permission.ACCESS_COARSE_LOCATION] == true
-                    if (locationGranted) {
-                        com.example.service.VesperaTelemetryService.start(applicationContext)
-                        viewModel.broadcastSelfTelemetry()
-                    }
-                    // Đọc lại trạng thái THẬT ngay sau khi người dùng trả lời hộp thoại hệ thống.
-                    viewModel.refreshPermissions()
-                    viewModel.refreshUsageStats()
-                }
-
-                // Xin tất cả quyền runtime còn thiếu ở đúng thời điểm người dùng vào app
+                // Xin tất cả quyền runtime còn thiếu ở đúng thời điểm người dùng vào app.
+                // ACCESS_BACKGROUND_LOCATION được cố tình giữ NGOÀI lô này: xin chung
+                // hộp thoại với foreground location sẽ fail thầm trên API 29+.
                 LaunchedEffect(Unit) {
                     val missing = PermissionManager.missingRuntimePermissions(applicationContext)
                     if (missing.isNotEmpty()) permissionsLauncher.launch(missing)
@@ -175,18 +195,59 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun openSpecialPermission(item: PermissionManager.PermissionItem) {
+        // Quyen runtime bi "Don't ask again": hop thoai he thong se khong hien nua,
+        // loi duy nhat con lai la man hinh Thong tin ung dung cua chinh app.
+        if (item.permanentlyDenied) {
+            try {
+                startActivity(PermissionManager.appDetailsIntent(this))
+            } catch (e: Exception) {
+                Toast.makeText(this, "Không thể mở cài đặt quyền: ${e.message}", Toast.LENGTH_SHORT).show()
+            }
+            return
+        }
+        // Vi tri nen: tu Android 10 chi cap duoc qua hop thoai runtime, va chi sau khi
+        // foreground location da duoc chap thuan. Mo trang "Thong tin ung dung" la
+        // ngua tro tren nhieu OEM — khong di duong do nua.
+        if (item.id == "background_location") {
+            requestBackgroundLocation()
+            return
+        }
         val intent = when (item.id) {
             "usage" -> PermissionManager.usageAccessIntent()
             "overlay" -> PermissionManager.overlayIntent(this)
             "notifications" -> PermissionManager.notificationSettingsIntent(this)
-            "background_location" -> PermissionManager.backgroundLocationSettingsIntent(this)
+            // Android cam code tu bat AccessibilityService — day la huong duy nhat hop le.
+            "accessibility" -> PermissionManager.accessibilitySettingsIntent()
             "battery" -> PermissionManager.batteryOptimizationIntent(this)
             else -> null
         }
         try {
-            if (intent != null) startActivity(intent)
+            if (intent != null) startActivity(intent) else Toast.makeText(
+                this,
+                "Quyền này cấp bằng hộp thoại hệ thống khi cần dùng.",
+                Toast.LENGTH_SHORT
+            ).show()
         } catch (e: Exception) {
             Toast.makeText(this, "Không thể mở cài đặt quyền: ${e.message}", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    /**
+     * Xin ACCESS_BACKGROUND_LOCATION dung cach: rieng mot hop thoai, chi khi
+     * foreground location da duoc cap. Neu chua co foreground thi xin no truoc.
+     */
+    private fun requestBackgroundLocation() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return // < 10: khong ton tai quyen nen rieng
+        if (PermissionManager.hasBackgroundLocation(this)) return
+        if (PermissionManager.hasForegroundLocation(this)) {
+            backgroundLocationLauncher.launch(Manifest.permission.ACCESS_BACKGROUND_LOCATION)
+        } else {
+            Toast.makeText(
+                this,
+                "Cần cấp quyền Vị trí (GPS) trước — Android chỉ cho bật vị trí nền sau đó.",
+                Toast.LENGTH_LONG
+            ).show()
+            permissionsLauncher.launch(PermissionManager.runtimePermissionsFor("location"))
         }
     }
 

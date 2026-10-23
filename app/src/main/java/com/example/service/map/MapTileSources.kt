@@ -40,10 +40,18 @@ object MapTileSources {
             .toString()
     }
 
-    /** Esri dung thu tu {z}/{y}/{x} (row/col) va khong co duoi tren URL. */
-    private class EsriSource : XYTileSource(
-        "EsriWorldImagery", 0, 18, 256, ".jpg",
-        arrayOf("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/")
+    /**
+     * Esri dung thu tu {z}/{y}/{x} (row/col) va khong co duoi tren URL.
+     * [maxZoom] khong phai do Esri tu khai — do la tran da do truc tiep tai
+     * toa do nong thon Quang Ngai hom 2026-10-23 (xem ghi chu o dau file).
+     */
+    private class EsriSource(
+        keyName: String,
+        service: String,
+        maxZoom: Int
+    ) : XYTileSource(
+        keyName, 0, maxZoom, 256, ".jpg",
+        arrayOf("https://server.arcgisonline.com/ArcGIS/rest/services/$service/MapServer/tile/")
     ) {
         override fun getTileURLString(pMapTileIndex: Long): String = StringBuilder(getBaseUrl())
             .append(MapTileIndex.getZoom(pMapTileIndex)).append('/')
@@ -56,12 +64,33 @@ object MapTileSources {
     val GOOGLE_MAX_ZOOM = 21
     val ESRI_MAX_ZOOM = 18
 
+    /**
+     * Tran du lieu THAT cua World_Street_Map, do hom 2026-10-23 tai
+     * 14.4572191/107.9176331: z15 = 9.565 B, z16 = 5.174 B, z17 = 2.421 B (md5
+     * f7f490c2, anh that), z18 = 2.521 B md5 f27d9de7 = dung o xam "khong du lieu"
+     * nhu World_Imagery. De maxZoom = 18 la ban do trong trang o cap cao nhat.
+     */
+    val ESRI_STREET_MAX_ZOOM = 17
+
     // Kieu phai ghi tuong minh: class ben duoi la private, de Kotlin tu suy ra thi
     // "public property exposes its private type" la loi bien dich.
     val HYBRID: OnlineTileSourceBase = GoogleSource("GoogleHybrid", "y", "jpg")
     val SATELLITE: OnlineTileSourceBase = GoogleSource("GoogleSatellite", "s", "jpg")
     val STREET: OnlineTileSourceBase = GoogleSource("GoogleStreet", "m", "png")
-    val ESRI: OnlineTileSourceBase = EsriSource()
+    val ESRI: OnlineTileSourceBase = EsriSource("EsriWorldImagery", "World_Imagery", 18)
+
+    /**
+     * Nen duong pho bo sung theo yeu cau "chon ban do OSM chi tiet".
+     *
+     * KHONG phai tile.openstreetmap.org: host do do truc tiep hom 2026-10-23 van
+     * tra HTTP 000 (khong phan hoi), va hom 2026-10-21 cung da nhu vay — dung no
+     * thi map trong trang, dung cai nguoi dung kha. Carto Voyager (duong dan ve
+     * lai tu OSM) cung bi chan: moi zoom tra ve dung 2.049 byte giong het nhau,
+     * tuc la mot anh loi. World_Street_Map cua Esri thi tai that va du lieu duong
+     * pho cua no cung den tu OpenStreetMap, nen ghi ro credit la OSM.
+     */
+    val ESRI_STREET: OnlineTileSourceBase =
+        EsriSource("EsriWorldStreetMap", "World_Street_Map", ESRI_STREET_MAX_ZOOM)
 
     /**
      * Max zoom ma tile that su co du lieu — khong phai max zoom source tu khai.
@@ -70,6 +99,7 @@ object MapTileSources {
      */
     fun suggestedMaxZoom(source: OnlineTileSourceBase): Int = when (source) {
         ESRI -> ESRI_MAX_ZOOM
+        ESRI_STREET -> ESRI_STREET_MAX_ZOOM
         HYBRID, SATELLITE, STREET -> GOOGLE_MAX_ZOOM
         else -> source.maximumZoomLevel.coerceAtMost(GOOGLE_MAX_ZOOM)
     }

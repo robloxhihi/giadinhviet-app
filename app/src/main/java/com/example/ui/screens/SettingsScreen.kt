@@ -93,7 +93,6 @@ fun SettingsScreen(
     onUnpair: () -> Unit,
     onSignOut: () -> Unit,
     onToggleDarkMode: (Boolean) -> Unit,
-    onToggleIosPreview: () -> Unit = {},
     onSaveEmergencyPhone: (String) -> Unit = { _ -> },
     onSaveSosSchedule: (Boolean, Int, Int) -> Unit = { _, _, _ -> },
     onUpdateProfile: (String, String) -> Unit = { _, _ -> },

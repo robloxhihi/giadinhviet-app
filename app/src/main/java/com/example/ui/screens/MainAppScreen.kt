@@ -199,11 +199,9 @@ fun MainAppScreen(
                         onOpenUsageSettings = onOpenUsageSettings,
                         onRequestExtraTimeClick = { showExtraTimeDialog = true },
                         // "Sửa lịch" phải đưa tới nơi CHỨA lịch (thẻ Chặn ứng dụng
-                        // nằm ở tab Cài đặt), không phải mở đồng hồ Pomodoro.
+                        // nằm ở tab Cài đặt).
                         onEditScheduleClick = { selectedTab = 4 },
                         onToggleBackgroundService = { viewModel.toggleBackgroundService(context) },
-                        onStartFocusSession = { viewModel.startFocusSession(25) },
-                        onStopFocusSession = { viewModel.stopFocusSession() },
                         onStartFamilyStudy = { viewModel.startFamilyStudy(it) },
                         onStopFamilyStudy = { viewModel.stopFamilyStudy() },
                         onOpenInsights = { overlayScreen = "insights" },
@@ -237,7 +235,6 @@ fun MainAppScreen(
                         onUnpair = { viewModel.unpairConnection() },
                         onSignOut = { viewModel.signOut() },
                         onToggleDarkMode = { enabled -> viewModel.setDarkMode(enabled) },
-                        onToggleIosPreview = { viewModel.toggleIosPreviewMode() },
                         onSaveEmergencyPhone = { phone -> viewModel.saveEmergencyPhoneNumber(phone) },
                         onSaveSosSchedule = { restricted, startH, endH -> viewModel.saveSosSchedule(restricted, startH, endH) },
                         onUpdateProfile = { name, photo -> viewModel.updateUserProfile(name, photo) },

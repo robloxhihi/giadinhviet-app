@@ -463,12 +463,24 @@ class NoDemoDataRegressionTest {
         assertTrue("Ứng dụng nổi bật phải lấy từ danh sách thật hoặc để trống",
             telemetry.contains(".firstOrNull()?.appName.orEmpty()"))
 
+        // IosDynamicIslandPill (lop da gia iOS) va dong ho Pomodoro da bi cat
+        // theo yeu cau "vứt hết demo". Ba doan duoi day giu cho chung khong con
+        // duong quay lai: khong con composable, khong con cong tac bat, khong con
+        // chu "iOS Preview" / "Pomodoro" o bat ky dau trong app.
         val bento = stripComments(readUtf8(projectFile("src/main/java/com/example/ui/components/BentoCards.kt")))
-        assertTrue("Đèn danh thiếp phải phân biệt dữ liệu live", bento.contains("isLive: Boolean"))
-        assertTrue("Pin chưa đọc được hiển thị là Pin ?", bento.contains("\"Pin ?\""))
+        assertTrue("Lớp da giả iOS đã bị loại khỏi app", !bento.contains("IosDynamicIslandPill"))
 
-        val screen = stripComments(readUtf8(projectFile("src/main/java/com/example/ui/screens/ScreenTimeScreen.kt")))
-        assertTrue("Danh thiếp phải nói rõ dữ liệu còn mới", screen.contains("isLive = partnerLoc.updatedAt > 0L"))
+        val demoScreens = listOf(
+            "src/main/java/com/example/ui/screens/ScreenTimeScreen.kt",
+            "src/main/java/com/example/ui/screens/SettingsScreen.kt",
+            "src/main/java/com/example/ui/screens/MainAppScreen.kt",
+            "src/main/java/com/example/ui/viewmodel/VesperaViewModel.kt"
+        )
+        demoScreens.forEach { path ->
+            val src = stripComments(readUtf8(projectFile(path)))
+            assertTrue("$path không còn công tắc xem trước iOS", !src.contains("IosPreview"))
+            assertTrue("$path không còn đồng hồ Pomodoro", !src.contains("Pomodoro"))
+        }
     }
 
     // ── 19. Ket luan cua mang/GPS khong duoc bi xoa khi dang xuat ───────────

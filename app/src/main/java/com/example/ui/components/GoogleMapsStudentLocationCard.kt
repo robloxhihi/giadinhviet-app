@@ -18,17 +18,19 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.BatteryChargingFull
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Explore
 import androidx.compose.material.icons.filled.Fullscreen
 import androidx.compose.material.icons.filled.FullscreenExit
 import androidx.compose.material.icons.filled.GpsFixed
 import androidx.compose.material.icons.filled.Layers
-import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.filled.OpenInNew
@@ -114,7 +116,20 @@ private enum class MapLayer(
     SATELLITE("Vệ tinh", MapTileSources.SATELLITE, MapTileSources.GOOGLE_MAX_ZOOM, "© Google, Maxar"),
     STREET("Đường phố", MapTileSources.STREET, MapTileSources.GOOGLE_MAX_ZOOM, "© Google"),
     ESRI("Vệ tinh Esri", MapTileSources.ESRI, MapTileSources.ESRI_MAX_ZOOM, "© Esri, Maxar"),
-    TERRAIN("Địa hình", TileSourceFactory.OpenTopo, 0, "© OpenTopoMap")
+    TERRAIN("Địa hình", TileSourceFactory.OpenTopo, 0, "© OpenTopoMap"),
+
+    /**
+     * Lop "duong pho chi tiet" theo dung yeu cau cua nguoi dung hom 2026-10-23.
+     * PHAI NAM CUOI: thu tu enum chinh la `ordinal` duoc luu trong
+     * SharedPreferences "map_view"/"layer2". Xen ke vao giua thi khi mo lai app
+     * nguoi dung dung tu chuyen sang mot lop khac ma khong hieu vi sao.
+     */
+    ESRI_STREET(
+        "Đường phố chi tiết (OSM/Esri)",
+        MapTileSources.ESRI_STREET,
+        MapTileSources.ESRI_STREET_MAX_ZOOM,
+        "© Esri, OpenStreetMap contributors"
+    )
 }
 
 /** An toàn khi danh sach lop ngan lai: mod theo size, KHONG bao gio index ngoai mang. */
@@ -194,6 +209,9 @@ fun GoogleMapsStudentLocationCard(
     }
 
     var isExpanded by remember { mutableStateOf(false) }
+    // The map-filling info panel is now a one-line chip; `infoExpanded` is the
+    // only way back to the full read-out, so the map itself stays visible.
+    var infoExpanded by remember { mutableStateOf(false) }
     // Lop va muc zoom tung chon bang nut "Lớp" phai song qua lan mo lai man hinh.
     // Key mang ten moi ("layer2"/"zoom2"): ban cu luu "layer" = lop Duong pho cua
     // OSM, ma host tile.openstreetmap.org do hom 2026-10-21 khong tra ve HTTP nao
@@ -546,6 +564,8 @@ fun GoogleMapsStudentLocationCard(
                                 setAnchor(org.osmdroid.views.overlay.Marker.ANCHOR_CENTER, org.osmdroid.views.overlay.Marker.ANCHOR_BOTTOM)
                                 title = "Điểm xuất phát"
                                 snippet = "Bắt đầu hành trình"
+                                // Xem ly do o marker vi tri hien tai ben duoi.
+                                setOnMarkerClickListener({ _, _ -> true }, map)
                             })
                         }
 
@@ -574,6 +594,13 @@ fun GoogleMapsStudentLocationCard(
                             title = studentName.ifEmpty { "Vị trí học sinh" } +
                                     if (isStaleFix) " (vị trí có thể đã cũ)" else ""
                             snippet = "$displayAddress\nLat: $latitude, Lng: $longitude"
+                            // Chan bong bong mac dinh cua osmdroid. No ve mot hop
+                            // trang khong theo mau nao cua app, rong hon the thong
+                            // tin o goc tren trai va lap lai dung nhung gi chip da
+                            // hien — chinh la cai o trang cho "Con Ga / Lat.. Lng.."
+                            // trong anh nguoi dung gui. An click thi van giu nguyen
+                            // dau pin de nhan mat vi tri.
+                            setOnMarkerClickListener({ _, _ -> true }, map)
                         })
 
                         // Chế độ theo dõi: animateTo tới tọa độ mới, nhưng chỉ khi
@@ -594,45 +621,94 @@ fun GoogleMapsStudentLocationCard(
                 )
             }
 
-            // Góc trên trái: thẻ thông tin gọn + bán trong suốt (không che đường)
+            // Góc trên trái: MỘT CHIP GỌN tự co, mot dong. The cu dung
+            // fillMaxWidth(0.62f) voi 7-9 dong chu => tren man rong (BlueStacks
+            // bao 1280dp) no che gan mot nua ban do, dung cai nguoi dung phan
+            // "cho no nho con 1/10". Cham chip moi mo bang chi tiet: khong con
+            // so lieu nao bi mat, chi khong phai nhin tat ca cung luc.
             if (!isPrivacyActive) {
                 Surface(
-                    modifier = Modifier.align(Alignment.TopStart).padding(6.dp)
-                        .fillMaxWidth(0.62f).shadow(2.dp, RoundedCornerShape(10.dp)),
+                    onClick = { infoExpanded = !infoExpanded },
+                    shape = RoundedCornerShape(8.dp),
+                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, rgbGradientBrush),
+                    modifier = Modifier
+                        .align(Alignment.TopStart)
+                        .padding(6.dp)
+                        .shadow(2.dp, RoundedCornerShape(8.dp))
+                        .widthIn(max = 240.dp)
+                        .testTag("map_info_chip")
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier.size(6.dp).clip(CircleShape).background(
+                                when {
+                                    !showMap -> NeonAmber
+                                    isStaleFix -> NeonRose
+                                    else -> NeonEmerald
+                                }
+                            )
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = when {
+                                !showMap -> "Đang dò GPS…"
+                                else -> displayAddress
+                            },
+                            color = TextPrimary, fontSize = 10.sp, fontWeight = FontWeight.Bold,
+                            maxLines = 1, overflow = TextOverflow.Ellipsis
+                        )
+                        if (showMap) {
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                FixPrecision.accuracyShortLabel(accuracyMeters),
+                                color = FacebookBlue, fontSize = 9.sp,
+                                fontWeight = FontWeight.Medium, maxLines = 1
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(2.dp))
+                        Icon(
+                            imageVector = if (infoExpanded) Icons.Default.ExpandLess
+                                          else Icons.Default.ExpandMore,
+                            contentDescription = if (infoExpanded) "Thu gọn thông tin vị trí"
+                                                 else "Xem chi tiết định vị",
+                            tint = TextMuted,
+                            modifier = Modifier.size(14.dp)
+                        )
+                    }
+                }
+            }
+            if (!isPrivacyActive && infoExpanded) {
+                Surface(
+                    modifier = Modifier.align(Alignment.TopStart)
+                        // 38.dp = chieu cao chip o tren + 6.dp padding x2. Doc lap
+                        // voi chieu rong chip nen khong bao gio de chong len nhau.
+                        .padding(start = 6.dp, end = 6.dp, top = 38.dp)
+                        .widthIn(max = 340.dp).shadow(2.dp, RoundedCornerShape(10.dp)),
                     shape = RoundedCornerShape(10.dp),
-                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.72f),
+                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.94f),
                     border = androidx.compose.foundation.BorderStroke(1.dp, rgbGradientBrush)
                 ) {
                     Column(modifier = Modifier.padding(6.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Box(modifier = Modifier.size(6.dp).clip(CircleShape)
-                                .background(
-                                    when {
-                                        isPrivacyActive -> NeonAmber
-                                        !showMap -> NeonAmber
-                                        isStaleFix -> NeonRose
-                                        else -> NeonEmerald
-                                    }
-                                ))
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Icon(Icons.Default.LocationOn, null, tint = FacebookBlue, modifier = Modifier.size(13.dp))
-                            Spacer(modifier = Modifier.width(3.dp))
-                            Text(
-                                text = when {
-                                    isPrivacyActive -> "Đang ẩn"
-                                    !showMap -> "Đang dò GPS…"
-                                    else -> displayAddress
-                                },
-                                color = TextPrimary, fontSize = 11.sp, fontWeight = FontWeight.Bold,
-                                maxLines = 1, overflow = TextOverflow.Ellipsis
-                            )
-                        }
                         Spacer(modifier = Modifier.height(1.dp))
                         Text(
                             "🕒 $currentTimeString • ⏳ $lastUpdateText",
                             color = TextSecondary, fontSize = 9.sp,
                             maxLines = 1, overflow = TextOverflow.Ellipsis
                         )
+                        // "Đường Chưa Đặt Tên" trông hệt một địa chỉ đã xác minh
+                        // nhưng thật ra chỉ là điểm chưa được bản đồ hoá: toạ độ
+                        // đúng, tên đường thì không ai đặt. Nói rõ để phụ huynh
+                        // không đoán sai chỗ con đang đứng.
+                        if (showMap && AddressHelper.isUnmappedRoadLabel(displayAddress)) {
+                            Text(
+                                "⚠️ Khu vực này bản đồ chưa đặt tên đường, toạ độ bên dưới mới là dữ liệu thật",
+                                color = NeonAmber, fontSize = 9.sp, fontWeight = FontWeight.SemiBold
+                            )
+                        }
                         if (stayDurationMillis >= 0) {
                             Text(
                                 "⏳ Đã ở đây: $stayText",
