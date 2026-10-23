@@ -1,7 +1,6 @@
 package com.example
 
 import com.example.service.AddressHelper
-import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -87,11 +86,14 @@ class MapHonestyRegressionTest {
             card.contains("if (!isPrivacyActive && infoExpanded)"))
 
         // Hộp trắng "Con Ga / Lat:.. Lng:.." trong ảnh người dùng gửi.
-        val suppression = "setOnMarkerClickListener({ _, _ -> true }, map)"
-        assertEquals(
-            "Cả hai marker (điểm xuất phát + vị trí hiện tại) đều phải chặn bong bóng mặc định",
-            2,
-            card.split(suppression).size - 1
+        // Marker.setOnMarkerClickListener CHỈ nhận một tham số (khac MapView) —
+        // them `map` vao la compileDebugKotlin chet, CI run 110/111 do ngay.
+        val suppression = "setOnMarkerClickListener { _, _ -> true }"
+        val suppressedMarkers = card.split(suppression).size - 1
+        assertTrue(
+            "Cả hai marker (điểm xuất phát + vị trí hiện tại) đều phải chặn bong bóng " +
+                "mặc định, hiện find được $suppressedMarkers",
+            suppressedMarkers == 2
         )
 
         assertTrue("Card phải hỏi bộ phân loại nhãn đường",
@@ -135,14 +137,21 @@ class MapHonestyRegressionTest {
      */
     @Test
     fun detailLayerUsesAMeasuredWorkingHostNotADeadOne() {
-        val tiles = projectFile(
+        val raw = projectFile(
             "src/main/java/com/example/service/map/MapTileSources.kt"
         ).readText()
+        // "tile.openstreetmap.org" CO MAT trong tep nay, nhưng chỉ trong lời giải
+        // thích vì sao KHONG dùng host đó. So sánh trên toàn văn bản sẽ đỏ vì lý do
+        // sai, nên phải cắt comment trước.
+        val tiles = stripComments(raw)
         assertTrue("Lớp đường phố chi tiết phải lấy từ Esri World_Street_Map",
             tiles.contains("World_Street_Map"))
         assertTrue("Esri Street phải khoá max zoom theo kết quả đo thật (z18 là ô xám)",
             tiles.contains("ESRI_STREET_MAX_ZOOM = 17"))
-        assertFalse("Không được trỏ host tile.openstreetmap.org đã chết",
+        assertTrue("Mã nguồn tile phải trỏ host ArcGIS đã đo được tile thật",
+            tiles.contains("server.arcgisonline.com"))
+        assertFalse("Không được trỏ host tile.openstreetmap.org đã chết trong code",
             tiles.contains("tile.openstreetmap.org"))
+        assertTrue("Comment phải giữ lại bằng chứng đo", raw.contains("HTTP 000"))
     }
 }

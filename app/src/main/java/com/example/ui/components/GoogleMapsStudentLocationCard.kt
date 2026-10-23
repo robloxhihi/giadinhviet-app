@@ -565,7 +565,10 @@ fun GoogleMapsStudentLocationCard(
                                 title = "Điểm xuất phát"
                                 snippet = "Bắt đầu hành trình"
                                 // Xem ly do o marker vi tri hien tai ben duoi.
-                                setOnMarkerClickListener({ _, _ -> true }, map)
+                                // Marker.setOnMarkerClickListener chi NHAN MOT tham so
+                                // (khac voi MapView.setOnMarkerClickListener) — chay thu
+                                //tren CI run 110/111 moi ro.
+                                setOnMarkerClickListener { _, _ -> true }
                             })
                         }
 
@@ -600,7 +603,7 @@ fun GoogleMapsStudentLocationCard(
                             // hien — chinh la cai o trang cho "Con Ga / Lat.. Lng.."
                             // trong anh nguoi dung gui. An click thi van giu nguyen
                             // dau pin de nhan mat vi tri.
-                            setOnMarkerClickListener({ _, _ -> true }, map)
+                            setOnMarkerClickListener { _, _ -> true }
                         })
 
                         // Chế độ theo dõi: animateTo tới tọa độ mới, nhưng chỉ khi
