@@ -32,9 +32,19 @@ class MapHonestyRegressionTest {
             ?: error("Không tìm thấy tệp: $relative")
     }
 
+    /**
+     * Cat comment truoc khi noi "ma nguon KHONG con chuoi X", neu khong mot dong
+     * giai thich ve cai loi cu cung du lam test do that bai.
+     *
+     * Phai cat theo DONG. Ban truoc dung Regex("//[^\\n]*") — no an ca `https://`
+     * ben trong chuoi URL, nen "server.arcgisonline.com" bien mat khỏi ma that
+     * va CI run v50 do ngay o dong 151. String khong bi dong.
+     */
     private fun stripComments(source: String): String = source
+        .lines()
+        .filterNot { it.trimStart().startsWith("//") }
+        .joinToString("\n")
         .replace(Regex("/\\*[\\s\\S]*?\\*/"), "")
-        .replace(Regex("//[^\\n]*"), "")
 
     // ── 1. Nhãn đường chưa được bản đồ hoá không được vẽ ra như địa chỉ thật ──
 
@@ -74,22 +84,25 @@ class MapHonestyRegressionTest {
         val card = projectFile(
             "src/main/java/com/example/ui/components/GoogleMapsStudentLocationCard.kt"
         ).readText()
+        // Dong 628 van ghi ro "fillMaxWidth(0.62f)" nhu mot loi giai thich. Doi voi
+        // cac assert "khong con X" thi phai tim tren ma da cat comment.
+        val code = stripComments(card)
 
         // Bảng cũ dùng fillMaxWidth(0.62f) với 7-9 dòng chữ, che gần nửa bản đồ.
         assertFalse("Thẻ vị trí không còn choán 62% chiều ngang bản đồ",
-            card.contains("fillMaxWidth(0.62f)"))
+            code.contains("fillMaxWidth(0.62f)"))
         assertTrue("Chip phải tự co theo nội dung, tối đa 240.dp",
-            card.contains(".widthIn(max = 240.dp)"))
+            code.contains(".widthIn(max = 240.dp)"))
         assertTrue("Chip gọn phải có nhãn ổn định để test trên máy",
-            card.contains("testTag(\"map_info_chip\")"))
+            code.contains("testTag(\"map_info_chip\")"))
         assertTrue("Bảng chi tiết chỉ hiện khi chạm vào chip",
-            card.contains("if (!isPrivacyActive && infoExpanded)"))
+            code.contains("if (!isPrivacyActive && infoExpanded)"))
 
         // Hộp trắng "Con Ga / Lat:.. Lng:.." trong ảnh người dùng gửi.
         // Marker.setOnMarkerClickListener CHỈ nhận một tham số (khac MapView) —
         // them `map` vao la compileDebugKotlin chet, CI run 110/111 do ngay.
         val suppression = "setOnMarkerClickListener { _, _ -> true }"
-        val suppressedMarkers = card.split(suppression).size - 1
+        val suppressedMarkers = code.split(suppression).size - 1
         assertTrue(
             "Cả hai marker (điểm xuất phát + vị trí hiện tại) đều phải chặn bong bóng " +
                 "mặc định, hiện find được $suppressedMarkers",
@@ -97,7 +110,7 @@ class MapHonestyRegressionTest {
         )
 
         assertTrue("Card phải hỏi bộ phân loại nhãn đường",
-            card.contains("AddressHelper.isUnmappedRoadLabel(displayAddress)"))
+            code.contains("AddressHelper.isUnmappedRoadLabel(displayAddress)"))
         assertTrue("Phải nói rõ toạ độ mới là dữ liệu thật",
             card.contains("toạ độ bên dưới mới là dữ liệu thật"))
     }
