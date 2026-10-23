@@ -1,0 +1,127 @@
+---
+layout: null
+---
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gia Đình Việt — bản 51.0 (Android APK)</title>
+<meta name="description" content="Tải bản cài đặt Android của ứng dụng Gia Đình Việt 51.0, kèm hash kiểm chứng.">
+<style>
+  :root{
+    --bg:#05060a; --panel:#0d1120; --line:#232a45;
+    --text:#eaf0ff; --muted:#9aa4c4; --cyan:#38bdf8; --emerald:#34d399; --amber:#fbbf24; --rose:#fb7185;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:radial-gradient(1200px 620px at 78% -12%,#122043 0%,var(--bg) 62%);
+       color:var(--text);font:16px/1.6 -apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+       -webkit-font-smoothing:antialiased}
+  .wrap{max-width:760px;margin:0 auto;padding:40px 20px 72px}
+  h1{font-size:30px;line-height:1.25;margin:0 0 6px;letter-spacing:-.4px}
+  .sub{color:var(--muted);margin:0 0 26px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:18px;margin:0 0 18px}
+  .badge{display:inline-block;font-size:12px;font-weight:700;letter-spacing:.4px;text-transform:uppercase;
+         color:#05060a;background:var(--emerald);border-radius:999px;padding:4px 10px;margin-bottom:12px}
+  a.btn{display:block;text-align:center;text-decoration:none;font-weight:800;font-size:17px;color:#030712;
+        background:linear-gradient(90deg,var(--cyan),var(--emerald));border-radius:12px;padding:14px 18px;margin:4px 0 10px}
+  a.ghost{display:block;text-align:center;text-decoration:none;font-weight:700;font-size:14px;color:var(--text);
+        border:1px solid var(--line);border-radius:12px;padding:11px 18px}
+  h2{font-size:16px;margin:0 0 10px;color:var(--cyan);letter-spacing:.2px}
+  table{width:100%;border-collapse:collapse;font-size:13.5px}
+  th,td{text-align:left;padding:7px 0;border-bottom:1px solid #182040;vertical-align:top}
+  th{color:var(--muted);font-weight:600;width:38%}
+  td code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12px;word-break:break-all;color:#cfe3ff}
+  ul{margin:0;padding-left:20px}
+  li{margin:0 0 7px}
+  .warn{border-left:3px solid var(--amber);padding-left:12px;color:var(--text)}
+  .warn li{margin:0 0 9px}
+  .note{color:var(--muted);font-size:13px}
+  .stop{border-left:3px solid var(--rose)}
+  footer{color:var(--muted);font-size:12.5px;margin-top:26px}
+  @media (max-width:520px){h1{font-size:25px}.wrap{padding:26px 14px 56px}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <span class="badge">Android &middot; bản 51.0</span>
+  <h1>Gia Đình Việt — file cài đặt v51</h1>
+  <p class="sub">Ứng dụng định vị &amp; cân bằng thời gian sử dụng điện thoại cho gia đình. Đây là bản build
+  tự động trên GitHub Actions, ký bằng khoá debug — dùng cho bản demo và kiểm thử, chưa phải bản phát hành chính thức.</p>
+
+  <div class="card">
+    <a class="btn" href="https://github.com/robloxhihi/giadinhviet-app/releases/download/v51/GiaDinhViet.apk" rel="nofollow">Tải GiaDinhViet.apk (76.2 MB)</a>
+    <a class="ghost" href="https://github.com/robloxhihi/giadinhviet-app/releases/tag/v51">Trang Release trên GitHub (mã nguồn + nhật ký build)</a>
+    <p class="note" style="margin:12px 0 0">Yêu cầu Android 7.0 trở lên (API 24). Máy Samsung, Xiaomi, Oppo, Vinsmart đều cài được.</p>
+  </div>
+
+  <div class="card">
+    <h2>Bản này có gì mới</h2>
+    <ul>
+      <li><b>Thẻ vị trí trên bản đồ còn 1 dòng.</b> Trước đây nó chiếm tới 62% chiều ngang và che gần nửa bản đồ; giờ là một chip nhỏ, chạm vào mới mở bảng chi tiết.</li>
+      <li><b>Hộp trắng ghi toạ độ đè trên bản đồ đã bị loại.</b> Đó là bong bóng mặc định của thư viện bản đồ, không thuộc màu nào của ứng dụng.</li>
+      <li><b>Thêm lớp "Đường phố chi tiết".</b> Bộ chọn lớp giờ có: Vệ tinh + tên đường, Vệ tinh, Đường phố, Vệ tinh Esri, Địa hình và Đường phố chi tiết.</li>
+      <li><b>Nút "Cấp tất cả quyền còn thiếu".</b> Ứng dụng hướng dẫn từng quyền một, và đọc lại trạng thái thật từ Android sau mỗi lần bạn quay về.</li>
+      <li><b>Bỏ toàn bộ phần demo còn sót</b> (đồng hồ Pomodoro giả và lớp da giả Dynamic Island của iOS).</li>
+      <li><b>Địa chỉ không còn đánh lừa.</b> Khi Google Maps trả về "Đường Chưa Đặt Tên", ứng dụng nói rõ đó là vùng chưa được bản đồ hoá, và toạ độ mới là dữ liệu thật.</li>
+    </ul>
+  </div>
+
+  <div class="card">
+    <h2>Số liệu kiểm chứng được</h2>
+    <table>
+      <tr><th>Phiên bản</th><td><code>51.0</code> &nbsp;(versionCode <code>51</code>, tag <code>v51</code>)</td></tr>
+      <tr><th>Kích thước file</th><td><code>79,879,052</code> byte ≈ 76.2 MB</td></tr>
+      <tr><th>SHA-256 của APK</th><td><code>91b7c490bc6ebb09e2ce6e8904dcf2fe37321257307ac7f1df614cca2f4f2ef3</code></td></tr>
+      <tr><th>SHA-1 của APK</th><td><code>1bdb124f8a715b25da059f33ca519f66427799e0</code></td></tr>
+      <tr><th>Chứng chỉ ký (SHA-1)</th><td><code>AB:F2:F6:49:CB:02:29:63:DE:77:96:FC:FA:EB:2B:7C:85:94:07:E4</code></td></tr>
+      <tr><th>Chứng chỉ ký (SHA-256)</th><td><code>4A:62:78:E5:B0:04:6C:60:48:B5:A8:A9:A0:94:F4:80:30:0E:91:D7:E0:98:7A:70:BE:6A:7E:E0:C2:55:E7:14</code></td></tr>
+      <tr><th>Xây dựng bởi</th><td>GitHub Actions <a href="https://github.com/robloxhihi/giadinhviet-app/actions/runs/39946095488">run 39946095488</a> (đơn vị chạy: ubuntu, JDK 21)</td></tr>
+      <tr><th>Phát hành</th><td><code>2026-10-23 11:32:10 UTC</code></td></tr>
+      <tr><th>Unit test</th><td>Đã chạy và xanh trong chính run này ("Run unit tests" → success) trước khi APK được ký</td></tr>
+    </table>
+    <p class="note">SHA-256 lấy từ chính API Release của GitHub; SHA-1 tính lại bằng cách tải file về rồi băm,
+    nên hai con số này khớp với file bạn tải, không phải số chép tay.</p>
+  </div>
+
+  <div class="card">
+    <h2>Cài đặt</h2>
+    <ol>
+      <li>Mở file vừa tải trong trình quản lý file của điện thoại.</li>
+      <li>Android sẽ hỏi "Cho phép cài ứng dụng không rõ nguồn gốc?" — chọn Cho phép cho trình duyệt/bạn đang dùng.</li>
+      <li>Cài xong, mở ứng dụng và cấp quyền. Quyền <b>Vị trí</b> và <b>Tin nhắn</b> hiện hộp thoại ngay; các quyền <b>Trợ năng</b>, <b>Hiển thị trên ứng dụng khác</b>, <b>Dữ liệu sử dụng</b>, <b>Tối ưu pin</b> Android bắt buộc bạn tự bật trong Cài đặt — ứng dụng chỉ mở đúng màn hình đó, không tự bật được.</li>
+      <li>Đăng nhập bằng tài khoản và mật khẩu tự đặt, hoặc tài khoản Google.</li>
+    </ol>
+  </div>
+
+  <div class="card">
+    <h2>Những giới hạn thật của bản này</h2>
+    <ul class="warn">
+      <li>File ký bằng <b>debug.keystore công khai trong repo</b>. Nó chứng minh file chưa bị sửa đổi, nhưng <b>không</b> chứng minh người ký — đừng coi đây là bản phân phối chính thức.</li>
+      <li>Đăng nhập Google có thể báo lỗi trên một số máy, vì SHA-256 của khoá debug này chưa được cập nhật vào cấu hình Firebase của dự án.</li>
+      <li>Trang này là GitHub Pages tĩnh, <b>không</b> có lớp kiểm Cloudflare Turnstile như trang chủ. Trang chủ (link bên dưới) mới là nơi tải về có kiểm chứng người thật.</li>
+      <li>Không có file <b>.exe</b> hay <b>.ipa</b> cho ứng dụng này, và không thể có: toàn bộ app viết bằng Kotlin/Compose cho Android và dựa vào ba cơ chế chỉ Android mới có — AccessibilityService để chặn ứng dụng, UsageStatsManager để đo thời gian dùng app, và quyền định vị nền. Windows không có ba thứ đó, iOS thì cấm hẳn ý tưởng "app cha điều khiển app con". Muốn chạy trên Windows chỉ có giả lập Android, trên iPhone chỉ có bản viết lại hoàn toàn bằng Swift + một tài khoản Apple Nhà phát triển.</li>
+    </ul>
+  </div>
+
+  <div class="card stop">
+    <h2 style="color:var(--rose)">Nếu bản đồ hiện vị trí sai</h2>
+    <ul class="warn">
+      <li>Ứng dụng không tự đoán vị trí. Điểm trên bản đồ đúng bằng toạ độ mà chính điện thoại báo lên.</li>
+      <li>Muốn biết vì sao lệch, bật bảng chi tiết (chạm vào chip vị trí) và xem hai dòng: <b>sai số ± mét</b> và <b>toạ độ</b>. Sai số trên 40 m nghĩa là định vị chỉ tới cấp toà nhà, không tới cấp cửa.</li>
+      <li>Máy tính giả lập (BlueStacks, LDPlayer...) có GPS ảo cố định — vị trí trên đó thường là một điểm mặc định, không phải nơi bạn ngồi.</li>
+      <li>Sai số dưới 3 m bị hiển thị là ±3 m, đó là sàn của thiết bị chứ không phải phép đo chính xác tuyệt đối.</li>
+    </ul>
+  </div>
+
+  <footer>
+    Trang tải về của mã nguồn mở <a href="https://github.com/robloxhihi/giadinhviet-app">robloxhihi/giadinhviet-app</a>
+    &nbsp;·&nbsp; Trang giới thiệu chính thức:
+    <a href="https://giadinhviet-9eud03puq7u.qoder.website">giadinhviet-9eud03puq7u.qoder.website</a>
+    &nbsp;·&nbsp; Sinh tự động từ GitHub Release API ngày 2026-10-23.
+  </footer>
+
+</div>
+</body>
+</html>
