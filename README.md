@@ -37,15 +37,15 @@ GitHub Actions tự chạy unit test, build `assembleDebug`, ký bằng `debug.k
 repo và gắn file `GiaDinhViet.apk` vào Release.
 
 ```bash
-git tag -a v51 -m "ban 51.0"
-git push origin refs/tags/v51          # -> https://github.com/robloxhihi/giadinhviet-app/releases
+git tag -a v52 -m "ban 52.0"
+git push origin refs/tags/v52          # -> https://github.com/robloxhihi/giadinhviet-app/releases
 ```
 
-Bản mới nhất có file cài đặt thật: **v51** (`GiaDinhViet.apk` gắn kèm Release, tải qua
-[GiaDinhViet.apk](https://github.com/robloxhihi/giadinhviet-app/releases/download/v51/GiaDinhViet.apk)
+Bản mới nhất có file cài đặt thật: **v52** (`GiaDinhViet.apk` gắn kèm Release, tải qua
+[GiaDinhViet.apk](https://github.com/robloxhihi/giadinhviet-app/releases/download/v52/GiaDinhViet.apk)
 hoặc trang [Tai app](https://robloxhihi.github.io/giadinhviet-app/tai-app.html)).
 Tag `v50` vẫn nằm trong repo nhưng **không có Release**: CI đỏ vì hai test hồi quy tự
-viết do tôi sai (`stripComments` ăn cả `https://` trong URL), sửa ở `v51`.
+viết sai (`stripComments` ăn cả `https://` trong URL), đã sửa ở `v51`.
 
 Muốn build bằng Android Studio: mở thư mục này, tạo `.env` chứa `GEMINI_API_KEY`
 (xem `.env.example` — không commit key thật), rồi chạy `assembleDebug`.

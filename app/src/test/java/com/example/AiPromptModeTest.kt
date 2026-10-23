@@ -24,8 +24,35 @@ class AiPromptModeTest {
         assertFalse("Chat thường vẫn bị ép khối Giải pháp đánh số", p.contains("**Giải pháp:**"))
         assertTrue("Chat thường phải được nói rõ là KHÔNG phải báo cáo",
             p.contains("KHONG phai yeu cau phan tich"))
-        assertTrue("Chat thường phải trả lời ngắn kiểu nhắn tin", p.contains("1-3 cau"))
         assertTrue("Phai cam lap lai khuon mau", p.contains("khong lap lai khuon mau"))
+    }
+
+    /**
+     * Lô 2026-10-23: người dùng phàn nàn ngay trên máy "nó gò bó quá", và cả ba
+     * chỗ gò đều nằm trong prompt chat — trần "1-3 câu", cấm danh sách, và lệnh
+     * "chỉ dựa trên số liệu" khiến model từ chối luôn câu hỏi thường.
+     */
+    @Test
+    fun chuyenThoaiThuongDuocPhepNoiNhieuVaHoiChung() {
+        val p = AiPrompt.system(stats, report = false)
+        assertFalse("Vẫn còn trần 1-3 câu nên model không được giải thích đủ",
+            p.contains("1-3 cau"))
+        assertFalse("Vẫn cấm danh sách đánh số trong lúc chat", p.contains("khong danh sach danh so"))
+        assertFalse("Lệnh 'chỉ dựa trên số liệu' đặt chung cho mọi câu hỏi",
+            p.contains("chỉ dựa trên số liệu được cung cấp"))
+        assertTrue("Phải nói rõ được phép trả lời câu hỏi ngoài số liệu",
+            p.contains("cứ trả lời bình thường"))
+        assertTrue("Phải cho phép độ dài theo câu hỏi", p.contains("Tra loi tu nhien het muc"))
+    }
+
+    /** Cấm bịa số liệu vẫn nguyên vẹn sau khi nới giọng điệu. */
+    @Test
+    fun noiGiongDieuKhongDuocNongCamDoBia() {
+        val p = AiPrompt.system(stats, report = false)
+        assertTrue("Mất ràng buộc nguồn số liệu", p.contains("chỉ được lấy từ phần SỐ LIỆU"))
+        assertTrue("Mất lệnh cấm bịa", p.contains("không bịa"))
+        assertTrue("Mất quy tắc an toàn khám bệnh", p.contains("không chẩn đoán bệnh"))
+        assertTrue("Mất quy tắc không theo dõi bí mật", p.contains("không gợi ý theo"))
     }
 
     @Test
