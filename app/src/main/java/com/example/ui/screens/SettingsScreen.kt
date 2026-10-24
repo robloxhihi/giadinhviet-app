@@ -147,13 +147,21 @@ fun SettingsScreen(
             .padding(horizontal = 16.dp, vertical = 20.dp)
     ) {
         Text(
-            text = "CÀI ĐẶT & GIAO DIỆN",
+            text = if (isPaired) "CÀI ĐẶT & GIAO DIỆN" else "CÀI ĐẶT",
             style = MaterialTheme.typography.displayMedium,
             color = MaterialTheme.colorScheme.onBackground,
             fontWeight = FontWeight.Bold
         )
         Text(
-            text = "Tùy chỉnh giao diện sáng tối, màu sắc & quyền hệ thống",
+            // Dòng chữ dưới tiêu đề phải theo đúng những gì màn này còn. Trước đây
+            // nó hứa "tùy chỉnh giao diện sáng tối, màu sắc & quyền hệ thống" ngay cả
+            // khi máy chưa ghép nối — lúc mà cả ba thứ đó đều chưa có chỗ để dùng.
+            text = if (isPaired)
+                "Tùy chỉnh giao diện sáng tối, màu sắc & quyền hệ thống"
+            else
+                "Máy này chưa ghép nối — vào đây chỉ để đăng xuất khỏi máy.\n" +
+                    "Quyền hệ thống, nội quy chặn ứng dụng, giao diện và cài đặt SOS " +
+                    "sẽ trở lại ngay khi ghép nối xong ở mục Tổng quan.",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
@@ -166,6 +174,12 @@ fun SettingsScreen(
 
         Spacer(modifier = Modifier.height(16.dp))
 
+        // CHƯA GHÉP NỐI = màn Cài đặt chỉ còn việc ra khỏi máy (thẻ "TÀI KHOẢN &
+        // BẢO MẬT" bên dưới). Sáu thẻ ở giữa — quyền hệ thống, nội quy chặn ứng
+        // dụng, giao diện, hồ sơ, quản lý ghép nối, cứu hộ/SOS — đều quản lý một
+        // quan hệ chưa tồn tại, nên chúng biến mất hẳn chứ không hiện dạng mờ.
+        // Đổi ý kiến thì chỉ cần bỏ cặp ngoặc bao quanh khối này.
+        if (isPaired) {
         val telemetryHelper = TelemetryAndUsageHelper(context)
         // Đọc trạng thái quyền từ uiState (được refresh realtime khi app resume) — không tự tính lại cục bộ
         val hasUsage = uiState.hasUsagePermission
@@ -643,8 +657,7 @@ fun SettingsScreen(
                 )
             }
         }
-
-
+        }  // hết khối "if (isPaired)" — những gì ở dưới hiện cả khi chưa ghép nối
 
         // Account Actions
         BentoCard(modifier = Modifier.fillMaxWidth()) {

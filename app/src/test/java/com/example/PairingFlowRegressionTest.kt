@@ -398,7 +398,49 @@ class PairingFlowRegressionTest {
             assertTrue("Tab ${it.groupValues[1]} gọi thẳng ${it.groupValues[2]} khi chưa ghép nối", false)
         }
         assertTrue("Phải còn lời nói thẳng cho người dùng", shell.contains("chưa ghép nối"))
-        assertTrue("Tab Cài đặt phải mở suốt (quyền, số cứu hộ, đăng xuất)", shell.contains("4 -> SettingsScreen("))
+        assertTrue("Tab Cài đặt phải mở suốt (để còn đường đăng xuất)", shell.contains("4 -> SettingsScreen("))
         assertTrue("Placeholder phải có testTag cho uiautomator", shell.contains("testTag(\"unpaired_placeholder\")"))
+    }
+
+    /**
+     * (bản 61.0) Tab Cài đặt cũng phải theo cùng một luật: chưa có ai ở đầu kia
+     * thì không có gì để cấu hình. Trước đây màn này bày bảy thẻ ngay cả khi
+     * chưa ghép nối — quyền hệ thống, nội quy chặn app, bảng màu, hồ sơ, quản lý
+     * ghép nối, cài đặt SOS — trong đó sáu thẻ quản lý một quan hệ chưa tồn tại.
+     */
+    @Test
+    fun chuaGhepNoiManCaiDatChiConDuongRaKhoiMay() {
+        val settings = stripComments(read("ui/screens/SettingsScreen.kt"))
+        // blockOf dung indexOf nên mốc là `if (isPaired) {` dau tien trong tep —
+        // dung la nhanh chan ca man, khong phai `if (isPaired) {` nho ben trong
+        // the quan ly ghep noi.
+        val gate = blockOf(settings, "if (isPaired) {")
+        val afterGate = settings.substring(settings.indexOf(gate) + gate.length)
+
+        assertEquals(
+            "Ngoài khối if (isPaired) chỉ được còn đúng một thẻ",
+            1,
+            countOf(Regex("BentoCard\\("), afterGate)
+        )
+        assertTrue("Thẻ còn lại phải có nút đăng xuất", afterGate.contains("sign_out_btn"))
+        assertTrue("Thẻ còn lại phải có nút ngừng dùng", afterGate.contains("delete_account_btn"))
+
+        listOf(
+            "grant_permissions_button",
+            "NỘI QUY ỨNG DỤNG",
+            "GIAO DIỆN & BẢNG MÀU",
+            "QUẢN LÝ GHÉP NỐI THIẾT BỊ",
+            "unpair_btn",
+            "CỨU HỘ KHẨN CẤP"
+        ).forEach {
+            assertTrue("\"$it\" phải nằm sau song chắn isPaired", gate.contains(it))
+        }
+
+        // Tiêu đề cũ hứa "tùy chỉnh giao diện sáng tối, màu sắc & quyền hệ thống"
+        // ngay luc ca ba thu do da bi an — phu de phai noi lai dung cai con lai.
+        assertTrue(
+            "Phụ đề khi chưa ghép nối phải nói thật là chỉ còn đường đăng xuất",
+            settings.contains("chưa ghép nối — vào đây chỉ để đăng xuất")
+        )
     }
 }
