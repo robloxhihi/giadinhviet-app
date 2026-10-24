@@ -358,15 +358,13 @@ private fun UnpairedPlaceholder(isChild: Boolean) {
     ) {
         Text(
             text = if (isChild)
-                "Máy này chưa ghép nối.
-
-Ở mục Tổng quan có MÃ của con — đưa mã đó cho bố mẹ " +
+                "Máy này chưa ghép nối.\n\n" +
+                    "Ở mục Tổng quan có MÃ của con — đưa mã đó cho bố mẹ " +
                     "nhập ở máy của họ là liên kết tự về máy con, con không phải bấm gì. " +
                     "Ghép xong thì Bản đồ, Giờ dùng và Chat mới mở."
             else
-                "Bạn chưa ghép nối với máy học sinh nào.
-
-Ở mục Tổng quan có ô nhập mã đang " +
+                "Bạn chưa ghép nối với máy học sinh nào.\n\n" +
+                    "Ở mục Tổng quan có ô nhập mã đang " +
                     "hiện trên máy của con. Ghép xong thì Bản đồ, Giờ dùng và Chat mới có dữ liệu.",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
