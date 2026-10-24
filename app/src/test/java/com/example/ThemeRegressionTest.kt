@@ -57,6 +57,22 @@ class ThemeRegressionTest {
         assertFalse("Con lua chon lam ngoc", settings.contains("\"purple\""))
     }
 
+    /**
+     * Xoa bo chon mau ma de lai chu "mau sac" tren man hinh thi nguoi dung van
+     * con di tim no. Ban 61.0 doi tieu de the "GIAO DIỆN & BẢNG MÀU" va phu de
+     "Tùy chỉnh ... màu sắc" thanh dung cai con lai: cong tac toi/sang.
+     */
+    @Test
+    fun caiDatKhongConHenBoChonMau() {
+        val settings = code(read("ui/screens/SettingsScreen.kt"))
+        assertFalse("Tieu de the van Goi la 'BẢNG MÀU'", settings.contains("BẢNG MÀU"))
+        assertFalse("Phu de trang Cai dat van hen 'màu sắc'", settings.contains("màu sắc"))
+        assertTrue(
+            "The giao dien phai go dung theo dung mot cong tac sang toi no co",
+            settings.contains("GIAO DIỆN & CHẾ ĐỘ SÁNG TỐI")
+        )
+    }
+
     @Test
     fun chiConToiSangTrongHamTheme() {
         assertTrue(

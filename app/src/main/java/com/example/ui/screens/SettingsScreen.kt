@@ -153,14 +153,15 @@ fun SettingsScreen(
             fontWeight = FontWeight.Bold
         )
         Text(
-            // Dòng chữ dưới tiêu đề phải theo đúng những gì màn này còn. Trước đây
-            // nó hứa "tùy chỉnh giao diện sáng tối, màu sắc & quyền hệ thống" ngay cả
-            // khi máy chưa ghép nối — lúc mà cả ba thứ đó đều chưa có chỗ để dùng.
+            // Dong chu duoi tieu de phai theo dung nhung gi man nay con. Truoc day
+            // no hen "tuy chinh giao dien sang toi, mau sac & quyen he thong":
+            // "mau sac" da sai tu ban 40 (bang chon mau chu dao bi xoa, chi con
+            // cong tac toi/sang), va ca ba thu do deu an khi may chua ghep noi.
             text = if (isPaired)
-                "Tùy chỉnh giao diện sáng tối, màu sắc & quyền hệ thống"
+                "Quyền hệ thống, nội quy chặn ứng dụng và chế độ sáng tối của giao diện"
             else
                 "Máy này chưa ghép nối — vào đây chỉ để đăng xuất khỏi máy.\n" +
-                    "Quyền hệ thống, nội quy chặn ứng dụng, giao diện và cài đặt SOS " +
+                    "Nội quy chặn ứng dụng, hồ sơ, quản lý ghép nối và cài đặt SOS " +
                     "sẽ trở lại ngay khi ghép nối xong ở mục Tổng quan.",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -405,11 +406,13 @@ fun SettingsScreen(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Theme & Color Customization Card
+        // The only choice this card still offers is dark/light — the accent colour
+        // palette was removed in ban 40, so the old title "GIAO DIỆN & BẢNG MÀU"
+        // advertised a picker that no longer exists.
         BentoCard(modifier = Modifier.fillMaxWidth()) {
             Column {
                 Text(
-                    text = "GIAO DIỆN & BẢNG MÀU",
+                    text = "GIAO DIỆN & CHẾ ĐỘ SÁNG TỐI",
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.primary,
                     fontWeight = FontWeight.Bold

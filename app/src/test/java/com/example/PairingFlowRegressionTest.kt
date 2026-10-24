@@ -428,7 +428,7 @@ class PairingFlowRegressionTest {
         listOf(
             "grant_permissions_button",
             "NỘI QUY ỨNG DỤNG",
-            "GIAO DIỆN & BẢNG MÀU",
+            "GIAO DIỆN & CHẾ ĐỘ SÁNG TỐI",
             "QUẢN LÝ GHÉP NỐI THIẾT BỊ",
             "unpair_btn",
             "CỨU HỘ KHẨN CẤP"
@@ -436,11 +436,18 @@ class PairingFlowRegressionTest {
             assertTrue("\"$it\" phải nằm sau song chắn isPaired", gate.contains(it))
         }
 
-        // Tiêu đề cũ hứa "tùy chỉnh giao diện sáng tối, màu sắc & quyền hệ thống"
-        // ngay luc ca ba thu do da bi an — phu de phai noi lai dung cai con lai.
+        // Phu de khi chua ghep noi phai ke lai dung nhung the bi an. "Quyen he
+        // thong" khong duoc nam trong danh sach "se tro lai": dong nhac quyen o
+        // dau man van con nguyen khi chua ghep noi, hen tra no la hen hai duong.
         assertTrue(
             "Phụ đề khi chưa ghép nối phải nói thật là chỉ còn đường đăng xuất",
             settings.contains("chưa ghép nối — vào đây chỉ để đăng xuất")
+        )
+        assertFalse(
+            "Phụ đề không được hứa trả lại quyền hệ thống",
+            settings.substringAfter("chưa ghép nối — vào đây chỉ để đăng xuất")
+                .substringBefore("style = MaterialTheme")
+                .contains("Quyền hệ thống")
         )
 
         // Hop thu "Ngung dung tren may nay" tung dan nguoi doc toi nut "Huy lien
