@@ -165,15 +165,28 @@ class FixRegressionTest {
     }
 
     /**
-     * Han muc phut soan o Dashboard khong bao luu duoc (card do chi hien khi
-     * CHUA ghep noi), nen no phaibien thanh noi dung + nut roi, khong con
-     * thanh keo tu ghi may chủ.
+     * Han muc phut soan o Dashboard khong bao luu duoc (the do chi hien khi
+     * CHUA ghep noi, ma noi quy thi chua co cho de ghi). Ban 59.0 doi no thanh
+     * noi dung + nut roi; ban 60.0 cat han the do vi man CHUA ghep noi khong
+     * duoc noi bat cu thu gi khac viec ghep noi. Test giu ca hai cach quay
+     * lai: tu ghi len may chu, va mo lai mot the chi de day nguoi dung di choi.
      */
     @Test
     fun dashboard_dailyTargetIsNotEditedWhileUnpaired() {
         val src = projectFile("src/main/java/com/example/ui/screens/DashboardScreen.kt").readText()
         assertTrue("Dashboard không được tự ghi hạn mức", !src.contains("onUpdateDailyTarget"))
-        assertTrue("Phải chỉ đường tới nơi soạn được thật", src.contains("Đổi hạn mức trong Cài đặt"))
+        assertTrue(
+            "Màn chưa ghép nối không còn thẻ hạn mức lẫn nút điều hướng tới nó",
+            !src.contains("Đổi hạn mức trong Cài đặt") &&
+                !src.contains("Thiết lập mục tiêu giờ dùng cho con")
+        )
+        // Noi quy that van phai soan duoc o mot cho co ton tai: the luat trong
+        // tab Cai dat (BlockRulesCard), noi co nut gui va nhat ky thay doi.
+        assertTrue(
+            "Cài đặt phải còn nơi soạn nội quy thật",
+            projectFile("src/main/java/com/example/ui/screens/SettingsScreen.kt").readText()
+                .contains("BlockRulesCard")
+        )
     }
 
     /** Cot "hom nay" tren bieu do phai theo thu tu mang (T2..CN), khong co dinh CN. */

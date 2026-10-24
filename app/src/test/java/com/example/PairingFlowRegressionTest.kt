@@ -7,10 +7,10 @@ import org.junit.Test
 import java.io.File
 
 /**
- * Hồi quy cho lô đổi luồng ghép nối (bản 59.0), viết sau khi đọc lại toàn bộ
- * đường đi của một phép ghép chứ không đoán từ màn hình.
+ * Hồi quy cho lô đổi luồng ghép nối (bản 59.0 và 60.0), viết sau khi đọc lại
+ * toàn bộ đường đi của một phép ghép chứ không đoán từ màn hình.
  *
- * Bốn điều xác minh được trong code cũ, mỗi điều tương ứng với một test dưới
+ * Năm điều xác minh được trong code, mỗi điều tương ứng với một test dưới
  * đây:
  *
  * 1. **Chỉ có một đường ghép thật.** Phụ huynh gõ mã ở thẻ "Ghép nối thiết bị
@@ -28,6 +28,10 @@ import java.io.File
  * 4. **Hình dạng mã hay bị nói sai.** Mã thật là `HS-` + 8 ký tự, còn ô nhập
  *    cũ ghi "vd: HS-XXXXX" (5 chữ X), khiến phụ huynh nhìn máy con và tưởng mã
  *    lỗi.
+ * 5. **(bản 60.0) Chưa ghép nối thì màn hình chỉ được nói về việc ghép nối.**
+ *    Trước đó máy phụ huynh chưa ghép vẫn bày thêm bốn thẻ "chờ kết nối", máy
+ *    con bày thêm thẻ GPS/PIN, và ba tab Vị trí / Giờ dùng / Chat mở ra màn
+ *    trống vì chưa có ai ở đầu kia.
  *
  * Test quét tệp nguồn theo kiểu FirestoreKeyRegressionTest: so literal và hằng
  * số, không dựng Compose.
@@ -99,6 +103,32 @@ class PairingFlowRegressionTest {
         }
         return out
     }
+
+    /**
+     * Cat dung doan nam giua `header` (tinh ca dau `{` mo cuoi cua no) va dau
+     * `}` dong nguyen block do — dem ngoac hoa nen khong lan sang phan ke tiep.
+     * Dung de hoi "bên trong nhanh CHUA ghep noi co nhung the nao", vi do la
+     * cau hoi ve vung nguon, khong phai ve chuoi toan cuc.
+     */
+    private fun blockOf(src: String, header: String): String {
+        val start = src.indexOf(header)
+        assertTrue("Thiếu `$header` — cấu trúc màn hình đã đổi mà không sửa test", start >= 0)
+        val open = src.indexOf('{', start)
+        assertTrue("$header không có thân block", open >= 0)
+        var depth = 0
+        for (i in open until src.length) {
+            when (src[i]) {
+                '{' -> depth++
+                '}' -> {
+                    depth--
+                    if (depth == 0) return src.substring(open, i + 1)
+                }
+            }
+        }
+        error("Block của $header không đóng ngoặc")
+    }
+
+    private fun countOf(regex: Regex, text: String): Int = regex.findAll(text).count()
 
     // ── 1. Bên con chỉ hiện mã ────────────────────────────────────────────
 
@@ -293,5 +323,82 @@ class PairingFlowRegressionTest {
             "Nhãn ô nhập phải ví dụ đúng hình dạng mã",
             dashboard.contains("HS-" + "X".repeat(length))
         )
+    }
+
+    // ── 5. Chưa ghép nối thì màn hình CHỈ còn việc ghép nối (bản 60.0) ─────
+
+    @Test
+    fun chuaGhepNoiManTongQuanChiConTheGhepNoi() {
+        // Truoc ban 60.0, nhanh "CHUA ghep noi" cua phu huynh nhem them bon the
+        // phu — "Trung tam giam sat hoc sinh", "Thiet lap muc tieu gio dung cho
+        // con", "An toan khan cap & cuu ho ngoai tuyen", "Trang thai thiet bi
+        // phu huynh". Ca bon chi to "chua ghep noi" va day di noi khac, trong
+        // khi nguoi dung luc do chi can MOT thu: o nhap ma cua con.
+        val dashboard = stripComments(read("ui/screens/DashboardScreen.kt"))
+        val unpaired = blockOf(dashboard, "if (!isPaired) {")
+        assertEquals(
+            "Nhanh chua ghep noi phai chi con dung mot the cho moi vai tro (2 = the cua con + the cua ba me)",
+            2,
+            countOf(Regex("BentoCard\\("), unpaired)
+        )
+        listOf(
+            "Trung tâm giám sát học sinh",
+            "Thiết lập mục tiêu giờ dùng cho con",
+            "An toàn khẩn cấp",
+            "Trạng thái thiết bị phụ huynh",
+            "ĐANG CHỜ KẾT NỐI"
+        ).forEach {
+            assertFalse("Thẻ filler \"$it\" đã quay lại màn chưa ghép nối", unpaired.contains(it))
+        }
+        assertTrue("Phải còn thẻ nhập mã của phụ huynh", unpaired.contains("parent_enter_code_card"))
+        assertTrue("Phải còn ô nhập mã", unpaired.contains("student_code_input"))
+        // Tro ly AI doc so lieu may nay, nen no chi co nghia khi da nam trong
+        // mot gia dinh that: no phai nam ngoai nhanh chua ghep noi.
+        assertFalse(
+            "Trợ lý AI không được hiện khi chưa ghép nối",
+            unpaired.contains("open_ai_chat_button")
+        )
+        assertTrue(
+            "Thẻ AI phải bị khoá sau isPaired",
+            dashboard.contains("if (!isChild && isPaired) {")
+        )
+    }
+
+    @Test
+    fun chuaGhepNoiMayConChiConTheMa() {
+        val student = stripComments(read("ui/screens/StudentMainScreen.kt"))
+        // Mốc là testTag của thẻ MA (comment bị stripComments cắt đi nên không
+        // được dùng "// Student Code Card" làm mốc). Từ thẻ mã tới nhanh
+        // `if (isPaired) {` khong duoc con the phu nao: bo them BentoCard o day
+        // la them chu "chua ghep noi" mà app không có dữ liệu để nói.
+        val card = student.indexOf("student_code_card")
+        val paired = student.indexOf("if (isPaired) {")
+        assertTrue("Thẻ mã học sinh đã đổi chỗ", card in 0 until paired)
+        assertEquals(
+            "Giữa thẻ mã và nhanh ghép-nối-xong không được còn thẻ phụ nào",
+            0,
+            countOf(Regex("BentoCard\\("), student.substring(card, paired))
+        )
+        assertFalse(
+            "Máy con chưa ghép nối không còn thẻ \"TRẠNG THÁI THIẾT BỊ\" (GPS/PIN của chính nó)",
+            student.contains("TRẠNG THÁI THIẾT BỊ")
+        )
+    }
+
+    @Test
+    fun baTabCanNguoiBenKiaPhaiChanKhiChuaGhepNoi() {
+        val shell = stripComments(read("ui/screens/MainAppScreen.kt"))
+        assertEquals(
+            "Đúng ba tab (Vị trí, Giờ dùng, Chat) phải bị khoá tới khi ghép nối",
+            3,
+            countOf(Regex("OnlyWhenPaired\\(isPaired, isChild\\) \\{"), shell)
+        )
+        // Goi truc tiep ma khong qua OnlyWhenPaired la mo lai mot man trong.
+        Regex("""\b[123] -> (LocationScreen|ScreenTimeScreen|ChatScreen)\(""").find(shell)?.let {
+            assertTrue("Tab ${it.groupValues[1]} gọi thẳng ${it.groupValues[2]} khi chưa ghép nối", false)
+        }
+        assertTrue("Phải còn lời nói thẳng cho người dùng", shell.contains("chưa ghép nối"))
+        assertTrue("Tab Cài đặt phải mở suốt (quyền, số cứu hộ, đăng xuất)", shell.contains("4 -> SettingsScreen("))
+        assertTrue("Placeholder phải có testTag cho uiautomator", shell.contains("testTag(\"unpaired_placeholder\")"))
     }
 }

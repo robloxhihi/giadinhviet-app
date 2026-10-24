@@ -31,7 +31,6 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.FamilyRestroom
-import androidx.compose.material.icons.filled.GpsFixed
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.HourglassTop
 import androidx.compose.material.icons.filled.Insights
@@ -46,7 +45,6 @@ import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material.icons.filled.Timeline
 import androidx.compose.material.icons.filled.TouchApp
-import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.FloatingActionButton
@@ -78,7 +76,6 @@ import com.example.data.model.PairingStatus
 import com.example.data.model.RequestStatus
 import com.example.data.model.RuleAuditEntry
 import com.example.data.model.UserRole
-import com.example.data.model.hasRealFix
 import com.example.service.blocker.ConsentPolicy
 import com.example.ui.components.BentoCard
 import com.example.ui.components.BentoProgressBar
@@ -354,7 +351,11 @@ fun DashboardScreen(
 
         // Cho dat tro ly AI o VUNG CHET cua bang dieu tra: no doc dung so lieu
         // app do tren may nay, nen chi huu ich voi nguoi nam noi quy.
-        if (!isChild) {
+        //
+        // Ban 60.0: the nay con bi chan sau `isPaired`. Khi CHUA ghep noi thi
+        // man nay chi duoc phep con mot thu: the nhap ma cua con. Tro ly AI,
+        // thong ke, noi quy... xuat hien day du ngay sau khi ghep xong.
+        if (!isChild && isPaired) {
             GlassCard(
                 modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
                 glow = NeonViolet
@@ -599,337 +600,13 @@ fun DashboardScreen(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(16.dp))
-
-                // PARENT MONITORING SUITE: Bảng giám sát con (Chưa ghép nối)
-                BentoCard(
-                    modifier = Modifier.fillMaxWidth(),
-                    borderColor = NeonAmber.copy(alpha = 0.5f)
-                ) {
-                    Column {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                text = "Trung tâm giám sát học sinh",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = NeonAmber,
-                                fontWeight = FontWeight.Bold,
-                                letterSpacing = 1.sp
-                            )
-                            Box(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(8.dp))
-                                    .background(NeonAmber.copy(alpha = 0.15f))
-                                    .padding(horizontal = 8.dp, vertical = 2.dp)
-                            ) {
-                                Text(
-                                    text = "ĐANG CHỜ KẾT NỐI",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = NeonAmber,
-                                    fontWeight = FontWeight.Bold
-                                )
-                            }
-                        }
-
-                        Spacer(modifier = Modifier.height(12.dp))
-
-                        // Grid 4 chỉ số con
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
-                            BentoStatCard(
-                                modifier = Modifier.weight(1f),
-                                icon = Icons.Default.LocationOn,
-                                iconTint = NeonCyan,
-                                title = "VỊ TRÍ CON",
-                                value = "Chưa kết nối",
-                                subtitle = "Đang chờ thiết bị",
-                                testTag = "child_unpaired_loc_stat"
-                            )
-
-                            BentoStatCard(
-                                modifier = Modifier.weight(1f),
-                                icon = Icons.Default.BatteryUnknown,
-                                iconTint = TextMuted,
-                                title = "PIN THIẾT BỊ CON",
-                                value = "—",
-                                subtitle = "Chưa liên kết",
-                                testTag = "child_unpaired_bat_stat"
-                            )
-                        }
-
-                        Spacer(modifier = Modifier.height(10.dp))
-
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
-                            BentoStatCard(
-                                modifier = Modifier.weight(1f),
-                                icon = Icons.Default.Schedule,
-                                iconTint = FacebookBlue,
-                                title = "GIỜ DÙNG CỦA CON",
-                                value = "—",
-                                subtitle = "Chưa ghép nối — chưa có số liệu",
-                                testTag = "child_unpaired_usage_stat"
-                            )
-
-                            BentoStatCard(
-                                modifier = Modifier.weight(1f),
-                                icon = Icons.Default.HourglassTop,
-                                iconTint = NeonAmber,
-                                title = "TRẠNG THÁI AN TOÀN",
-                                value = "Chờ tín hiệu",
-                                subtitle = "Tự động cập nhật",
-                                testTag = "child_unpaired_safe_stat"
-                            )
-                        }
-
-                        Spacer(modifier = Modifier.height(10.dp))
-
-                        Text(
-                            text = "Dữ liệu vị trí và pin sẽ tự động cập nhật sau khi ghép nối thành công.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = TextMuted
-                        )
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                // CẤU HÌNH GIỚI HẠN THỜI GIAN CHO CON (Parental Screen Time Controls)
-                BentoCard(modifier = Modifier.fillMaxWidth()) {
-                    Column {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(
-                                imageVector = Icons.Default.Schedule,
-                                contentDescription = null,
-                                tint = NeonCyan,
-                                modifier = Modifier.size(20.dp)
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                text = "Thiết lập mục tiêu giờ dùng cho con",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = NeonCyan,
-                                fontWeight = FontWeight.Bold,
-                                letterSpacing = 1.sp
-                            )
-                        }
-
-                        Spacer(modifier = Modifier.height(8.dp))
-
-                        Text(
-                            text = "Phụ huynh có thể cài đặt trước giới hạn thời gian màn hình mỗi ngày để rèn luyện thói quen tự giác cho con:",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = TextSecondary
-                        )
-
-                        Spacer(modifier = Modifier.height(10.dp))
-
-                        val target = uiState.usageSchedule?.dailyTargetMinutes ?: 0
-
-                        Column {
-                            Text(
-                                text = if (target > 0) "Mục tiêu hiện tại: $target phút/ngày"
-                                else "Mục tiêu hiện tại: chưa đặt",
-                                style = MaterialTheme.typography.labelMedium,
-                                color = NeonCyan,
-                                fontWeight = FontWeight.Bold
-                            )
-                            // Thanh keo han muc tung dat o day va goi thang
-                            // len máy chủ. Đây là nhánh "CHUA ghep noi": nội quy
-                            // chưa có chỗ để lưu nên mỗi lần kéo là một lần
-                            // thất bại, kéo xong thì giá trị quay về cũ. Ở đây
-                            // chỉ hiển thị — soạn thì ở card Nội quy trong
-                            // Cài đặt, nơi có nút Gửi đề xuất và nhật ký.
-                            Text(
-                                text = "Chưa ghép nối nên chưa lưu được hạn mức này. " +
-                                    "Hạn mức chỉ đổi được ở mục Nội quy ứng dụng trong Cài đặt, " +
-                                    "nơi có nút Gửi đề xuất và nhật ký thay đổi.",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = TextSecondary,
-                                modifier = Modifier.padding(top = 6.dp)
-                            )
-                            Spacer(modifier = Modifier.height(10.dp))
-                            OutlinedButton(
-                                onClick = { onNavigateToTab(4) },
-                                modifier = Modifier.fillMaxWidth().height(42.dp),
-                                shape = RoundedCornerShape(10.dp)
-                            ) {
-                                Text(
-                                    "Đổi hạn mức trong Cài đặt →",
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.Bold
-                                )
-                            }
-                        }
-
-
-                        Spacer(modifier = Modifier.height(12.dp))
-
-                        Button(
-                            onClick = { onNavigateToTab(2) },
-                            modifier = Modifier.fillMaxWidth().height(44.dp),
-                            shape = RoundedCornerShape(10.dp),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = SpaceCardElevated,
-                                contentColor = NeonCyan
-                            )
-                        ) {
-                            Text("Đi đến Quản lý Giờ dùng & Phân loại ứng dụng →", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                        }
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                // CÀI ĐẶT AN TOÀN SOS & KÊNH NGOẠI TUYẾN
-                BentoCard(modifier = Modifier.fillMaxWidth()) {
-                    Column {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(
-                                imageVector = Icons.Default.Warning,
-                                contentDescription = null,
-                                tint = NeonRose,
-                                modifier = Modifier.size(20.dp)
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                text = "An toàn khẩn cấp & cứu hộ ngoại tuyến",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = NeonRose,
-                                fontWeight = FontWeight.Bold,
-                                letterSpacing = 1.sp
-                            )
-                        }
-
-                        Spacer(modifier = Modifier.height(8.dp))
-
-                        Text(
-                            text = "Hệ thống SOS thông minh: Tự động gửi tọa độ GPS qua Internet, Mesh hoặc SMS khi khẩn cấp.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = TextSecondary,
-                            lineHeight = 18.sp
-                        )
-
-                        Spacer(modifier = Modifier.height(10.dp))
-
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(text = "Số cứu hộ SMS:", style = MaterialTheme.typography.bodySmall, color = TextMuted)
-                            Text(
-                                text = uiState.emergencyPhoneNumber.ifEmpty { "Chưa lưu số người thân" },
-                                style = MaterialTheme.typography.labelMedium,
-                                color = NeonEmerald,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-
-                        Spacer(modifier = Modifier.height(4.dp))
-
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(text = "Khung giờ con được bấm SOS:", style = MaterialTheme.typography.bodySmall, color = TextMuted)
-                            Text(
-                                text = if (uiState.isSosRestricted) "${uiState.sosStartHour}:00 - ${uiState.sosEndHour}:00" else "Toàn thời gian (24/7)",
-                                style = MaterialTheme.typography.labelMedium,
-                                color = NeonAmber,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-
-                        Spacer(modifier = Modifier.height(12.dp))
-
-                        Button(
-                            onClick = { onNavigateToTab(4) },
-                            modifier = Modifier.fillMaxWidth().height(44.dp),
-                            shape = RoundedCornerShape(10.dp),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = SpaceCardElevated,
-                                contentColor = NeonRose
-                            )
-                        ) {
-                            Text("Cài đặt số điện thoại & Khung giờ SOS →", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                        }
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                // Real Telemetry of THIS device
-                val myLoc = uiState.myLocation
-                val totalTodayMins = uiState.detailedAppUsage.sumOf { it.minutesUsed }
-
-                BentoCard(modifier = Modifier.fillMaxWidth()) {
-                    Column {
-                        Text(
-                            text = "Trạng thái thiết bị phụ huynh (máy này)",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = NeonEmerald,
-                            fontWeight = FontWeight.Bold,
-                            letterSpacing = 1.sp
-                        )
-
-                        Spacer(modifier = Modifier.height(10.dp))
-
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
-                            BentoStatCard(
-                                modifier = Modifier.weight(1f),
-                                icon = Icons.Default.GpsFixed,
-                                iconTint = NeonCyan,
-                                title = "GPS MÁY NÀY",
-                                // "Vệ tinh" khi myLoc == null la noi xau: may CHƯA
-                                // do duoc gi ca. Sai so cung phai qua FixPrecision
-                                // de khong in "±1m" cua may gia lap.
-                                value = if (myLoc != null && myLoc.hasRealFix) "Đã có vị trí" else "Chưa có vị trí",
-                                subtitle = if (myLoc != null && myLoc.hasRealFix)
-                                    "±${com.example.service.map.FixPrecision.honestAccuracyMeters(myLoc.accuracy).toInt()} m"
-                                else "máy chưa dò được GPS",
-                                testTag = "device_gps_stat"
-                            )
-
-                            BentoStatCard(
-                                modifier = Modifier.weight(1f),
-                                icon = Icons.Default.Schedule,
-                                iconTint = NeonEmerald,
-                                title = "GIỜ DÙNG MÁY NÀY",
-                                value = "$totalTodayMins phút",
-                                subtitle = "Hôm nay",
-                                testTag = "device_usage_stat"
-                            )
-                        }
-
-                        Spacer(modifier = Modifier.height(10.dp))
-
-                        Button(
-                            onClick = { onNavigateToTab(1) },
-                            modifier = Modifier.fillMaxWidth().height(44.dp),
-                            shape = RoundedCornerShape(10.dp),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = SpaceCardElevated,
-                                contentColor = NeonCyan
-                            )
-                        ) {
-                            Icon(imageVector = Icons.Default.LocationOn, contentDescription = null, modifier = Modifier.size(16.dp))
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("Xem bản đồ GPS & Lịch sử di chuyển", fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                        }
-                    }
-                }
+                // Ban 60.0: CAT HET bon the phu o day. Khi CHUA ghep noi, man
+                // nay tung nhem them "Trung tam giam sat hoc sinh", "Thiet lap
+                // muc tieu gio dung cho con", "An toan khan cap & cuu ho ngoai
+                // tuyen" va "Trang thai thiet bi phu huynh" — ca bon chi noi
+                // "chua ghep noi" roi day nguoi dung di choi khac. Luc do thi
+                // nguoi dung can DUNG mot thu: o nhap ma cua con. Ghep xong,
+                // du lieu that ve nen man hinh day du (nhanh else ben duoi).
             }
 
             Spacer(modifier = Modifier.height(14.dp))

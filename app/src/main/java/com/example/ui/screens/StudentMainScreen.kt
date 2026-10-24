@@ -25,14 +25,12 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.BatteryChargingFull
 import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.Chat
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.ExitToApp
-import androidx.compose.material.icons.filled.GpsFixed
 import androidx.compose.material.icons.filled.HourglassTop
 import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.LinkOff
@@ -63,7 +61,6 @@ import com.example.data.model.PairingStatus
 import com.example.data.model.UserRole
 import com.example.ui.components.BentoCard
 import com.example.ui.components.BentoProgressBar
-import com.example.ui.components.BentoStatCard
 import com.example.ui.theme.FacebookBlue
 import com.example.ui.theme.NeonAmber
 import com.example.ui.theme.NeonCyan
@@ -108,7 +105,6 @@ fun StudentMainScreen(
     val studentCode = userProfile?.studentCode.orEmpty()
     val isPaired = uiState.activePairing != null && uiState.activePairing.status == PairingStatus.PAIRED
     val parentName = uiState.activePairing?.parentName?.ifEmpty { "Phụ huynh" } ?: "Phụ huynh"
-    val myLoc = uiState.myLocation
 
     Column(
         modifier = Modifier
@@ -355,36 +351,11 @@ fun StudentMainScreen(
                     }
                 }
             }
-        } else {
-            // Device Stats (Only show when not paired or as secondary info)
-            BentoCard(modifier = Modifier.fillMaxWidth()) {
-                Column {
-                    Text("TRẠNG THÁI THIẾT BỊ", style = MaterialTheme.typography.labelSmall, color = NeonEmerald, fontWeight = FontWeight.Bold)
-                    Spacer(modifier = Modifier.height(10.dp))
-                    // Pin: chi hien % khi doc duoc so that tu telemetry. Null hoac
-                    // 0 = chua do duoc, khong duoc bịa "85%" nhu truoc day.
-                    val battery = myLoc?.batteryLevel ?: 0
-                    val hasBattery = myLoc != null && battery > 0
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        BentoStatCard(
-                            modifier = Modifier.weight(1f),
-                            icon = Icons.Default.GpsFixed,
-                            iconTint = NeonCyan,
-                            title = "GPS",
-                            value = if (myLoc != null) "Hoạt động" else "Đang dò",
-                            subtitle = "Tự động cập nhật"
-                        )
-                        BentoStatCard(
-                            modifier = Modifier.weight(1f),
-                            icon = Icons.Default.BatteryChargingFull,
-                            iconTint = NeonEmerald,
-                            title = "PIN",
-                            value = if (hasBattery) "$battery%" else "—",
-                            subtitle = if (hasBattery) "Thiết bị học sinh" else "Chưa đọc được pin"
-                        )
-                    }
-                }
-            }
         }
+
+        // Ban 60.0: nhanh "CHUA ghep noi" o day tung con mot the "TRẠNG THÁI
+        // THIẾT BỊ" (GPS + PIN may nay). No khong giup gi cho viec ghep noi —
+        // luc chua ghep thi chang co ai nhan duoc toa do do — nen no bi cat.
+        // May con chua ghep chi con dung mot the: MA.
     }
 }

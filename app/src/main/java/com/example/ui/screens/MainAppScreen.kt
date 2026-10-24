@@ -59,6 +59,12 @@ fun MainAppScreen(
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val isChild = uiState.userProfile?.role == UserRole.CHILD
+    // Ban 60.0: khi CHUA ghep noi thi app chi mo dung man Tong quan (cho nhap
+    // / hien ma) va Cai dat (quyen he thong, so cuu ho, dang xuat). Vi tri,
+    // Gio dung va Chat deu can nguoi ben kia; mo ra khi chua ghep chi la mot
+    // man trong khong co ai, nen chan bang OnlyWhenPaired.
+    val isPaired = uiState.activePairing != null &&
+        uiState.activePairing.status == PairingStatus.PAIRED
     var selectedTab by remember { mutableIntStateOf(0) }
     var overlayScreen by remember { mutableStateOf<String?>(null) }
     var showExtraTimeDialog by remember { mutableStateOf(false) }
@@ -180,49 +186,42 @@ fun MainAppScreen(
                             onOpenAiChat = { overlayScreen = "ai" }
                         )
                     }
-                    1 -> LocationScreen(
-                        uiState = uiState,
-                        onRefreshLocation = { viewModel.broadcastSelfTelemetry() },
-                        onRequestPrivacyClick = { showPrivacyDialog = true },
-                        onSendZenlyBump = { viewModel.sendZenlyBump(context) },
-                        onToggleLocationHistory = { enabled -> viewModel.toggleLocationHistory(enabled) },
-                        onOpenLocationHistory = { overlayScreen = "history" },
-                        onRecheckPermissions = { viewModel.refreshPermissions() }
-                    )
-                    2 -> ScreenTimeScreen(
-                        uiState = uiState,
-                        onOpenUsageSettings = onOpenUsageSettings,
-                        onRequestExtraTimeClick = { showExtraTimeDialog = true },
-                        // "Sửa lịch" phải đưa tới nơi CHỨA lịch (thẻ Chặn ứng dụng
-                        // nằm ở tab Cài đặt).
-                        onEditScheduleClick = { selectedTab = 4 },
-                        onToggleBackgroundService = { viewModel.toggleBackgroundService(context) },
-                        onStartFamilyStudy = { viewModel.startFamilyStudy(it) },
-                        onStopFamilyStudy = { viewModel.stopFamilyStudy() },
-                        onOpenInsights = { overlayScreen = "insights" },
-                        onProposeAgreement = { viewModel.proposeAgreement(it) },
-                        onRespondToAgreement = { agr, accept -> viewModel.respondToAgreement(agr, accept) },
-                    )
-                    3 -> {
-                        val isPaired = uiState.activePairing != null &&
-                            uiState.activePairing.status == PairingStatus.PAIRED
-                        if (isChild && !isPaired) {
-                            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                                Text(
-                                    text = "Vui lòng ghép nối với phụ huynh để trò chuyện.",
-                                    color = MaterialTheme.colorScheme.onSurface
-                                )
-                            }
-                        } else {
-                            ChatScreen(
-                                uiState = uiState,
-                                onSendMessage = { text, url, type -> viewModel.sendMessage(text, url, type) },
-                                onToggleStar = { id, star -> viewModel.toggleMessageStar(id, star) },
-                                onSelectEmotion = { emotion -> viewModel.setSelectedEmotion(emotion) },
-                                onConnectMeshPeer = { peerId -> viewModel.connectMeshPeer(peerId) },
-                                onSendMeshMessage = { peerId, text -> viewModel.sendMeshMessage(peerId, text) }
-                            )
-                        }
+                    1 -> OnlyWhenPaired(isPaired, isChild) {
+                        LocationScreen(
+                            uiState = uiState,
+                            onRefreshLocation = { viewModel.broadcastSelfTelemetry() },
+                            onRequestPrivacyClick = { showPrivacyDialog = true },
+                            onSendZenlyBump = { viewModel.sendZenlyBump(context) },
+                            onToggleLocationHistory = { enabled -> viewModel.toggleLocationHistory(enabled) },
+                            onOpenLocationHistory = { overlayScreen = "history" },
+                            onRecheckPermissions = { viewModel.refreshPermissions() }
+                        )
+                    }
+                    2 -> OnlyWhenPaired(isPaired, isChild) {
+                        ScreenTimeScreen(
+                            uiState = uiState,
+                            onOpenUsageSettings = onOpenUsageSettings,
+                            onRequestExtraTimeClick = { showExtraTimeDialog = true },
+                            // "Sửa lịch" phải đưa tới nơi CHỨA lịch (thẻ Chặn ứng dụng
+                            // nằm ở tab Cài đặt).
+                            onEditScheduleClick = { selectedTab = 4 },
+                            onToggleBackgroundService = { viewModel.toggleBackgroundService(context) },
+                            onStartFamilyStudy = { viewModel.startFamilyStudy(it) },
+                            onStopFamilyStudy = { viewModel.stopFamilyStudy() },
+                            onOpenInsights = { overlayScreen = "insights" },
+                            onProposeAgreement = { viewModel.proposeAgreement(it) },
+                            onRespondToAgreement = { agr, accept -> viewModel.respondToAgreement(agr, accept) },
+                        )
+                    }
+                    3 -> OnlyWhenPaired(isPaired, isChild) {
+                        ChatScreen(
+                            uiState = uiState,
+                            onSendMessage = { text, url, type -> viewModel.sendMessage(text, url, type) },
+                            onToggleStar = { id, star -> viewModel.toggleMessageStar(id, star) },
+                            onSelectEmotion = { emotion -> viewModel.setSelectedEmotion(emotion) },
+                            onConnectMeshPeer = { peerId -> viewModel.connectMeshPeer(peerId) },
+                            onSendMeshMessage = { peerId, text -> viewModel.sendMeshMessage(peerId, text) }
+                        )
                     }
                     4 -> SettingsScreen(
                         uiState = uiState,
@@ -328,6 +327,50 @@ fun MainAppScreen(
                 }
             },
             onDismiss = { showPermissionDialog = false }
+        )
+    }
+}
+
+/**
+ * Chan duong dan vao ba tab can nguoi ben kia (Vi tri / Gio dung / Chat) khi
+ * may CHUA ghep noi. Mo ra khi chua ghep thi ca ba chi la man trong khong co
+ * ai: khong co ai de do toa do, khong co noi quy ap len may nao, khong co dau
+ * ben kia de nhan tin. Thay vi mot man trong, nguoi dung thay dung mot dong
+ * giai thich va van ve duoc Tong quan de ghep.
+ */
+@Composable
+private fun OnlyWhenPaired(
+    isPaired: Boolean,
+    isChild: Boolean,
+    content: @Composable () -> Unit
+) {
+    if (isPaired) content() else UnpairedPlaceholder(isChild)
+}
+
+@Composable
+private fun UnpairedPlaceholder(isChild: Boolean) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = 28.dp)
+            .testTag("unpaired_placeholder"),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = if (isChild)
+                "Máy này chưa ghép nối.
+
+Ở mục Tổng quan có MÃ của con — đưa mã đó cho bố mẹ " +
+                    "nhập ở máy của họ là liên kết tự về máy con, con không phải bấm gì. " +
+                    "Ghép xong thì Bản đồ, Giờ dùng và Chat mới mở."
+            else
+                "Bạn chưa ghép nối với máy học sinh nào.
+
+Ở mục Tổng quan có ô nhập mã đang " +
+                    "hiện trên máy của con. Ghép xong thì Bản đồ, Giờ dùng và Chat mới có dữ liệu.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center
         )
     }
 }
