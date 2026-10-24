@@ -6,8 +6,8 @@ layout: null
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Gia Đình Việt — bản 60.0 (Android APK)</title>
-<meta name="description" content="Tải bản cài đặt Android của ứng dụng Gia Đình Việt 60.0, kèm hash kiểm chứng.">
+<title>Gia Đình Việt — bản 61.0 (Android APK)</title>
+<meta name="description" content="Tải bản cài đặt Android của ứng dụng Gia Đình Việt 61.0, kèm hash kiểm chứng.">
 <style>
   :root{
     --bg:#05060a; --panel:#0d1120; --line:#232a45;
@@ -45,41 +45,45 @@ layout: null
 <body>
 <div class="wrap">
 
-  <span class="badge">Android &middot; bản 60.0</span>
-  <h1>Gia Đình Việt — file cài đặt v60</h1>
+  <span class="badge">Android &middot; bản 61.0</span>
+  <h1>Gia Đình Việt — file cài đặt v61</h1>
   <p class="sub">Ứng dụng định vị &amp; cân bằng thời gian sử dụng điện thoại cho gia đình. Đây là bản build
   tự động trên GitHub Actions, ký bằng khoá debug — dùng cho bản demo và kiểm thử, chưa phải bản phát hành chính thức.</p>
 
   <div class="card">
-    <a class="btn" href="https://github.com/robloxhihi/giadinhviet-app/releases/download/v60/GiaDinhViet.apk" rel="nofollow">Tải GiaDinhViet.apk (76.2 MB)</a>
-    <a class="ghost" href="https://github.com/robloxhihi/giadinhviet-app/releases/tag/v60">Trang Release trên GitHub (mã nguồn + nhật ký build)</a>
-    <p class="note" style="margin:12px 0 0">Yêu cầu Android 7.0 trở lên (API 24). Máy Samsung, Xiaomi, Oppo, Vinsmart đều cài được. Nếu máy đang cài bản cũ hơn, gỡ bản cũ trước khi cài — Android có thể báo <code>INSTALL_FAILED_UPDATE_INCOMPATIBLE</code>.</p>
+    <a class="btn" href="https://github.com/robloxhihi/giadinhviet-app/releases/download/v61/GiaDinhViet.apk" rel="nofollow">Tải GiaDinhViet.apk (76.2 MB)</a>
+    <a class="ghost" href="https://github.com/robloxhihi/giadinhviet-app/releases/tag/v61">Trang Release trên GitHub (mã nguồn + nhật ký build)</a>
+    <p class="note" style="margin:12px 0 0">Yêu cầu Android 7.0 trở lên (API 24). Máy Samsung, Xiaomi, Oppo, Vinsmart đều cài được.</p>
   </div>
 
   <div class="card">
     <h2>Bản này có gì mới</h2>
+    <!-- Ba muc dau la cua ban 61.0; ba muc sau ke thua 59.0-60.0. Phai ghi ro
+         vi nguoi doc den tu v60 da co ba muc sau, ke chung nhu "moi" la noi xau. -->
+    <p class="note" style="margin:0 0 12px">Ba mục đầu là của bản 61.0. Ba mục sau kế thừa từ 59.0–60.0, nhắc lại vì chúng vẫn đúng ở bản này.</p>
     <ul>
-      <li><b>Chưa ghép nối thì chỉ còn việc ghép nối.</b> Màn Tổng quan của máy phụ huynh bây giờ đúng một thẻ: ô nhập mã của con. Bốn thẻ giới thiệu (trung tâm giám sát, mục tiêu giờ dùng, cứu hộ khẩn cấp, trạng thái thiết bị) đã bị xoá khỏi trạng thái này — chúng chỉ là chữ lấp chỗ trống khi chưa có dữ liệu thật.</li>
-      <li><b>Map, Giờ dùng và Chat bị chặn khi chưa ghép nối.</b> Chạm vào là một dòng giải thích hiện ra thay vì màn hình trống hoặc số liệu bịa; mục Cài đặt vẫn mở đầy đủ.</li>
-      <li><b>Máy học sinh chỉ hiện mã của mình</b> (bản 59). Không còn ô nhập mã, không còn nút Đồng ý / Từ chối, không còn hàng đợi "YÊU CẦU GHÉP NỐI".</li>
-      <li><b>Mã xác thực (PIN) và toàn bộ ống nước xin-phép đã bị xoá hẳn</b> — ghép nối giờ chỉ có một đường: phụ huynh nhập mã đang hiện trên máy con.</li>
-      <li><b>Ghép nối là tức thì.</b> Phụ huynh bấm "Ghép nối ngay", liên kết ghi xuống máy chủ; nếu máy con đang mở app thì khoảng 20 giây sau mã hiện trên máy con sẽ tự đổi sang mã mới và mọi màn hình mở ra.</li>
+      <li><b>Màn Cài đặt cũng theo đúng một luật như mọi màn khác.</b> Khi máy chưa ghép nối, ở đó chỉ còn thẻ "TÀI KHOẢN &amp; BẢO MẬT" với hai nút: <i>Đăng xuất</i> và <i>Ngừng dùng trên máy này</i>. Sáu thẻ trước đây vẫn hiện — quyền hệ thống, nội quy chặn ứng dụng, giao diện, hồ sơ, quản lý ghép nối, cứu hộ SOS — bị ẩn hẳn, vì chúng quản lý một quan hệ chưa tồn tại.</li>
+      <li><b>Hộp thoại "Ngừng dùng trên máy này" không còn dẫn tới một nút đã bị ẩn.</b> Trước đây nó bảo người đọc "gỡ liên kết bằng nút Hủy liên kết ở trên", mà nút đó nằm trong thẻ vừa bị ẩn khi chưa ghép nối. Giờ hộp thoại có hai câu riêng theo đúng trạng thái máy.</li>
+      <li><b>Sửa ba dòng chữ hứa sai trên màn Cài đặt.</b> Phụ đề hẹn "trả lại quyền hệ thống" sau khi ghép nối trong khi quyền không phụ thuộc ghép nối; tiêu đề thẻ "GIAO DIỆN &amp; BẢNG MÀU" và phụ đề "màu sắc" vẫn nói tới bộ chọn màu đã bị xoá từ bản 40 — chỗ đó giờ chỉ còn công tắc tối/sáng.</li>
+      <li><b>Chưa ghép nối thì Tổng quan chỉ còn việc ghép nối</b> (bản 60): đúng một thẻ, ô nhập mã của con; bản đồ, Giờ dùng và Chat hiện lời giải thích thay vì màn hình trống hoặc số liệu bịa.</li>
+      <li><b>Máy học sinh chỉ hiện mã của mình.</b> Không còn ô nhập, không còn nút Đồng ý / Từ chối, không còn hàng đợi "YÊU CẦU GHÉP NỐI"; mã PIN và toàn bộ ống nước xin-phép đã bị xoá hẳn.</li>
+      <li><b>Ghép nối là tức thì.</b> Phụ huynh nhập mã đang hiện trên máy con; nếu máy con đang mở app thì khoảng 20 giây sau mọi màn hình mở ra và mã của con tự đổi sang mã mới.</li>
     </ul>
   </div>
 
   <div class="card">
     <h2>Số liệu kiểm chứng được</h2>
     <table>
-      <tr><th>Phiên bản</th><td><code>60.0</code> &nbsp;(versionCode <code>60</code>, tag <code>v60</code>)</td></tr>
+      <tr><th>Phiên bản</th><td><code>61.0</code> &nbsp;(versionCode <code>61</code>, tag <code>v61</code>)</td></tr>
       <tr><th>Kích thước file</th><td><code>79,879,052</code> byte ≈ 76.2 MB</td></tr>
-      <tr><th>SHA-256 của APK</th><td><code>4db67bdb7a588a03b23bcb71a90e43839018ad577e30380066b10904e227f11f</code></td></tr>
-      <tr><th>SHA-1 của APK</th><td><code>58eae1741780a4da7088cd75ba2f813a2101dc5f</code></td></tr>
+      <tr><th>SHA-256 của APK</th><td><code>e6f23c42e1ee1b0c51be3795e67865a3667dcf5ecf0facdbdc197f6afba676c9</code></td></tr>
+      <tr><th>SHA-1 của APK</th><td><code>15b2b6ddcd8a579974e5e4284bc1d3fed69f8368</code></td></tr>
       <tr><th>Chứng chỉ ký (SHA-1)</th><td><code>AB:F2:F6:49:CB:02:29:63:DE:77:96:FC:FA:EB:2B:7C:85:94:07:E4</code></td></tr>
       <tr><th>Chứng chỉ ký (SHA-256)</th><td><code>4A:62:78:E5:B0:04:6C:60:48:B5:A8:A9:A0:94:F4:80:30:0E:91:D7:E0:98:7A:70:BE:6A:7E:E0:C2:55:E7:14</code></td></tr>
-      <tr><th>Xây dựng bởi</th><td>GitHub Actions <a href="https://github.com/robloxhihi/giadinhviet-app/actions/runs/40083680468">run 40083680468</a> (đơn vị chạy: ubuntu, JDK 21)</td></tr>
-      <tr><th>Phát hành</th><td><code>2026-10-24 09:59:33 UTC</code></td></tr>
-      <tr><th>Unit test</th><td>Đã chạy và xanh trong chính run này ("Run unit tests" → success) trước khi APK được ký. 11 test trong <code>PairingFlowRegressionTest</code> buộc màn chưa ghép nối chỉ được còn thẻ ghép nối.</td></tr>
-      <tr><th>Chạy thật trên máy</th><td>Cài bản 60 lên máy giả lập BlueStacks (Android 9, API 28): tài khoản phụ huynh <b>chưa ghép nối</b> hiện đúng một thẻ "Ghép nối thiết bị học sinh"; ba tab Vị trí / Giờ dùng / Chat hiện dòng chữ "Bạn chưa ghép nối với máy học sinh nào…"; Cài đặt vẫn đầy đủ.</td></tr>
+      <tr><th>Xây dựng bởi</th><td>GitHub Actions <a href="https://github.com/robloxhihi/giadinhviet-app/actions/runs/40087472894">run 40087472894</a> (đơn vị chạy: ubuntu, JDK 21)</td></tr>
+      <tr><th>Phát hành</th><td><code>2026-10-24 10:56:33 UTC</code></td></tr>
+      <tr><th>Unit test</th><td>Đã chạy và xanh trong chính run này ("Run unit tests" → success) trước khi APK được ký</td></tr>
+      <tr><th>Chạy thật trên máy</th><td>Cài bản 61.0 lên máy giả lập BlueStacks (Android 9, API 28): tài khoản phụ huynh <b>chưa ghép nối</b> mở mục Cài đặt chỉ còn đúng hai nút <i>Đăng xuất</i> và <i>Ngừng dùng trên máy này</i>; đăng nhập tài khoản <b>đã ghép nối</b> thì sáu thẻ kia hiện lại đầy đủ, kèm nút "Hủy liên kết thiết bị".</td></tr>
     </table>
     <p class="note">SHA-256 lấy từ chính API Release của GitHub; SHA-1 tính lại bằng cách tải file về rồi băm,
     nên hai con số này khớp với file bạn tải, không phải số chép tay. Hai digest chứng chỉ ở trên không chép
@@ -101,8 +105,7 @@ layout: null
     <h2>Những giới hạn thật của bản này</h2>
     <ul class="warn">
       <li>File ký bằng <b>debug.keystore công khai trong repo</b>. Nó chứng minh file chưa bị sửa đổi, nhưng <b>không</b> chứng minh người ký — đừng coi đây là bản phân phối chính thức.</li>
-      <li>Đăng nhập Google cần đúng SHA-1 của khoá ký được khai trong Firebase. Hai digest của khoá debug này (bảng ở trên) vừa được ghi vào dự án Firebase ngày 24/10/2026, nhưng <b>chưa</b> có một lần đăng nhập Google thật trên máy để xác nhận; Firebase có thể mất vài phút để lan toả. Đăng nhập bằng email + mật khẩu tự đặt thì đã chạy thật.</li>
-      <li>Màn hình của máy học sinh (chỉ hiện mã) mới được kiểm chứng bằng unit test, chưa bằng một lần chạy thật: máy giả lập đang đăng nhập tài khoản phụ huynh nên không mở được vai trò học sinh.</li>
+      <li>Đăng nhập Google cần đúng SHA-1 của khoá ký được khai trong Firebase. Hai digest của khoá debug này (bảng ở trên) đã được ghi vào dự án Firebase ngày 24/10/2026, nhưng <b>chưa</b> có một lần đăng nhập Google thật được kiểm chứng trên máy; Firebase có thể mất vài phút để lan toả. Đăng nhập bằng email + mật khẩu tự đặt thì đã chạy thật.</li>
       <li>Trang này là GitHub Pages tĩnh, <b>không</b> có lớp kiểm Cloudflare Turnstile như trang chủ. Trang chủ (link bên dưới) mới là nơi tải về có kiểm chứng người thật.</li>
       <li>Không có file <b>.exe</b> hay <b>.ipa</b> cho ứng dụng này, và không thể có: toàn bộ app viết bằng Kotlin/Compose cho Android và dựa vào ba cơ chế chỉ Android mới có — AccessibilityService để chặn ứng dụng, UsageStatsManager để đo thời gian dùng app, và quyền định vị nền. Windows không có ba thứ đó, iOS thì cấm hẳn ý tưởng "app cha điều khiển app con". Muốn chạy trên Windows chỉ có giả lập Android, trên iPhone chỉ có bản viết lại hoàn toàn bằng Swift + một tài khoản Apple Nhà phát triển.</li>
     </ul>
