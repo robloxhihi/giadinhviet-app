@@ -74,7 +74,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.model.EmotionTag
 import com.example.data.model.FamilyMessage
-import com.example.data.model.PairingRequest
 import com.example.data.model.PairingStatus
 import com.example.data.model.RequestStatus
 import com.example.data.model.RuleAuditEntry
@@ -104,8 +103,6 @@ import com.example.ui.viewmodel.VesperaUiState
 fun DashboardScreen(
     uiState: VesperaUiState,
     onPairDirectly: (String) -> Unit,
-    onAcceptPairing: (PairingRequest) -> Unit,
-    onRejectPairing: (String) -> Unit,
     onApproveExtraTime: (String, Int) -> Unit,
     onRejectExtraTime: (String) -> Unit,
     onApprovePrivacy: (String, String) -> Unit,
@@ -497,71 +494,6 @@ fun DashboardScreen(
                         )
                     }
                 }
-
-                // Pending requests from parents
-                if (uiState.pendingRequests.isNotEmpty()) {
-                    Spacer(modifier = Modifier.height(14.dp))
-
-                    Text(
-                        text = "Yêu cầu ghép nối (${uiState.pendingRequests.size})",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = NeonAmber,
-                        fontWeight = FontWeight.Bold
-                    )
-
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    uiState.pendingRequests.forEach { req ->
-                        BentoCard(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(bottom = 10.dp),
-                            borderColor = NeonAmber
-                        ) {
-                            Column {
-                                Text(
-                                    text = "Phụ huynh: ${req.parentName}",
-                                    style = MaterialTheme.typography.titleSmall,
-                                    color = TextPrimary,
-                                    fontWeight = FontWeight.Bold
-                                )
-                                Text(
-                                    text = req.parentEmail,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = TextSecondary
-                                )
-                                Spacer(modifier = Modifier.height(10.dp))
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                ) {
-                                    Button(
-                                        onClick = { onRejectPairing(req.id) },
-                                        modifier = Modifier.weight(1f),
-                                        shape = RoundedCornerShape(10.dp),
-                                        colors = ButtonDefaults.buttonColors(
-                                            containerColor = SpaceCardElevated,
-                                            contentColor = NeonRose
-                                        )
-                                    ) {
-                                        Text("Từ chối")
-                                    }
-                                    Button(
-                                        onClick = { onAcceptPairing(req) },
-                                        modifier = Modifier.weight(1f),
-                                        shape = RoundedCornerShape(10.dp),
-                                        colors = ButtonDefaults.buttonColors(
-                                            containerColor = NeonEmerald,
-                                            contentColor = Color.Black
-                                        )
-                                    ) {
-                                        Text("Đồng ý", fontWeight = FontWeight.Bold)
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
             } else {
                 // Parent: Enter Student Code & Pairing Suite
                 BentoCard(
@@ -587,13 +519,30 @@ fun DashboardScreen(
 
                         Spacer(modifier = Modifier.height(10.dp))
 
-                        val myDeviceCode = uiState.userProfile?.studentCode.orEmpty()
+                        // Gợi ý hình dạng mã ngay trên máy, trước khi gọi Firestore.
+                        // Quyet dinh cuoi cung la `VesperaRepository.studentCodePattern`
+                        // (sinh tu STUDENT_CODE_ALPHABET + STUDENT_CODE_LENGTH). Doan duoi
+                        // day viet lai bang ky tu tuong duong — [2-9A-HJ-NP-Z] la chinh no,
+                        // bo 0/1/I/O — va `PairingFlowRegressionTest` gop hai lai mot de
+                        // chung khong the lac nhau.
+                        val codeShape = Regex("^HS-[2-9A-HJ-NP-Z]{8}$")
+                        val typedCode = inputStudentCode.trim()
+                        val codeShapeOk = codeShape.matches(typedCode)
 
                         OutlinedTextField(
                             value = inputStudentCode,
                             onValueChange = { inputStudentCode = it.uppercase() },
-                            label = { Text("Nhập mã độc quyền của con (vd: HS-XXXXX)") },
+                            label = { Text("Nhập mã đang hiện trên máy của con (HS-XXXXXXXX)") },
                             singleLine = true,
+                            isError = typedCode.isNotEmpty() && !codeShapeOk,
+                            supportingText = {
+                                if (typedCode.isNotEmpty() && !codeShapeOk) {
+                                    Text(
+                                        text = "Mã gồm HS- rồi 8 ký tự, không có các chữ 0, 1, I, O.",
+                                        color = NeonRose
+                                    )
+                                }
+                            },
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .testTag("student_code_input"),
@@ -609,54 +558,41 @@ fun DashboardScreen(
 
                         Spacer(modifier = Modifier.height(12.dp))
 
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        Button(
+                            onClick = {
+                                onPairDirectly(typedCode)
+                                inputStudentCode = ""
+                            },
+                            enabled = codeShapeOk && !uiState.isLoading,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(46.dp)
+                                .testTag("send_pair_request_btn"),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = FacebookBlue,
+                                contentColor = Color.White
+                            )
                         ) {
-                            // Quick fill with this device's unique code. Chi hien
-                            // khi tai khoan nay THAT SU co ma (hoc sinh); phuc
-                            // huynh thi studentCode rong nen nut bien mat.
-                            if (myDeviceCode.isNotEmpty()) {
-                                Button(
-                                    onClick = {
-                                        inputStudentCode = myDeviceCode
-                                    },
-                                    modifier = Modifier.weight(1f).height(46.dp),
-                                    shape = RoundedCornerShape(12.dp),
-                                    colors = ButtonDefaults.buttonColors(
-                                        containerColor = SpaceCardElevated,
-                                        contentColor = FacebookBlue
-                                    )
-                                ) {
-                                    Text("Mã máy này: $myDeviceCode", fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                                }
-                            }
-
-                            Button(
-                                onClick = {
-                                    if (inputStudentCode.isNotBlank()) {
-                                        onPairDirectly(inputStudentCode)
-                                        inputStudentCode = ""
-                                    } else {
-                                        Toast.makeText(context, "Vui lòng nhập mã học sinh!", Toast.LENGTH_SHORT).show()
-                                    }
-                                },
-                                modifier = Modifier.weight(1.3f).height(46.dp).testTag("send_pair_request_btn"),
-                                shape = RoundedCornerShape(12.dp),
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = FacebookBlue,
-                                    contentColor = Color.White
-                                )
-                            ) {
-                                Icon(imageVector = Icons.Default.Send, contentDescription = null, modifier = Modifier.size(16.dp))
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text("Ghép nối ngay", fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                            }
+                            Icon(
+                                imageVector = Icons.Default.Send,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = if (uiState.isLoading) "Đang ghép nối…" else "Ghép nối ngay",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 13.sp
+                            )
                         }
 
                         Spacer(modifier = Modifier.height(6.dp))
                         Text(
-                            text = "Chỉ cần nhập mã học sinh từ máy của con là ghép nối tức thì, không cần mã xác thực.",
+                            text = "Nhập mã là ghép nối tức thì — máy con không phải bấm " +
+                                "Đồng ý, và cũng không có mã xác thực nào cả. Nếu hai máy " +
+                                "đang mở app cùng lúc thì liên kết về máy con trong khoảng " +
+                                "20 giây.",
                             style = MaterialTheme.typography.bodySmall,
                             color = TextSecondary
                         )

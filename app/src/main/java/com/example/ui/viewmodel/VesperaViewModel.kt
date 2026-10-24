@@ -16,7 +16,6 @@ import com.example.data.model.ExtraTimeRequest
 import com.example.data.model.FamilyMessage
 import com.example.data.model.LocationData
 import com.example.data.model.Pairing
-import com.example.data.model.PairingRequest
 import com.example.data.model.LocationHistoryEntry
 import com.example.data.model.PairingStatus
 import com.example.data.model.PrivacyRequest
@@ -75,7 +74,6 @@ data class VesperaUiState(
     val authUserId: String? = null,
     val userProfile: UserProfile? = null,
     val activePairing: Pairing? = null,
-    val pendingRequests: List<PairingRequest> = emptyList(),
     val partnerLocation: LocationData? = null,
     val myLocation: LocationData? = null,
     val usageSchedule: UsageSchedule? = null,
@@ -187,7 +185,6 @@ class VesperaViewModel(
 
     /** pairingId da tu xoa lien ket o may nay — de khong ghi lap lai. */
     private var unlinkedPairingId: String? = null
-    private var requestsJob: Job? = null
     private var locationJob: Job? = null
     private var historyJob: Job? = null
     private var scheduleJob: Job? = null
@@ -326,7 +323,6 @@ class VesperaViewModel(
     private fun stopAllObservers() {
         profileJob?.cancel()
         pairingJob?.cancel()
-        requestsJob?.cancel()
         locationJob?.cancel()
         historyJob?.cancel()
         scheduleJob?.cancel()
@@ -531,9 +527,6 @@ class VesperaViewModel(
                         observeLocationHistoryForUser(userId)
                         watchPairingArrival(profile)
                     }
-                    if (profile.role == UserRole.CHILD) {
-                        observeIncomingRequests(profile.id)
-                    }
                 }
             }
         }
@@ -708,15 +701,6 @@ class VesperaViewModel(
         auditJob = viewModelScope.launch {
             repository.observeRuleAudit(pairingId).collect { entries ->
                 _uiState.value = _uiState.value.copy(ruleAudit = entries)
-            }
-        }
-    }
-
-    private fun observeIncomingRequests(childId: String) {
-        requestsJob?.cancel()
-        requestsJob = viewModelScope.launch {
-            repository.observePendingRequestsForChild(childId).collect { list ->
-                _uiState.value = _uiState.value.copy(pendingRequests = list)
             }
         }
     }
@@ -1068,11 +1052,10 @@ class VesperaViewModel(
         } else {
             current?.studentCode.orEmpty()
         }
-        val verificationPin = if (role == UserRole.CHILD) {
-            current?.verificationPin?.ifEmpty { repository.getOrGenerateVerificationPin() } ?: repository.getOrGenerateVerificationPin()
-        } else {
-            current?.verificationPin.orEmpty()
-        }
+        // `verificationPin` KHONG duoc sinh o day nua. Tung co dong `getOrGenerate`
+        // + toast "PIN: 1234", nhung khong mot noi nao trong app doi chieu no:
+        // khong co buoc xac nhan nao -- phu huynh nhap ma la ghep. Sinh ra mot
+        // so "bao mat" khong bao gio dung den la noi doi gia voi nguoi dung.
         // Chua dang nhap thi KHONG biem ten hay email. `user_local` +
         // "phuhuynh@giadinhviet.vn" tung khien man hinh in ra mot tai khoan
         // khong ton tai; giu rong de cac man hinh tu hien thi "chua dang nhap".
@@ -1082,7 +1065,6 @@ class VesperaViewModel(
         )).copy(
             role = role,
             studentCode = studentCode,
-            verificationPin = verificationPin,
             displayName = (current?.displayName ?: auth.currentUser?.displayName.orEmpty())
                 .ifEmpty { if (role == UserRole.CHILD) "Học sinh" else "Phụ huynh" }
         )
@@ -1094,34 +1076,8 @@ class VesperaViewModel(
             viewModelScope.launch {
                 try {
                     repository.saveUserProfile(updated)
-                    if (role == UserRole.CHILD) {
-                        observeIncomingRequests(updated.id)
-                    } else {
-                        requestsJob?.cancel()
-                        _uiState.value = _uiState.value.copy(pendingRequests = emptyList())
-                    }
                 } catch (e: Exception) {
                     Log.w(TAG, "Save user profile error", e)
-                }
-            }
-        }
-    }
-
-    fun regenerateStudentCode() {
-        val newCode = repository.regenerateDeviceStudentCode()
-        val newPin = repository.regenerateVerificationPin()
-        val current = _uiState.value.userProfile ?: return
-        val updated = current.copy(studentCode = newCode, verificationPin = newPin)
-        _uiState.value = _uiState.value.copy(
-            userProfile = updated,
-            successMessage = "Đã tạo mã học sinh mới: $newCode (PIN: $newPin)"
-        )
-        if (auth.currentUser != null) {
-            viewModelScope.launch {
-                try {
-                    repository.saveUserProfile(updated)
-                } catch (e: Exception) {
-                    Log.w(TAG, "Save new student code error", e)
                 }
             }
         }
@@ -1132,11 +1088,34 @@ class VesperaViewModel(
         selectRole(if (currentRole == UserRole.PARENT) UserRole.CHILD else UserRole.PARENT)
     }
 
+    /**
+     * Buoc duy nhat cua phep ghep noi: phu huynh nhap ma may con dang hien.
+     *
+     * May con khong nhap gi va cung khong xac nhan gi — no tu nhan document
+     * mang ten minh trong vong ~20 giay (`watchPairingArrival`). Vi vay hai
+     * lan kiem tra duoi day chi de nguoi dung khoi doi oan: ma sai dinh dang
+     * thi phep thu tay da ro, con may dang vai tro HOC SINH thi ghep voi ai?
+     */
     fun pairDirectly(studentCode: String) {
         val parent = _uiState.value.userProfile ?: return
         val cleanCode = studentCode.trim().uppercase()
         if (cleanCode.isBlank()) {
             _uiState.value = _uiState.value.copy(errorMessage = "Vui lòng nhập mã học sinh")
+            return
+        }
+        if (parent.role == UserRole.CHILD) {
+            _uiState.value = _uiState.value.copy(
+                errorMessage = "Máy này đang ở vai trò Học sinh nên không ghép nối bằng mã. " +
+                    "Mã của máy này để phụ huynh nhập — hãy chuyển sang vai trò Phụ huynh " +
+                    "trên máy của bố mẹ."
+            )
+            return
+        }
+        if (!repository.isPlausibleStudentCode(cleanCode)) {
+            _uiState.value = _uiState.value.copy(
+                errorMessage = "Mã học sinh có dạng ${repository.studentCodeExample} — " +
+                    "không dùng các chữ 0, 1, I, O nên rất dễ chép nhầm."
+            )
             return
         }
 
@@ -1147,9 +1126,10 @@ class VesperaViewModel(
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,
                     activePairing = pairing,
-                    successMessage = "Đã ghép nối với ${pairing.childName}. Máy của con sẽ tự " +
-                        "nhận liên kết này ngay lần mở app tiếp theo — app không ghi được hồ sơ " +
-                        "của máy khác."
+                    successMessage = "Đã ghép nối với ${pairing.childName}. Nếu máy của con " +
+                        "đang mở app thì nó tự nhận liên kết trong khoảng 20 giây; nếu đang " +
+                        "tắt thì lần mở kế tiếp sẽ tự nhận — app không ghi được hồ sơ của máy " +
+                        "khác, nên bố mẹ không cần làm gì thêm ở máy con."
                 )
             } catch (e: Exception) {
                 Log.e(TAG, "Pairing error", e)
@@ -1157,30 +1137,6 @@ class VesperaViewModel(
                     isLoading = false,
                     errorMessage = "Ghép nối thất bại: ${e.localizedMessage ?: "Vui lòng kiểm tra lại mã"}"
                 )
-            }
-        }
-    }
-
-    fun acceptPairing(request: PairingRequest) {
-        val child = _uiState.value.userProfile ?: return
-        viewModelScope.launch {
-            try {
-                repository.acceptPairingRequest(request, child)
-                _uiState.value = _uiState.value.copy(
-                    successMessage = "Ghép nối thành công với ${request.parentName}!"
-                )
-            } catch (e: Exception) {
-                _uiState.value = _uiState.value.copy(errorMessage = e.localizedMessage)
-            }
-        }
-    }
-
-    fun rejectPairing(requestId: String) {
-        viewModelScope.launch {
-            try {
-                repository.rejectPairingRequest(requestId)
-            } catch (e: Exception) {
-                _uiState.value = _uiState.value.copy(errorMessage = e.localizedMessage)
             }
         }
     }

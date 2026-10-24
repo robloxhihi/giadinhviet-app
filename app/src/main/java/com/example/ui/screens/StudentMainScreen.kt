@@ -59,7 +59,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.R
-import com.example.data.model.PairingRequest
 import com.example.data.model.PairingStatus
 import com.example.data.model.UserRole
 import com.example.ui.components.BentoCard
@@ -83,18 +82,22 @@ import com.example.ui.viewmodel.VesperaUiState
  * Dedicated Student Screen: Focuses purely on displaying the unique student code
  * for parents to connect, running background GPS & usage telemetry, and showing
  * connection status.
+ *
+ * Man nay KHONG co o nhap ma va KHONG co nut "Dong y" nao. Phep ghep noi chi
+ * chay mot chieu: phu huynh nhap ma cua may con o may ho, may con tu nhan
+ * document mang ten minh. Truoc day man nay con khoi "Yêu cầu ghép nối" với
+ * hai nut Dong y/Tu choi — kho do khong bao gio hien vi khong mot dong nao ghi
+ * vao `pairing_requests`, va cung khong can ai dong y: hoc sinh khong nen phai
+ * duyet viec minh bi theo doi (xem ConsentPolicy).
  */
 @Composable
 fun StudentMainScreen(
     uiState: VesperaUiState,
-    onAcceptPairing: (PairingRequest) -> Unit,
-    onRejectPairing: (String) -> Unit,
     onSendZenlyBump: () -> Unit,
     onOpenChat: () -> Unit,
     onRequestExtraTime: () -> Unit,
     onRequestPrivacyClick: () -> Unit = {},
-    onSignOut: () -> Unit,
-    onRegenerateCode: () -> Unit = {}
+    onSignOut: () -> Unit
 ) {
     val context = LocalContext.current
     val scrollState = rememberScrollState()
@@ -216,7 +219,10 @@ fun StudentMainScreen(
         Spacer(modifier = Modifier.height(16.dp))
 
         // Student Code Card
-        BentoCard(modifier = Modifier.fillMaxWidth()) {
+        BentoCard(
+            modifier = Modifier.fillMaxWidth(),
+            testTag = "student_code_card"
+        ) {
             Column {
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     Text("MÃ KẾT NỐI HỌC SINH", style = MaterialTheme.typography.labelMedium, color = FacebookBlue, fontWeight = FontWeight.Bold)
@@ -257,30 +263,16 @@ fun StudentMainScreen(
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
                     text = if (studentCode.isNotEmpty())
-                        "Đưa mã này cho phụ huynh nhập để hoàn tất ghép nối."
+                        "Đưa mã này cho phụ huynh nhập ở máy của họ. Máy này không cần nhập " +
+                            "gì và không cần bấm Đồng ý: nếu app đang mở thì liên kết sẽ tự " +
+                            "về máy trong khoảng 20 giây, còn app đang tắt thì tự về ở lần mở " +
+                            "kế tiếp."
                     else
                         "Mã do máy chủ cấp khi tạo tài khoản học sinh. Chưa có mã nghĩa là " +
                             "chưa đăng nhập được — chưa ghép nối bằng mã nào.",
                     style = MaterialTheme.typography.bodySmall,
                     color = TextMuted
                 )
-            }
-        }
-
-        // Pending requests
-        if (uiState.pendingRequests.isNotEmpty()) {
-            Spacer(modifier = Modifier.height(14.dp))
-            Text("YÊU CẦU GHÉP NỐI", style = MaterialTheme.typography.labelSmall, color = NeonAmber, fontWeight = FontWeight.Bold)
-            uiState.pendingRequests.forEach { req ->
-                BentoCard(modifier = Modifier.fillMaxWidth().padding(top = 8.dp), borderColor = NeonAmber) {
-                    Column {
-                        Text("Phụ huynh: ${req.parentName}", style = MaterialTheme.typography.titleSmall, color = TextPrimary)
-                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Button(onClick = { onRejectPairing(req.id) }, modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColors(containerColor = SpaceCardElevated, contentColor = NeonRose)) { Text("Từ chối") }
-                            Button(onClick = { onAcceptPairing(req) }, modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColors(containerColor = NeonEmerald, contentColor = Color.Black)) { Text("Đồng ý") }
-                        }
-                    }
-                }
             }
         }
 

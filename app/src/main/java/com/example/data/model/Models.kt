@@ -36,6 +36,19 @@ data class UserProfile(
     val photoUrl: String = "",
     val role: UserRole = UserRole.PARENT,
     val studentCode: String = "",
+    /**
+     ** MA CHET — giu lai chi de doc tai lieu cu khong in canh bao. **
+     *
+     * Tung duoc sinh ra cung luc voi `studentCode` va toast "PIN: 1234", nhung
+     * khong mot dong nao trong app doi chieu no: phep ghep noi chi chay mot
+     * chieu tu phu huynh (`pairDirectly`), khong co buoc xac nhan. Tu ban 59.0
+     * app ngung sinh va ngung hien no.
+     *
+     * Khong xoa khai bao: document cua tai khoan cu van con khoa
+     * `verificationPin`, va Firebase in "No setter/field for verificationPin"
+     * cho moi lan doc — dung loai canh bao ma ban 58.0 da mat cong doi de sach
+     * logcat. Khoa do o day, chi la khong ai dung.
+     */
     val verificationPin: String = "",
     val pairedWith: String = "",
     val activePairingId: String = "",
@@ -82,17 +95,6 @@ data class Pairing(
     fun studySession(): StudySession =
         StudySession(until = studyUntil, byName = studyByName, startedAt = studyStartedAt)
 }
-
-data class PairingRequest(
-    val id: String = "",
-    val studentCode: String = "",
-    val parentId: String = "",
-    val parentName: String = "",
-    val parentEmail: String = "",
-    val childId: String = "",
-    val status: RequestStatus = RequestStatus.PENDING,
-    val createdAt: Long = System.currentTimeMillis()
-)
 
 data class LocationData(
     val userId: String = "",

@@ -9,7 +9,6 @@ import com.example.data.model.FamilyMessage
 import com.example.data.model.LocationData
 import com.example.data.model.LocationHistoryEntry
 import com.example.data.model.Pairing
-import com.example.data.model.PairingRequest
 import com.example.data.model.PairingStatus
 import com.example.data.model.PrivacyRequest
 import com.example.data.model.RequestStatus
@@ -30,6 +29,16 @@ import kotlinx.coroutines.tasks.await
 import java.util.UUID
 
 private const val TAG = "VesperaRepository"
+
+/**
+ * Bang ky tu cua ma ghep noi: khong co 0/1/I/O vi nguoi dung phai chep tay tu
+ * man hinh may nay sang may kia. `studentCodePattern` duoc lap trinh tu chinh
+ * chuoi nay, nen muon doi bang ky tu thi chi can sua mot cho — cau lenh bao
+ * "ma khong dung dinh dang" tren man phu huynh khong the lac loi khoi loi sinh
+ * ma duoi may con.
+ */
+private const val STUDENT_CODE_ALPHABET = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ"
+private const val STUDENT_CODE_LENGTH = 8
 
 class VesperaRepository(private val db: FirebaseFirestore, private val auth: FirebaseAuth, private val context: Context? = null) {
 
@@ -89,18 +98,40 @@ class VesperaRepository(private val db: FirebaseFirestore, private val auth: Fir
     }
 
     /**
-     * Student Code generator (HS-XXXXX: Unique 5-char alphanumeric)
-     */
-    /**
-     * Student Code generator (HS-XXXXXXXX: Unique 8-char alphanumeric)
+     * Ma ghep noi cua may hoc sinh: `HS-` + [STUDENT_CODE_LENGTH] ky tu thuoc
+     * [STUDENT_CODE_ALPHABET]. Do dai that la 8, KHONG phai 5 — chu giai o o
+     * nhap cua phu huynh va `studentCodePattern` cung lay tu mot nguon.
      */
     fun generateStudentCode(): String {
-        val allowedChars = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ"
-        val randomPart = (1..8)
-            .map { allowedChars.random() }
+        val randomPart = (1..STUDENT_CODE_LENGTH)
+            .map { STUDENT_CODE_ALPHABET.random() }
             .joinToString("")
         return "HS-$randomPart"
     }
+
+    /**
+     * Dinh dang ma ghep noi. Doi tu thanh phan `STUDENT_CODE_ALPHABET` +
+     * `STUDENT_CODE_LENGTH` (dau `$$` cuoi chuoi la `$` trong Kotlin), nen
+     * khong the lac khoi loi sinh ma.
+     */
+    val studentCodePattern: Regex = Regex(
+        "^HS-[$STUDENT_CODE_ALPHABET]{$STUDENT_CODE_LENGTH}$$"
+    )
+
+    /** Vi du dinh dang cho chu giai tren man hinh: `HS-XXXXXXXX`. */
+    val studentCodeExample: String get() = "HS-" + "X".repeat(STUDENT_CODE_LENGTH)
+
+    /**
+     * Ma co ra duoc mot document hoc sinh tren may chu khong?
+     *
+     * Kiem tra ngay tren may truoc khi goi Firestore: mot lan nhap sai ma khong
+     * co thiet bi nay nao dat mot lan doc tai lieu, va phu huynh nhan duoc cau
+     * "ma khong dung dinh dang" hon la "Ghép nối thất bại: Không tìm thấy học
+     * sinh với mã ABC" — hai loi khong gop lam mot, vi mot ben la phep thu tay
+     * nguoi, mot ben la tai khoan that su khong ton tai.
+     */
+    fun isPlausibleStudentCode(raw: String): Boolean =
+        studentCodePattern.matches(raw.trim().uppercase())
 
 
     /**
@@ -114,30 +145,6 @@ class VesperaRepository(private val db: FirebaseFirestore, private val auth: Fir
             prefs?.edit()?.putString("unique_student_code", code)?.apply()
         }
         return code
-    }
-
-    fun regenerateDeviceStudentCode(): String {
-        val prefs = context?.getSharedPreferences("vespera_device_prefs", android.content.Context.MODE_PRIVATE)
-        val code = generateStudentCode()
-        prefs?.edit()?.putString("unique_student_code", code)?.apply()
-        return code
-    }
-
-    fun getOrGenerateVerificationPin(): String {
-        val prefs = context?.getSharedPreferences("vespera_device_prefs", android.content.Context.MODE_PRIVATE)
-        var pin = prefs?.getString("unique_verification_pin", "") ?: ""
-        if (pin.isBlank() || pin == "8888") {
-            pin = (1000..9999).random().toString()
-            prefs?.edit()?.putString("unique_verification_pin", pin)?.apply()
-        }
-        return pin
-    }
-
-    fun regenerateVerificationPin(): String {
-        val prefs = context?.getSharedPreferences("vespera_device_prefs", android.content.Context.MODE_PRIVATE)
-        val pin = (1000..9999).random().toString()
-        prefs?.edit()?.putString("unique_verification_pin", pin)?.apply()
-        return pin
     }
 
     /**
@@ -159,111 +166,16 @@ class VesperaRepository(private val db: FirebaseFirestore, private val auth: Fir
     }
 
     /**
-     * Send pairing request from Parent to Child
-     */
-    suspend fun createPairingRequest(studentCode: String, parentProfile: UserProfile): PairingRequest {
-        val student = findStudentByCode(studentCode)
-            ?: throw IllegalArgumentException("Không tìm thấy học sinh với mã $studentCode")
-
-        val requestId = UUID.randomUUID().toString()
-        val request = PairingRequest(
-            id = requestId,
-            studentCode = studentCode.trim().uppercase(),
-            parentId = parentProfile.id,
-            parentName = parentProfile.displayName.ifEmpty { "Phụ huynh" },
-            parentEmail = parentProfile.email,
-            childId = student.id,
-            status = RequestStatus.PENDING,
-            createdAt = System.currentTimeMillis()
-        )
-
-        db.collection("pairing_requests").document(requestId).set(request).await()
-        return request
-    }
-
-    /**
-     * Observe incoming pairing requests for a child
-     */
-    fun observePendingRequestsForChild(childId: String): Flow<List<PairingRequest>> = callbackFlow {
-        if (childId.isEmpty()) {
-            trySend(emptyList())
-            return@callbackFlow
-        }
-        val query = db.collection("pairing_requests")
-            .whereEqualTo("childId", childId)
-            .whereEqualTo("status", RequestStatus.PENDING.name)
-
-        val listener = query.addSnapshotListener { snapshot, error ->
-            if (error != null) {
-                Log.w(TAG, "observePendingRequestsForChild error", error)
-                return@addSnapshotListener
-            }
-            val requests = snapshot?.toObjects(PairingRequest::class.java) ?: emptyList()
-            trySend(requests)
-        }
-        awaitClose { listener.remove() }
-    }
-
-    /**
-     * Rotate student code for a child after pairing
+     * Doi ma hoc sinh SAU khi mot cap da ghep noi thanh cong.
+     *
+     * Ly do: ma dung de ghep la ma mot lan — de no luon luon nhap duoc thi
+     * bat ky phu huynh nao biet no cung vao duoc. May con tu goi ham nay trong
+     * `watchPairingArrival`, nen ma in ra man hinh chi con hieu luc cho den
+     * luc phep ghep dau tien xuong may chu.
      */
     suspend fun rotateStudentCode(childId: String) {
         val newCode = generateStudentCode()
         db.collection("users").document(childId).update("studentCode", newCode).await()
-    }
-
-    /**
-     * Accept pairing request and create permanent Pairing
-     */
-    /**
-     * Chap nhan ghep noi. Khong an loi nua: `parent`/`child` phai biet rang
-     * ghi that bai, vi truoc day du toan bo khoi ghi bi `Log.w` nuot va man
-     * hinh van bao "Ghép nối thành công".
-     *
-     * KHONG tao kem "Lịch sinh hoạt chuẩn 120 phút, 07:00 - 21:30" nua: do la
-     * luat bi bia ra cho mot gia dinh chua tung chon gi. Noi quy chi ton tai
-     * sau khi co nguoi thao va luu o man BlockRules (`saveSchedule` dung
-     * `set()` nen lan luu dau tien tu tao document).
-     *
-     * Ben de xuat KHONG ghi vao ho so cua ben kia: `firestore.rules` chi
-     * `allow update: if isOwner(userId)`, nen mot lan ghi "ho ho" la mot lan
-     * PERMISSION_DENIED an lang — ben con lai vinh vien khong biet minh da
-     * duoc ghep. Moi may tu gan lay minh vao document ghep noi mang ten minh
-     * (xem [findPairingFor]).
-     */
-    suspend fun acceptPairingRequest(request: PairingRequest, childProfile: UserProfile) {
-        val pairingId = "pair_${request.parentId}_${request.childId}"
-        val pairing = Pairing(
-            id = pairingId,
-            parentId = request.parentId,
-            childId = request.childId,
-            studentCode = request.studentCode,
-            parentName = request.parentName,
-            childName = childProfile.displayName.ifEmpty { "Học sinh" },
-            status = PairingStatus.PAIRED,
-            createdAt = System.currentTimeMillis(),
-            updatedAt = System.currentTimeMillis()
-        )
-
-        db.collection("pairings").document(pairingId).set(pairing).await()
-        db.collection("pairing_requests").document(request.id).update(
-            "status", RequestStatus.APPROVED.name
-        ).await()
-        db.collection("users").document(request.childId).update(
-            mapOf(
-                "pairedWith" to request.parentId,
-                "activePairingId" to pairingId
-            )
-        ).await()
-
-        // Rotate child code to invalidate old one
-        rotateStudentCode(request.childId)
-    }
-
-    suspend fun rejectPairingRequest(requestId: String) {
-        db.collection("pairing_requests").document(requestId).update(
-            "status", RequestStatus.REJECTED.name
-        ).await()
     }
 
     /**

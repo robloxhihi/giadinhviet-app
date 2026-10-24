@@ -156,21 +156,16 @@ fun MainAppScreen(
                     0 -> if (isChild) {
                         StudentMainScreen(
                             uiState = uiState,
-                            onAcceptPairing = { req -> viewModel.acceptPairing(req) },
-                            onRejectPairing = { id -> viewModel.rejectPairing(id) },
                             onSendZenlyBump = { viewModel.sendZenlyBump(context) },
                             onOpenChat = { selectedTab = 3 },
                             onRequestExtraTime = { showExtraTimeDialog = true },
                             onRequestPrivacyClick = { showPrivacyDialog = true },
-                            onSignOut = { viewModel.signOut() },
-                            onRegenerateCode = { viewModel.regenerateStudentCode() }
+                            onSignOut = { viewModel.signOut() }
                         )
                     } else {
                         DashboardScreen(
                             uiState = uiState,
                             onPairDirectly = { code -> viewModel.pairDirectly(code) },
-                            onAcceptPairing = { req -> viewModel.acceptPairing(req) },
-                            onRejectPairing = { id -> viewModel.rejectPairing(id) },
                             onApproveExtraTime = { reqId, mins -> viewModel.respondToExtraTime(reqId, true, mins) },
                             onRejectExtraTime = { reqId -> viewModel.respondToExtraTime(reqId, false, 0) },
                             onApprovePrivacy = { reqId, childId -> viewModel.respondToPrivacyRequest(reqId, childId, true) },
