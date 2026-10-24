@@ -1734,7 +1734,25 @@ class VesperaViewModel(
     fun requestExtraTime(minutes: Int, reason: String) {
         val pairing = _uiState.value.activePairing ?: return
         val child = _uiState.value.userProfile ?: return
-
+        // May PHU HUYNH cung co nut "Xin them gio" o man Gio dung (tung lien
+        // `onRequestExtraTimeClick`), nen neu khong chan thi bam nut do ghi len
+        // mot phieu ma `childId` chinh la uid cua bo me, va app bao "Da gui
+        // yeu cau ... den phu huynh" — tuc la gui cho chinh minh. Phieu do cung
+        // moc len bang "CHỜ BẠN DUYỆT" cua Tong quan voi ten bo me. Xin them
+        // gio la chuyen cua may con; bo me dat han muc thi dung Cài đặt.
+        if (child.role != UserRole.CHILD) {
+            _uiState.value = _uiState.value.copy(
+                errorMessage = "Chỉ máy con mới xin thêm giờ được. Muốn đổi hạn mức, " +
+                    "hãy sửa trong mục Nội quy ở Cài đặt."
+            )
+            return
+        }
+        if (minutes <= 0) {
+            _uiState.value = _uiState.value.copy(
+                errorMessage = "Chưa nhập số phút xin thêm, nên chưa gửi phiếu."
+            )
+            return
+        }
 
         viewModelScope.launch {
             try {

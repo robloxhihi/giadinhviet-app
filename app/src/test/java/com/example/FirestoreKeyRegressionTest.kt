@@ -82,7 +82,7 @@ class FirestoreKeyRegressionTest {
     }
 
     @Test
-    fun familyMessageKhaiBaoTenKhoaDung NhuChoGhiBangMerge() {
+    fun familyMessageKhaiBaoTenKhoaDungNhuChoGhiBangMerge() {
         val models = stripComments(read("data/model/Models.kt"))
         val body = classBody(models, "data class FamilyMessage")
         assertTrue(
@@ -143,6 +143,17 @@ class FirestoreKeyRegressionTest {
         val vm = stripComments(read("ui/viewmodel/VesperaViewModel.kt"))
         assertTrue("Phải bù email/displayName còn thiếu vào document cũ", vm.contains("existing.email.ifBlank"))
         assertTrue("Phải nói rõ khi vai trò máy chủ khác vai trò vừa chọn", vm.contains("khác vai trò bạn vừa chọn"))
+    }
+
+    @Test
+    fun phieuXinThemGioKhongDuocGhiTuMayPhuHuanh() {
+        // Nut "Xin thêm giờ" o man Giờ dùng đã đặt trong `if (isChild)`, nhưng
+        // luồng vẫn phải tự chối: mot document cu mang role PARENT thi may hoc
+        // sinh van co the goi len phieu ma `childId` la uid cua bo me, hoac
+        // phieu "0 phút" khi người dùng quên nhập số.
+        val vm = stripComments(read("ui/viewmodel/VesperaViewModel.kt"))
+        assertTrue("requestExtraTime phải chặn máy phụ huynh", vm.contains("child.role != UserRole.CHILD"))
+        assertTrue("requestExtraTime phải từ chối phiếu 0 phút", vm.contains("if (minutes <= 0)"))
     }
 
     @Test
