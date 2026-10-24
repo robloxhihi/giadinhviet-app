@@ -24,7 +24,9 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.BatteryChargingFull
+import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.Chat
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
@@ -296,8 +298,16 @@ fun StudentMainScreen(
                     Text(parentName, style = MaterialTheme.typography.titleMedium, color = TextPrimary, fontWeight = FontWeight.Bold)
                     Spacer(modifier = Modifier.height(12.dp))
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Button(onClick = onOpenChat, modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColors(containerColor = NeonCyan, contentColor = Color.Black)) { Text("💬 Nhắn tin") }
-                        Button(onClick = onSendZenlyBump, modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColors(containerColor = SpaceCardElevated, contentColor = NeonAmber)) { Text("⚡ Bump") }
+                        Button(onClick = onOpenChat, modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColors(containerColor = NeonCyan, contentColor = Color.Black)) {
+                            Icon(imageVector = Icons.Default.Chat, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Nhắn tin")
+                        }
+                        Button(onClick = onSendZenlyBump, modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColors(containerColor = SpaceCardElevated, contentColor = NeonAmber)) {
+                            Icon(imageVector = Icons.Default.Bolt, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Bump")
+                        }
                     }
                     Spacer(modifier = Modifier.height(8.dp))
                     Button(
@@ -305,7 +315,13 @@ fun StudentMainScreen(
                         modifier = Modifier.fillMaxWidth(),
                         colors = ButtonDefaults.buttonColors(containerColor = SpaceCardElevated, contentColor = NeonEmerald)
                     ) {
-                        Text("🛡️ Xin Khung giờ riêng tư (Bảo vệ vị trí)", fontWeight = FontWeight.Bold)
+                        Icon(
+                            imageVector = Icons.Default.Security,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Xin Khung giờ riêng tư (Bảo vệ vị trí)", fontWeight = FontWeight.Bold)
                     }
                 }
             }
@@ -341,7 +357,9 @@ fun StudentMainScreen(
                     }
                     Spacer(modifier = Modifier.height(8.dp))
                     Button(onClick = onRequestExtraTime, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors(containerColor = SpaceCardElevated, contentColor = NeonEmerald)) {
-                        Text("➕ Xin thêm thời gian")
+                        Icon(imageVector = Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Xin thêm thời gian")
                     }
                 }
             }

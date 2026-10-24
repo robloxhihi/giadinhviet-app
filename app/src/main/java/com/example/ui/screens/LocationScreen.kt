@@ -19,6 +19,9 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Bolt
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Explore
 import androidx.compose.material.icons.filled.GpsFixed
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.LinkOff
@@ -27,6 +30,7 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Speed
+import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -403,8 +407,14 @@ fun LocationScreen(
                         contentColor = NeonAmber
                     )
                 ) {
+                    Icon(
+                        imageVector = Icons.Default.Bolt,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
                     Text(
-                        text = "⚡ Chạm tay Zenly Bump • " +
+                        text = "Chạm tay Zenly Bump • " +
                             bumpStateLabel(uiState.lastBumpAt, uiState.lastBumpByName, System.currentTimeMillis()),
                         fontWeight = FontWeight.Bold
                     )
@@ -476,7 +486,7 @@ fun LocationScreen(
         ) {
             Icon(imageVector = Icons.Default.MyLocation, contentDescription = null, modifier = Modifier.size(16.dp))
             Spacer(modifier = Modifier.width(8.dp))
-            Text(text = "📥 Tải bản đồ offline 34 tỉnh thành & Toàn quốc", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+            Text(text = "Tải bản đồ offline 34 tỉnh thành & Toàn quốc", fontWeight = FontWeight.Bold, fontSize = 12.sp)
         }
 
         Spacer(modifier = Modifier.height(14.dp))
@@ -769,8 +779,14 @@ fun LocationScreen(
                                 containerColor = if (downloadingProvince.value != null) NeonRose else FacebookBlue
                             )
                         ) {
+                            Icon(
+                                imageVector = if (downloadingProvince.value != null) Icons.Default.Stop else Icons.Default.Explore,
+                                contentDescription = null,
+                                modifier = Modifier.size(14.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
                             Text(
-                                text = if (downloadingProvince.value != null) "⏹ Hủy tải toàn quốc" else "🌍 Tải toàn quốc Việt Nam (Offline)",
+                                text = if (downloadingProvince.value != null) "Hủy tải toàn quốc" else "Tải toàn quốc Việt Nam (Offline)",
                                 fontWeight = FontWeight.Bold, fontSize = 12.sp
                             )
                         }
@@ -822,10 +838,18 @@ fun LocationScreen(
                                     modifier = Modifier.height(28.dp),
                                     contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 0.dp)
                                 ) {
+                                    if (isDownloaded) {
+                                        Icon(
+                                            imageVector = Icons.Default.Check,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(12.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(3.dp))
+                                    }
                                     Text(
                                         text = when {
                                             isThisDownloading -> "Đang tải…"
-                                            isDownloaded -> "Đã tải ✅"
+                                            isDownloaded -> "Đã tải"
                                             else -> "Tải"
                                         },
                                         fontSize = 10.sp, fontWeight = FontWeight.Bold

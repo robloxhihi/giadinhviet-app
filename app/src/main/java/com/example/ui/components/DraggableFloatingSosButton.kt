@@ -26,10 +26,12 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Emergency
 import androidx.compose.material.icons.filled.FamilyRestroom
 import androidx.compose.material.icons.filled.GpsFixed
+import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.LocalHospital
 import androidx.compose.material.icons.filled.LocalPolice
-import androidx.compose.material.icons.filled.NetworkCheck
+import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.Send
+import androidx.compose.material.icons.filled.SettingsInputAntenna
 import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Button
@@ -303,9 +305,16 @@ fun SosBottomSheetContent(
         // do SmartSosDispatcher day len tu NetworkMonitor + ket qua gui lan cuoi.
         // "50m" da boc bo vi Wi-Fi P2P khong tra khoang cach ve app.
         val channelBadgeText = when (currentChannel) {
-            SosChannelUsed.INTERNET_CLOUD -> "🌐 Tầng 1: Internet Cloud (Firebase)"
-            SosChannelUsed.OFFLINE_MESH_P2P -> "📡 Tầng 2: Mạng P2P Mesh ngoại tuyến"
-            SosChannelUsed.FALLBACK_SMS -> "✉️ Tầng 3: Kênh SMS Dự phòng"
+            SosChannelUsed.INTERNET_CLOUD -> "Tầng 1: Internet Cloud (Firebase)"
+            SosChannelUsed.OFFLINE_MESH_P2P -> "Tầng 2: Mạng P2P Mesh ngoại tuyến"
+            SosChannelUsed.FALLBACK_SMS -> "Tầng 3: Kênh SMS Dự phòng"
+        }
+        // Ký hiệu emoji đầu badge đã được thay bằng icon vector theo từng kênh:
+        // địa cầu (cloud), ăng-ten (mesh ngoại tuyến), phong bì thư (SMS dự phòng).
+        val channelBadgeIcon = when (currentChannel) {
+            SosChannelUsed.INTERNET_CLOUD -> Icons.Default.Language
+            SosChannelUsed.OFFLINE_MESH_P2P -> Icons.Default.SettingsInputAntenna
+            SosChannelUsed.FALLBACK_SMS -> Icons.Default.Email
         }
         val channelBadgeColor = when (currentChannel) {
             SosChannelUsed.INTERNET_CLOUD -> NeonCyan
@@ -323,7 +332,7 @@ fun SosBottomSheetContent(
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(
-                    imageVector = Icons.Default.NetworkCheck,
+                    imageVector = channelBadgeIcon,
                     contentDescription = null,
                     tint = channelBadgeColor,
                     modifier = Modifier.size(16.dp)

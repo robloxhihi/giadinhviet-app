@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -60,7 +61,13 @@ fun SosAlertBanner(
                 shape = RoundedCornerShape(8.dp),
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Text("📞 GỌI WEBRTC KHẨN CẤP NGAY", fontWeight = FontWeight.Bold)
+                Icon(
+                    imageVector = Icons.Default.Phone,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("GỌI WEBRTC KHẨN CẤP NGAY", fontWeight = FontWeight.Bold)
             }
         }
     }
@@ -88,7 +95,7 @@ fun SosEmergencyWarningDialog(
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
-                    text = "🚨 CẢNH BÁO SOS KHẨN CẤP",
+                    text = "CẢNH BÁO SOS KHẨN CẤP",
                     style = androidx.compose.material3.MaterialTheme.typography.titleLarge,
                     color = NeonRose,
                     fontWeight = FontWeight.Black

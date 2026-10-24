@@ -288,7 +288,7 @@ fun SettingsScreen(
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                text = "⚡ Cấp tất cả quyền (1 chạm)",
+                                text = "Cấp tất cả quyền (1 chạm)",
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold,
                                 color = Color.White

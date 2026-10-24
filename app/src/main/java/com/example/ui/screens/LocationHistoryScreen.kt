@@ -22,6 +22,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.BatteryChargingFull
+import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Home
@@ -590,12 +591,25 @@ fun LocationHistoryScreen(
                                     color = TextMuted
                                 )
                                 Spacer(modifier = Modifier.height(4.dp))
-                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Row(
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
                                     // batteryLevel == 0 = điểm không có telemetry → "—" xám, không in "0%"
                                     PremiumChip(
-                                        text = if (entry.batteryLevel > 0) "${entry.batteryLevel}%${if (entry.isCharging) " ⚡" else ""}" else "—",
+                                        text = if (entry.batteryLevel > 0) "${entry.batteryLevel}%" else "—",
                                         tint = if (entry.batteryLevel > 0) Premium.emerald else TextMuted
                                     )
+                                    // Sạc pin: icon vector Bolt thay cho ký hiệu
+                                    // emoji trước đây, đứng ngay cạnh chip %.
+                                    if (entry.batteryLevel > 0 && entry.isCharging) {
+                                        Icon(
+                                            imageVector = Icons.Default.Bolt,
+                                            contentDescription = null,
+                                            tint = Premium.emerald,
+                                            modifier = Modifier.size(14.dp)
+                                        )
+                                    }
                                     PremiumChip(text = "${entry.speed.toInt()} km/h", tint = Premium.amber)
                                 }
                                 Spacer(modifier = Modifier.height(10.dp))

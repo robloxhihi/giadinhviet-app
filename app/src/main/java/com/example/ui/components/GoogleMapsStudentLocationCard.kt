@@ -24,6 +24,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.BatteryChargingFull
+import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Explore
@@ -37,7 +38,9 @@ import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.Route
+import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Speed
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
@@ -697,20 +700,42 @@ fun GoogleMapsStudentLocationCard(
                 ) {
                     Column(modifier = Modifier.padding(6.dp)) {
                         Spacer(modifier = Modifier.height(1.dp))
-                        Text(
-                            "🕒 $currentTimeString • ⏳ $lastUpdateText",
-                            color = TextSecondary, fontSize = 9.sp,
-                            maxLines = 1, overflow = TextOverflow.Ellipsis
-                        )
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.Schedule,
+                                contentDescription = null,
+                                tint = TextSecondary,
+                                modifier = Modifier.size(12.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                "$currentTimeString • ⏳ $lastUpdateText",
+                                color = TextSecondary, fontSize = 9.sp,
+                                maxLines = 1, overflow = TextOverflow.Ellipsis
+                            )
+                        }
                         // "Đường Chưa Đặt Tên" trông hệt một địa chỉ đã xác minh
                         // nhưng thật ra chỉ là điểm chưa được bản đồ hoá: toạ độ
                         // đúng, tên đường thì không ai đặt. Nói rõ để phụ huynh
                         // không đoán sai chỗ con đang đứng.
                         if (showMap && AddressHelper.isUnmappedRoadLabel(displayAddress)) {
-                            Text(
-                                "⚠️ Khu vực này bản đồ chưa đặt tên đường, toạ độ bên dưới mới là dữ liệu thật",
-                                color = NeonAmber, fontSize = 9.sp, fontWeight = FontWeight.SemiBold
-                            )
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Warning,
+                                    contentDescription = null,
+                                    tint = NeonAmber,
+                                    modifier = Modifier.size(12.dp)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    "Khu vực này bản đồ chưa đặt tên đường, toạ độ bên dưới mới là dữ liệu thật",
+                                    color = NeonAmber, fontSize = 9.sp, fontWeight = FontWeight.SemiBold,
+                                    modifier = Modifier.weight(1f)
+                                )
+                            }
                         }
                         if (stayDurationMillis >= 0) {
                             Text(
@@ -729,10 +754,23 @@ fun GoogleMapsStudentLocationCard(
                             // Sai so bi huy (bang 0 hoac duoi 3 m) thi phoi thay ro ly do,
                             // khong de dong tren bi cat elip va bi hieu la "chinh xac ±3m".
                             if (accuracyNoteText != null) {
-                                Text(
-                                    text = "⚠️ $accuracyNoteText",
-                                    color = NeonAmber, fontSize = 9.sp, fontWeight = FontWeight.SemiBold
-                                )
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Warning,
+                                        contentDescription = null,
+                                        tint = NeonAmber,
+                                        modifier = Modifier.size(12.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(
+                                        text = accuracyNoteText,
+                                        color = NeonAmber, fontSize = 9.sp, fontWeight = FontWeight.SemiBold,
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                }
                             }
                             Text(
                                 text = "${layerAt(layerIndex).label} " +
@@ -742,24 +780,55 @@ fun GoogleMapsStudentLocationCard(
                                 maxLines = 1, overflow = TextOverflow.Ellipsis
                             )
                             if (zoomWasCapped) {
-                                Text(
-                                    "⚠️ Đã hạ zoom từ z${String.format(Locale.US, "%.0f", zoomLevel)}" +
-                                        " xuống z${String.format(Locale.US, "%.1f", zoomCeiling)}" +
-                                        " vì sai số ±${honestAcc.toInt()} m: phóng to hơn chỉ nở ảnh, không thêm chi tiết thật.",
-                                    color = NeonAmber, fontSize = 9.sp, fontWeight = FontWeight.SemiBold
-                                )
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Warning,
+                                        contentDescription = null,
+                                        tint = NeonAmber,
+                                        modifier = Modifier.size(12.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(
+                                        "Đã hạ zoom từ z${String.format(Locale.US, "%.0f", zoomLevel)}" +
+                                            " xuống z${String.format(Locale.US, "%.1f", zoomCeiling)}" +
+                                            " vì sai số ±${honestAcc.toInt()} m: phóng to hơn chỉ nở ảnh, không thêm chi tiết thật.",
+                                        color = NeonAmber, fontSize = 9.sp, fontWeight = FontWeight.SemiBold,
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                }
                             }
                             if (headingDegrees != null) {
-                                Text(
-                                    "🧭 Hướng ${compassLabel(headingDegrees)} (${headingDegrees.toInt()}°)",
-                                    color = NeonViolet, fontSize = 9.sp, fontWeight = FontWeight.Medium
-                                )
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        imageVector = Icons.Default.Explore,
+                                        contentDescription = null,
+                                        tint = NeonViolet,
+                                        modifier = Modifier.size(12.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(
+                                        "Hướng ${compassLabel(headingDegrees)} (${headingDegrees.toInt()}°)",
+                                        color = NeonViolet, fontSize = 9.sp, fontWeight = FontWeight.Medium
+                                    )
+                                }
                             }
                             if (isStaleFix) {
-                                Text(
-                                    "⚠️ Vị trí có thể đã cũ",
-                                    color = NeonRose, fontSize = 9.sp, fontWeight = FontWeight.Bold
-                                )
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        imageVector = Icons.Default.Warning,
+                                        contentDescription = null,
+                                        tint = NeonRose,
+                                        modifier = Modifier.size(12.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(
+                                        "Vị trí có thể đã cũ",
+                                        color = NeonRose, fontSize = 9.sp, fontWeight = FontWeight.Bold
+                                    )
+                                }
                             }
                         }
                     }
@@ -977,14 +1046,23 @@ fun GoogleMapsStudentLocationCard(
                 Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
                     // batteryLevel <= 0 = CHƯA có telemetry (LocationData mặc định 0).
                     // In "—" tint xám; chỉ báo amber khi thực sự yếu (1..19).
-                    val batteryText = if (batteryLevel <= 0) "—"
-                        else "$batteryLevel%${if (isCharging) "⚡" else ""}"
+                    val batteryText = if (batteryLevel <= 0) "—" else "$batteryLevel%"
                     val batteryTint = when {
                         batteryLevel <= 0 -> TextMuted
                         batteryLevel < 20 -> NeonAmber
                         else -> NeonEmerald
                     }
                     StatPill(Icons.Default.BatteryChargingFull, batteryText, batteryTint)
+                    // Dang sac: icon Bolt vector dung canh pill pin (emoji da
+                    // duoc thay bang Material icon nhu cac cho khac trong app).
+                    if (batteryLevel > 0 && isCharging) {
+                        Icon(
+                            imageVector = Icons.Default.Bolt,
+                            contentDescription = null,
+                            tint = batteryTint,
+                            modifier = Modifier.size(14.dp)
+                        )
+                    }
                     StatPill(Icons.Default.Speed, "${speedKmh.toInt()} km/h", FacebookBlue)
                     if (validRoutePoints.size >= 2) {
                         StatPill(Icons.Default.Route, String.format(Locale.US, "%.2f km", distanceFromStartKm ?: 0.0), NeonCyan)

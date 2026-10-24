@@ -28,10 +28,12 @@ import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.LockClock
 import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material.icons.filled.PieChart
+import androidx.compose.material.icons.filled.RocketLaunch
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.SportsEsports
 import androidx.compose.material.icons.filled.TagFaces
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
@@ -503,12 +505,21 @@ fun ScreenTimeScreen(
                     )
 
                     if (!uiState.hasUsagePermission) {
-                        Text(
-                            text = "Chưa cấp quyền ⚠️",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = NeonAmber,
-                            fontWeight = FontWeight.Bold
-                        )
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = "Chưa cấp quyền",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = NeonAmber,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Icon(
+                                imageVector = Icons.Default.Warning,
+                                contentDescription = null,
+                                tint = NeonAmber,
+                                modifier = Modifier.size(14.dp)
+                            )
+                        }
                     }
                 }
 
@@ -601,7 +612,14 @@ fun ScreenTimeScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(text = if (uiState.isBackgroundServiceRunning) "🟢" else "⚪", fontSize = 16.sp)
+                        // Diem trang thai that, khong phai emoji do he dieu hanh ve:
+                        // xanh = dich vụ chay, xam = chua chay.
+                        Box(
+                            modifier = Modifier
+                                .size(12.dp)
+                                .clip(CircleShape)
+                                .background(if (uiState.isBackgroundServiceRunning) NeonEmerald else TextMuted)
+                        )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
                             text = "Dịch vụ chạy ngầm GPS & Giờ dùng",
@@ -645,8 +663,16 @@ fun ScreenTimeScreen(
                         contentColor = if (uiState.isBackgroundServiceRunning) NeonRose else Color.Black
                     )
                 ) {
+                    if (!uiState.isBackgroundServiceRunning) {
+                        Icon(
+                            imageVector = Icons.Default.RocketLaunch,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                    }
                     Text(
-                        text = if (uiState.isBackgroundServiceRunning) "Dừng dịch vụ chạy ngầm" else "Kích hoạt chạy ngầm liên tục 🚀",
+                        text = if (uiState.isBackgroundServiceRunning) "Dừng dịch vụ chạy ngầm" else "Kích hoạt chạy ngầm liên tục",
                         fontWeight = FontWeight.Bold
                     )
                 }

@@ -28,10 +28,15 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.filled.Call
+import androidx.compose.material.icons.filled.Image
+import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Send
+import androidx.compose.material.icons.filled.Smartphone
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.StarBorder
+import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.Videocam
 import com.example.ui.call.CallActivity
 import androidx.compose.material3.Icon
@@ -64,6 +69,7 @@ import com.example.ui.components.EmotionSelectorRow
 import com.example.ui.theme.NeonAmber
 import com.example.ui.theme.NeonCyan
 import com.example.ui.theme.NeonEmerald
+import com.example.ui.theme.NeonRose
 import com.example.ui.theme.NeonViolet
 import com.example.ui.theme.SpaceCardBorder
 import com.example.ui.theme.SpaceCardElevated
@@ -105,7 +111,7 @@ fun ChatScreen(
         contract = ActivityResultContracts.GetContent()
     ) { uri ->
         if (uri != null) {
-            onSendMessage("🖼️ [Hình ảnh đính kèm]", uri.toString(), "image")
+            onSendMessage("[Hình ảnh đính kèm]", uri.toString(), "image")
         }
     }
 
@@ -113,7 +119,7 @@ fun ChatScreen(
         contract = ActivityResultContracts.GetContent()
     ) { uri ->
         if (uri != null) {
-            onSendMessage("📎 [Tệp đính kèm]", uri.toString(), "file")
+            onSendMessage("[Tệp đính kèm]", uri.toString(), "file")
         }
     }
 
@@ -158,7 +164,7 @@ fun ChatScreen(
         isRecording = false
         recordedAudioFile?.let { file ->
             if (file.exists()) {
-                onSendMessage("🎤 [Tin nhắn thoại]", Uri.fromFile(file).toString(), "audio")
+                onSendMessage("[Tin nhắn thoại]", Uri.fromFile(file).toString(), "audio")
             }
         }
         recordedAudioFile = null
@@ -194,7 +200,7 @@ fun ChatScreen(
     val quickPresets = listOf(
         "Bố mẹ sắp qua đón con nhé",
         "Con xin phép học bài thêm 30 phút",
-        "Nhớ uống nước và nghỉ ngơi nhé ❤️",
+        "Nhớ uống nước và nghỉ ngơi nhé",
         "Con đang học, lát nữa con nhắn lại nhé"
     )
 
@@ -416,8 +422,15 @@ fun ChatScreen(
                                         .padding(horizontal = 10.dp, vertical = 6.dp)
                                 ) {
                                     Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(
+                                            imageVector = Icons.Default.Smartphone,
+                                            contentDescription = null,
+                                            tint = TextPrimary,
+                                            modifier = Modifier.size(13.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(4.dp))
                                         Text(
-                                            text = "📱 ${peer.deviceName}",
+                                            text = peer.deviceName,
                                             style = MaterialTheme.typography.labelSmall,
                                             color = TextPrimary
                                         )
@@ -529,12 +542,21 @@ fun ChatScreen(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = "🔴 Đang ghi âm giọng nói...",
-                    color = NeonAmber,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 14.sp
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        modifier = Modifier
+                            .size(10.dp)
+                            .clip(CircleShape)
+                            .background(NeonRose)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = "Đang ghi âm giọng nói...",
+                        color = NeonAmber,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 14.sp
+                    )
+                }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Box(
                         modifier = Modifier
@@ -581,7 +603,11 @@ fun ChatScreen(
                 },
                 modifier = Modifier.size(36.dp)
             ) {
-                Text("🖼️", fontSize = 18.sp)
+                Icon(
+                    imageVector = Icons.Default.Image,
+                    contentDescription = "Gửi hình ảnh",
+                    modifier = Modifier.size(18.dp)
+                )
             }
 
             // File Upload Button
@@ -589,7 +615,11 @@ fun ChatScreen(
                 onClick = { filePickerLauncher.launch("*/*") },
                 modifier = Modifier.size(36.dp)
             ) {
-                Text("📎", fontSize = 18.sp)
+                Icon(
+                    imageVector = Icons.Default.AttachFile,
+                    contentDescription = "Đính kèm tệp",
+                    modifier = Modifier.size(18.dp)
+                )
             }
 
             // Voice Record Button
@@ -603,7 +633,11 @@ fun ChatScreen(
                 },
                 modifier = Modifier.size(36.dp)
             ) {
-                Text(if (isRecording) "⏹️" else "🎤", fontSize = 18.sp)
+                Icon(
+                    imageVector = if (isRecording) Icons.Default.Stop else Icons.Default.Mic,
+                    contentDescription = if (isRecording) "Dừng và gửi ghi âm" else "Ghi âm giọng nói",
+                    modifier = Modifier.size(18.dp)
+                )
             }
 
             OutlinedTextField(
@@ -767,7 +801,11 @@ fun MessageBubble(
                                     .padding(8.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Text("📎", fontSize = 20.sp)
+                                Icon(
+                                    imageVector = Icons.Default.AttachFile,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(20.dp)
+                                )
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Text("Tệp đính kèm tài liệu", style = MaterialTheme.typography.bodySmall, color = TextPrimary)
                             }
