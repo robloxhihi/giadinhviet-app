@@ -32,6 +32,7 @@ import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Smartphone
 import androidx.compose.material.icons.filled.Star
@@ -784,7 +785,12 @@ fun MessageBubble(
                                     .padding(8.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Text("▶️", fontSize = 20.sp)
+                                Icon(
+                                    imageVector = Icons.Default.PlayArrow,
+                                    contentDescription = "Phát",
+                                    tint = TextPrimary,
+                                    modifier = Modifier.size(20.dp)
+                                )
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Column {
                                     Text("Tin nhắn thoại", style = MaterialTheme.typography.bodySmall, color = TextPrimary, fontWeight = FontWeight.Bold)

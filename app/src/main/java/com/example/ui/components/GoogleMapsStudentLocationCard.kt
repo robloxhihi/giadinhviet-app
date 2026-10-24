@@ -709,7 +709,7 @@ fun GoogleMapsStudentLocationCard(
                             )
                             Spacer(modifier = Modifier.width(4.dp))
                             Text(
-                                "$currentTimeString • ⏳ $lastUpdateText",
+                                "$currentTimeString • $lastUpdateText",
                                 color = TextSecondary, fontSize = 9.sp,
                                 maxLines = 1, overflow = TextOverflow.Ellipsis
                             )
@@ -738,11 +738,24 @@ fun GoogleMapsStudentLocationCard(
                             }
                         }
                         if (stayDurationMillis >= 0) {
-                            Text(
-                                "⏳ Đã ở đây: $stayText",
-                                color = NeonEmerald, fontSize = 9.sp, fontWeight = FontWeight.Bold,
-                                maxLines = 1, overflow = TextOverflow.Ellipsis
-                            )
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Schedule,
+                                    contentDescription = null,
+                                    tint = NeonEmerald,
+                                    modifier = Modifier.size(12.dp)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    "Đã ở đây: $stayText",
+                                    color = NeonEmerald, fontSize = 9.sp, fontWeight = FontWeight.Bold,
+                                    maxLines = 1, overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.weight(1f)
+                                )
+                            }
                         }
                         if (showMap) {
                             Text(

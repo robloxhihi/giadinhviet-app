@@ -380,7 +380,7 @@ class VesperaViewModel(
                     lastBumpAt = at,
                     lastBumpByRole = profile?.role,
                     lastBumpByName = profile?.displayName.orEmpty(),
-                    successMessage = "⚡ Đã ghi chạm tay lên máy chủ lúc " +
+                    successMessage = "Đã ghi chạm tay lên máy chủ lúc " +
                         java.text.SimpleDateFormat("HH:mm", java.util.Locale.US).format(java.util.Date(at)) +
                         ". Máy bên kia chỉ rung khi đang mở app và còn kết nối — app này không xác nhận được điều đó."
                 )
@@ -491,7 +491,7 @@ class VesperaViewModel(
             lastRungBumpAt = pairing.lastBumpAt
             context?.let { vibrateForBump(it) }
             _uiState.value = _uiState.value.copy(
-                successMessage = "⚡ " + pairing.lastBumpByName.ifEmpty { "Máy bên kia" } +
+                successMessage = pairing.lastBumpByName.ifEmpty { "Máy bên kia" } +
                     " vừa chạm tay — máy này đã rung."
             )
         }

@@ -11,9 +11,11 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -58,12 +60,23 @@ fun ExtraTimeDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         title = {
-            Text(
-                text = "⏱️ Xin thêm thời gian sử dụng",
-                style = MaterialTheme.typography.titleLarge,
-                color = TextPrimary,
-                fontWeight = FontWeight.Bold
-            )
+            // ⏱️ go thanh icon vector: emoji do he dieu hanh ve, nen tieu de
+            // hop thoai ra hinh khac nhau giua hai may (va lech voi chu).
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    imageVector = Icons.Default.Schedule,
+                    contentDescription = null,
+                    tint = NeonCyan,
+                    modifier = Modifier.size(20.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = "Xin thêm thời gian sử dụng",
+                    style = MaterialTheme.typography.titleLarge,
+                    color = TextPrimary,
+                    fontWeight = FontWeight.Bold
+                )
+            }
         },
         text = {
             Column(modifier = Modifier.fillMaxWidth()) {
