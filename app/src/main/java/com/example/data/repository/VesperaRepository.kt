@@ -657,7 +657,11 @@ class VesperaRepository(private val db: FirebaseFirestore, private val auth: Fir
                     return@addSnapshotListener
                 }
                 if (snapshot != null && snapshot.exists()) {
-                    trySend(snapshot.toObject(UsageSchedule::class.java)?.let(ConsentPolicy::normalizePending))
+                    trySend(
+                        snapshot.toObject(UsageSchedule::class.java)
+                            ?.let { ConsentPolicy.healLegacyKeys(it, snapshot.data) }
+                            ?.let(ConsentPolicy::normalizePending)
+                    )
                 } else {
                     trySend(null)
                 }
@@ -984,7 +988,15 @@ class VesperaRepository(private val db: FirebaseFirestore, private val auth: Fir
                     Log.w(TAG, "observeMessages error", error)
                     return@addSnapshotListener
                 }
-                val list = snapshot?.toObjects(FamilyMessage::class.java) ?: emptyList()
+                val list = snapshot?.documents?.mapNotNull { doc ->
+                    val msg = doc.toObject(FamilyMessage::class.java) ?: return@mapNotNull null
+                    // `toggleMessageStar` ghi ro khoa "isStarred", nhung ban cu
+                    // ghi ca object nen tin cu con mang khoa "starred" (duoc cat
+                    // chu "is"). Model khai bao ten day du thi khoa cu bi bo qua
+                    // -> dau sao bien mat. Lay khoa moi neu co, khong thi ve.
+                    if (msg.isStarred || doc.contains("isStarred")) msg
+                    else msg.copy(isStarred = doc.getBoolean("starred") == true)
+                } ?: emptyList()
                 trySend(list)
             }
         awaitClose { listener.remove() }

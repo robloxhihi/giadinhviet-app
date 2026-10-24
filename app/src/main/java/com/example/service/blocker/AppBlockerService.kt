@@ -223,7 +223,11 @@ class AppBlockerService : AccessibilityService() {
                     Log.w(TAG, "Tai lich that bai: ${err.message}")
                     return@addSnapshotListener
                 }
-                schedule = snap?.toObject(UsageSchedule::class.java)?.let(ConsentPolicy::normalizePending)
+                schedule = snap?.let { d ->
+                    d.toObject(UsageSchedule::class.java)
+                        ?.let { ConsentPolicy.healLegacyKeys(it, d.data) }
+                        ?.let(ConsentPolicy::normalizePending)
+                }
                 Log.i(
                     TAG,
                     "Lich: isReminderOnly=${schedule?.isReminderOnly} " +

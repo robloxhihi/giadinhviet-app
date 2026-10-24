@@ -100,6 +100,36 @@ object ConsentPolicy {
         )
     }
 
+    /**
+     * Đọc lại hai khoá Boolean của nội quy theo **cả hai kiểu tên** từng tồn
+     * tại trên máy chủ.
+     *
+     * Vì sao cần: `val isReminderOnly` sinh getter `isReminderOnly()`, và bộ
+     * ánh xạ của Firestore cắt chữ "is" nên tai lieu cu duoc ghi voi khoa
+     * `reminderOnly` / `active` — con model tu ban 58.0 khai bao ten day du
+     * `isReminderOnly` / `isActive`. Neu chi tin vao `toObject` thi tai lieu
+     * cua gia dinh luu tu truoc van con kiem cu, doc ra se bi mac dinh lap
+     * day (`isActive = false`, `isReminderOnly = true`), tuc la **may con
+     * ngung chan app im lang** trong khi ba me tuong luat dang chay. Do chinh
+     * la loi nguy hiem nhat cua app nen buoc doc nay khong duoc dua vao may
+     * moi: khoa moi ton tai thi dung no, khong moi lay khoa cu.
+     *
+     * @param raw toa do nguyen ven cua document (`snapshot.data`), null khi
+     *            tai lieu khong ton tai.
+     */
+    fun healLegacyKeys(s: UsageSchedule, raw: Map<String, Any?>?): UsageSchedule {
+        if (raw.isNullOrEmpty()) return s
+        val active = if (raw.containsKey("isActive")) raw["isActive"] as? Boolean
+        else raw["active"] as? Boolean
+        val reminder = if (raw.containsKey("isReminderOnly")) raw["isReminderOnly"] as? Boolean
+        else raw["reminderOnly"] as? Boolean
+        if (active == null && reminder == null) return s
+        return s.copy(
+            isActive = active ?: s.isActive,
+            isReminderOnly = reminder ?: s.isReminderOnly
+        )
+    }
+
     /** Mô tả luật đang chạy — dùng cho banner đã lưu và cho nhật ký nội quy. */
     fun describe(s: UsageSchedule): String {
         val blocked = s.blockedPackages

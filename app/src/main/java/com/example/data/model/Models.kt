@@ -163,7 +163,12 @@ data class UsageSchedule(
     val allowedEndHour: Int? = null,
     val allowedEndMinute: Int? = null,
     val daysOfWeek: String = "",
-    val isReminderOnly: Boolean = true,
+    // `val isReminderOnly` sinh getter `isReminderOnly()`, Firebase cat chu "is"
+    // ra ten "reminderOnly" va di tim field/setter ten do — khong co, nen no IN
+    // "No setter/field for reminderOnly" roi BO QUA gia tri, du lieu trong tai
+    // lieu bi mac dinh `true` che. Hau qua tren may con: ba me da chan that ma
+    // luat chan luon hoi ve "chi nhac nho". Xem LocationData cung ly do.
+    @get:PropertyName("isReminderOnly") val isReminderOnly: Boolean = true,
     /**
      * Danh sach goi tuc ung dung bi chan hoan toan khi [isReminderOnly] = false.
      * Vi du: "com.zhiliaoapp.musically" (TikTok).
@@ -174,7 +179,7 @@ data class UsageSchedule(
      */
     val allowedApps: List<String> = emptyList(),
     /** Bat len thi may hoc sinh moi chan; mac dinh = chua bat. */
-    val isActive: Boolean = false,
+    @get:PropertyName("isActive") val isActive: Boolean = false,
     val createdAt: Long = System.currentTimeMillis(),
     /**
      * Phieu dong thuan cua noi quy gia dinh.

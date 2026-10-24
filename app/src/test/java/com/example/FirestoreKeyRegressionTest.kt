@@ -18,9 +18,12 @@ import java.io.File
  *    `toggleMessageStar` ghi thẳng `"isStarred"`, và document cũ cũng đang mang
  *    tên đầy đủ. Logcat của bản 54.0 báo "No setter/field for isSos": nghĩa là
  *    nút SOS của con có lên máy chủ thì bố mẹ vẫn không thấy banner nguy cấp.
- *    Riêng `UsageSchedule.isReminderOnly` / `isActive` để nguyên: hai trường đó
- *    chỉ do model này đọc và ghi, gắn thêm `@get:PropertyName` sẽ đổi tên khóa
- *    đã lưu và khiến mọi bảng chặn đang chạy bị đọc thành "chỉ nhắc".
+ *    `UsageSchedule.isReminderOnly` / `isActive` từng được để nguyên vì sợ đổi
+ *    tên khóa sẽ làm bảng chặn đang chạy đọc thành "chỉ nhắc". Logcat của bản
+ *    57.0 bác bỏ nỗi sợ đó: nó báo "No setter/field for reminderOnly" và
+ *    "No setter/field for active" — tức hai trường ấy **vốn đã không đọc được**,
+ *    máy con luôn nhận giá trị mặc định. Vì vậy bản 58.0 gắn `@get:PropertyName`
+ *    và thêm `ConsentPolicy.healLegacyKeys` để document cũ vẫn còn tác dụng.
  * 2. **Tab Tổng quan in tên enum.** Thẻ "Trò chuyện gần nhất" từng hiện
  *    "Gửi cảm xúc STUDY_STRESS" — người dùng không đọc được dòng đó.
  * 3. **Chữ on máy nói sai.** Cài đặt báo "máy này chưa đăng nhập tài khoản nào"
@@ -99,17 +102,49 @@ class FirestoreKeyRegressionTest {
     }
 
     @Test
-    fun usageScheduleKhongBiDoiTenKhoaThatLac() {
-        // Chanh nguc: them @get:PropertyName vao hai truong nay se doi ten khoa
-        // da luu, khien bang chan "chan that" bi doc thanh "chi nhac" tren may
-        // con. Test nay that neu co ai lam vay ma khong cap nhat du lieu cu.
+    fun usageScheduleDocCuVanDuocDocKhongBiLap() {
+        // Ban 57.0 de hai truong nay tran (khong @get:PropertyName) vi so doi ten
+        // khoa lam mat bang chan cu. Logcat cho thay chieu nguoc lai: chung chua
+        // bao gio doc duoc, nen can BOTH — khai bao ten day du de khoa moi chay,
+        // va doc them khoa cu de gia dinh luu tu truoc khong bi "chua bat".
         val models = stripComments(read("data/model/Models.kt"))
         val body = classBody(models, "data class UsageSchedule")
-        assertFalse(
-            "UsageSchedule vừa bị gắn @get:PropertyName — phải có đường di kèm " +
-                "cho document cũ trước khi đổi tên khóa",
-            body.contains("@get:PropertyName")
+        listOf("isReminderOnly", "isActive").forEach { key ->
+            assertTrue(
+                "UsageSchedule.$key thiếu @get:PropertyName → Firestore bỏ qua giá trị, máy con luôn ở chế độ nhắc",
+                body.contains("@get:PropertyName(\"$key\") val $key")
+            )
+        }
+        val policy = stripComments(read("service/blocker/ConsentPolicy.kt"))
+        assertTrue("ConsentPolicy phải còn đường đọc khóa cũ", policy.contains("fun healLegacyKeys("))
+        // Ca HAI noi doc noi quy phai di qua buoc nay — mot noi cho man hinh,
+        // mot noi chinh luc chan app cua may con.
+        val repo = stripComments(read("data/repository/VesperaRepository.kt"))
+        assertTrue("observeSchedule phải gọi healLegacyKeys", repo.contains("ConsentPolicy.healLegacyKeys(it, snapshot.data)"))
+        val blocker = stripComments(read("service/blocker/AppBlockerService.kt"))
+        assertTrue("AppBlockerService phải gọi healLegacyKeys", blocker.contains("ConsentPolicy.healLegacyKeys(it, d.data)"))
+    }
+
+    @Test
+    fun moiTruongBooleanIsTrongModelsDeuKhaiBaoTenKhoa() {
+        // Loi nay lap lai duoc o moi truong moi viet: `val isX: Boolean` luon bi
+        // cat chu "is" khi doc, va loi chi ro ra tren may that sau mot lan build.
+        val models = stripComments(read("data/model/Models.kt"))
+        val offenders = models.lines()
+            .map { it.trim() }
+            .filter { it.matches(Regex("""val is[A-Z]\w*: Boolean.*""")) }
+            .filterNot { it.startsWith("@get:PropertyName(") }
+        assertTrue("Thiếu @get:PropertyName: $offenders", offenders.isEmpty())
+    }
+
+    @Test
+    fun thuDaDanhDauDocCaKhoaCu() {
+        val repo = stripComments(read("data/repository/VesperaRepository.kt"))
+        assertTrue(
+            "observeMessages phải fallback khóa \"starred\" cho tin ghi bằng bản cũ",
+            repo.contains("doc.getBoolean(\"starred\")")
         )
+        assertFalse("Không được để OR hai khóa (tắt sao không bao giờ có tác dụng)", repo.contains("msg.isStarred || doc.getBoolean"))
     }
 
     @Test
