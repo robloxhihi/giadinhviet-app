@@ -42,6 +42,28 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    // QUAN TRI VIEN. Danh sach uid duoc lam quan tri, ghi thang vao day —
+      // khong the lay tu client vi client nao cung sua duoc code cua no.
+      // App `:admin` (package thanh.dev.app) cung kiem tra lai bang allowlist
+      // trung ten trong MainActivity.kt; hai ben phai khop nhau.
+    function isAdmin() {
+      return isAuthenticated() && request.auth.uid in
+        ["YU2BwDqvahSh1hUWx9NRAdOwvG33"];
+    }
+
+    // /bans/{uid} — lenh cam theo uid. Day la con duong DUY NHAT co that:
+    // Firestore rules khong co bien IP, va dien thoai di dong doi IP lien tuc
+    // qua CGNAT nen "chan IP" vua khong lam duoc vua khong co nghia.
+    //
+    // LUU Y: moi lenh cam phai duoc MOT rule khac kiem tra lai luc doc/ghi du
+    // lieu gia dinh, neu khong no chi la mot dong ghi chu. Chan do chua lam o
+    // ban nay vi no se chan luon ca may cua chinh nguoi bi cam dang go — can
+    // thu tung man hinh truoc khi bat. Doc/ghi thu nay thi chi quan tri.
+    match /bans/{uid} {
+      allow read: if isAuthenticated();
+      allow create, update, delete: if isAdmin();
+    }
+
     // Pairings
     match /pairings/{pairingId} {
       allow read: if isAuthenticated();

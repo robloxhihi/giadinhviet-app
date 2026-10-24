@@ -25,3 +25,4 @@ dependencyResolutionManagement {
 rootProject.name = "Gia Đình Việt"
 
 include(":app")
+include(":admin")

@@ -147,17 +147,25 @@ jobs:
     - name: Build Debug APK
       run: ./gradlew assembleDebug --stacktrace --warning-mode all
 
+    - name: Build Admin Debug APK
+      # App quan tri (`thanh.dev.app`) la module rieng :admin, APK rieng, cai
+      # song song ben app chinh tren cung mot may.
+      run: ./gradlew :admin:assembleDebug --stacktrace --warning-mode all
+
     - name: Rename APK
       run: |
         cp app/build/outputs/apk/debug/app-debug.apk GiaDinhViet.apk
-        ls -la GiaDinhViet.apk
-        sha256sum GiaDinhViet.apk
+        cp admin/build/outputs/apk/debug/admin-debug.apk QuanTriVien.apk
+        ls -la GiaDinhViet.apk QuanTriVien.apk
+        sha256sum GiaDinhViet.apk QuanTriVien.apk
 
     - name: Upload APK artifact
       uses: actions/upload-artifact@v4
       with:
         name: GiaDinhViet
-        path: GiaDinhViet.apk
+        path: |
+          GiaDinhViet.apk
+          QuanTriVien.apk
         if-no-files-found: error
 
     # Chi chay khi day tag dang v* (vi du v3) -> tao Release tai file APK
@@ -165,7 +173,9 @@ jobs:
       if: startsWith(github.ref, 'refs/tags/v')
       uses: softprops/action-gh-release@v2
       with:
-        files: GiaDinhViet.apk
+        files: |
+          GiaDinhViet.apk
+          QuanTriVien.apk
         prerelease: true
         generate_release_notes: true
         body: |
