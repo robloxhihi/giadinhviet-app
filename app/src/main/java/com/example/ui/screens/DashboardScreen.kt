@@ -80,6 +80,7 @@ import com.example.data.model.RequestStatus
 import com.example.data.model.RuleAuditEntry
 import com.example.data.model.UserRole
 import com.example.data.model.hasRealFix
+import com.example.service.blocker.ConsentPolicy
 import com.example.ui.components.BentoCard
 import com.example.ui.components.BentoProgressBar
 import com.example.ui.components.BentoStatCard
@@ -1150,6 +1151,77 @@ fun DashboardScreen(
             // nao khong co noi dung thi bien han — mot khung "Chưa có gì"
             // chi lam man hinh cang trong.
 
+            // (0) Noi quy dang chay. The nay LUON hien, vi mot cap cha con nao
+            // cung co mot trang thai noi quy — ke ca trang thai "chua dat".
+            // Day la ly do no dung dau: ba the duoi chi moc khi co phieu xin,
+            // co tin nhan hoac co nhat ky, nen may ngay dau mo app thi half
+            // man hinh van trong.
+            val schedActive = uiState.usageSchedule
+            val historyEditor = activePairing.historyChangedByName.ifEmpty {
+                when (activePairing.historyChangedByRole) {
+                    UserRole.CHILD -> "Con"
+                    UserRole.PARENT -> "Phụ huynh"
+                    null -> ""
+                    else -> ""
+                }
+            }
+            val pendingPrivacy = uiState.privacyRequests
+                .count { it.status == RequestStatus.PENDING }
+            BentoCard(
+                modifier = Modifier.fillMaxWidth().padding(bottom = 14.dp),
+                onClick = { onNavigateToTab(4) },
+                testTag = "dashboard_active_rules"
+            ) {
+                Column {
+                    DashboardCardHeading(
+                        icon = Icons.Default.Security,
+                        tint = if (schedActive?.isActive == true) NeonEmerald else TextMuted,
+                        title = "NỘI QUY ĐANG ÁP DỤNG",
+                        subtitle = when {
+                            schedActive == null ->
+                                "Gia đình chưa lưu bảng nội quy nào cho cặp này"
+
+                            !schedActive.isActive ->
+                                "Đang tắt — máy con chưa chặn app theo bảng này"
+
+                            else -> ConsentPolicy.describe(schedActive)
+                        }
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+                    // Gom chu vao mot `val` thay vi noi `+` ke ben `if/else`:
+                    // `else "dang tat" + if ...` doc la " + " thuoc ve nhanh
+                    // else, de sai dang dau va kho doi.
+                    val historyLine = buildString {
+                        append("Ghi điểm di chuyển: ")
+                        append(if (uiState.isLocationHistoryEnabled) "đang bật" else "đang tắt")
+                        if (historyEditor.isNotEmpty()) append(" — người đổi gần nhất: $historyEditor")
+                    }
+                    Text(
+                        text = historyLine,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = TextSecondary
+                    )
+                    if (pendingPrivacy > 0 && !isChild) {
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "$pendingPrivacy phiếu xin giờ trong quyền riêng chờ bạn duyệt",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = NeonAmber
+                        )
+                    }
+                    if (uiState.blockRulesSavedAtMillis > 0L) {
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "Bảng nội quy lưu " + minutesAgoLabel(
+                                uiState.blockRulesSavedAtMillis, System.currentTimeMillis()
+                            ),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = TextMuted
+                        )
+                    }
+                }
+            }
+
             // (1) Phieu xin them gio. `extraTimeRequests` duoc listener nap vao
             // tu luc mo app nhung CHUA TUNG duoc in ra dau, va hai tham so
             // onApproveExtraTime / onRejectExtraTime cua man nay nam chet.
@@ -1248,7 +1320,7 @@ fun DashboardScreen(
                         Spacer(modifier = Modifier.height(6.dp))
                         Text(
                             text = lastMessage.text.ifEmpty {
-                                lastMessage.emotion?.let { "Gửi cảm xúc $it" }
+                                emotionLabel(lastMessage.emotion)?.let { "Gửi trạng thái: $it" }
                                     ?: "(tin nhắn không có chữ)"
                             },
                             style = MaterialTheme.typography.bodySmall,
@@ -1432,4 +1504,17 @@ private fun ruleAuditLabel(entry: RuleAuditEntry): String {
     val detail = entry.detail
     return if (detail.isEmpty()) "$who $verb" else "$who $verb · $detail"
 }
+
+/**
+ * Nhan dien `FamilyMessage.emotion` — chuoi luu trong Firestore la TEN cua
+ * `EmotionTag` (vi du "STUDY_STRESS"). Truoc day the nay in thang ten enum ra
+ * man hinh, khong ai doc hieu. Tra ve tieng Viet cua trang thai do, hoac null
+ * neu chuoi khong tron voi enum nao; o day khong dung emoji vi tab Tong quan
+ * da quy uoc chi dung icon vector.
+ */
+private fun emotionLabel(raw: String?): String? =
+    raw?.takeIf { it.isNotBlank() }?.let { name ->
+        EmotionTag.values().firstOrNull { it.name == name }?.label
+            ?: "không rõ (${name.lowercase()})"
+    }
 

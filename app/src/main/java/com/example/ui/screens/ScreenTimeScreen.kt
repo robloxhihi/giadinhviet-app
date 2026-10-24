@@ -629,7 +629,7 @@ fun ScreenTimeScreen(
                 Spacer(modifier = Modifier.height(8.dp))
 
                 Text(
-                    text = "Android Foreground Service cập nhật vị trí GPS vệ sinh và thống kê liên tục khi khóa máy.",
+                    text = "Android Foreground Service cập nhật vị trí GPS vệ tinh và thống kê liên tục khi khóa máy.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = TextSecondary
                 )

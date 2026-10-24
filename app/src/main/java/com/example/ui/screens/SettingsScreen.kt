@@ -453,8 +453,15 @@ fun SettingsScreen(
                             fontWeight = FontWeight.Bold
                         )
                         Text(
-                            text = userProfile?.email?.takeIf { it.isNotBlank() }
-                                ?: "Chưa có email: máy này chưa đăng nhập tài khoản nào",
+                            // Dung hai noi khac nhau cho "chua co email" va "chua
+                            // dang nhap". Truoc day mot dong in ca hai, nen may
+                            // dang nhat van bao "may nay chua dang nhap".
+                            text = when {
+                                userProfile?.email?.isNotBlank() == true -> userProfile?.email.orEmpty()
+                                userProfile != null ->
+                                    "Tài khoản này chưa có email lưu trên máy chủ."
+                                else -> "Máy chưa đăng nhập tài khoản nào."
+                            },
                             style = MaterialTheme.typography.bodyMedium,
                             color = TextMuted
                         )

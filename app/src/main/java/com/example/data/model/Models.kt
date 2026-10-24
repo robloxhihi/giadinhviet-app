@@ -105,13 +105,20 @@ data class LocationData(
     val accuracy: Float = 0f,
     val speed: Float = 0.0f,
     val batteryLevel: Int = 0,
-    val isCharging: Boolean = false,
-    val isPrivacyActive: Boolean = false,
+    // Ca ba truong `is...` duoi day tung bi mat khi doc tai lieu. Kotlin sinh getter
+    // `isSos()`, Firestore cat chu "is" nen model luon doi doc khoa "sos" —
+    // trong khi phieu "gio trong quyen rieng" (respondToPrivacyRequest) va
+    // document nguoi dung da ghi san thi ghi ro "isPrivacyActive". Ket qua:
+    // logcat bao "No setter/field for isSos" va co SOS bi rang bo, nen ba me
+    // khong bao gio thay banner nguy cap. Ten khoa phai khai bao ro, o day va
+    // o FamilyMessage.isStarred (toggleMessageStar cung ghi bang ten day du).
+    @get:PropertyName("isCharging") val isCharging: Boolean = false,
+    @get:PropertyName("isPrivacyActive") val isPrivacyActive: Boolean = false,
     val currentSafeZone: String = "",
     val topActiveApp: String = "",
     val topActiveAppMinutes: Int = 0,
     val totalUsedMinutes: Int = 0,
-    val isSos: Boolean = false,
+    @get:PropertyName("isSos") val isSos: Boolean = false,
     val updatedAt: Long = 0L
 )
 
@@ -364,7 +371,10 @@ data class FamilyMessage(
     val emotion: String? = null,
     val mediaUrl: String? = null,
     val mediaType: String? = null,
-    val isStarred: Boolean = false,
+    // Xem ly do o LocationData: `toggleMessageStar` ghi ro khoa "isStarred",
+    // con model duoc sinh tu getter thi doi doc "starred" -> tin da danh dau
+    // luon hien lai nhu chua danh dau khi doc tu may chu.
+    @get:PropertyName("isStarred") val isStarred: Boolean = false,
     val createdAt: Long = System.currentTimeMillis()
 )
 

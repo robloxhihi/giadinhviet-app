@@ -969,7 +969,36 @@ class VesperaViewModel(
                         if (existing == null) {
                             repository.saveUserProfile(profile)
                         } else {
-                            _uiState.value = _uiState.value.copy(userProfile = existing)
+                            // Document tren may chu la tai lieu cu: co the thieu
+                            // email, va co the mang role KHAC cai vai tro nguoi
+                            // dung vua chon o man dang nhap. Truoc day app im
+                            // lang dung doc cu, nen dang nhap bang tai khoan "Học
+                            // sinh" van ra man Phụ huynh ma khong ai giai thich
+                            // duoc. Van lay may chu lam chuan (hoc sinh khong
+                            // duoc tu phong minh len bang cha me) nhung phai bo
+                            // sung cho du thong tin va phai noi ro khi lech.
+                            val merged = existing.copy(
+                                email = existing.email.ifBlank { profile.email },
+                                displayName = existing.displayName.ifBlank { profile.displayName }
+                            )
+                            val roleHint = { r: UserRole ->
+                                if (r == UserRole.CHILD) "Học sinh" else "Phụ huynh"
+                            }
+                            if (merged != existing) {
+                                // Chi ghi lai khi that su co them du lieu, de
+                                // mot lan dang nhap khong viet gi up xuong may
+                                // chu. Ghi that bai thi van con du lieu tren
+                                // man hinh; saveUserProfile nem loi to cuc.
+                                repository.saveUserProfile(merged)
+                            }
+                            _uiState.value = _uiState.value.copy(
+                                userProfile = merged,
+                                errorMessage = if (existing.role != profile.role)
+                                    "Máy chủ đang lưu tài khoản này là ${roleHint(existing.role)}, " +
+                                        "khác vai trò bạn vừa chọn (${roleHint(profile.role)}). " +
+                                        "App hiển thị theo vai trò máy chủ."
+                                else null
+                            )
                         }
                     } catch (e: Exception) {
                         Log.w(TAG, "Sync profile error", e)
