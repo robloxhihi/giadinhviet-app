@@ -121,9 +121,24 @@ fun ScreenTimeScreen(
             .verticalScroll(scrollState)
             .padding(horizontal = 16.dp, vertical = 20.dp)
     ) {
+        // Header phai o DAU tien. Anh chang man hinh ngay 2026-10-23: the "Thỏa
+        // thuận giờ dùng" nam ben tren tieu de, nen nguoi dung thay mot the
+        // chen-chu-nho roi moi biet minh dang o manh nao.
+        Text(
+            text = "QUẢN LÝ THỜI GIAN",
+            style = MaterialTheme.typography.displayMedium,
+            color = TextPrimary,
+            fontWeight = FontWeight.Bold
+        )
+        Text(
+            text = "Lịch sinh hoạt gia đình & Thống kê ứng dụng",
+            style = MaterialTheme.typography.bodyMedium,
+            color = TextSecondary
+        )
+        Spacer(modifier = Modifier.height(16.dp))
+
         // Agreement Section
         if (uiState.activePairing != null) {
-            Spacer(modifier = Modifier.height(16.dp))
             BentoCard(modifier = Modifier.fillMaxWidth()) {
                 Column {
                     Text(text = "THỎA THUẬN GIỜ DÙNG", style = MaterialTheme.typography.titleSmall, color = NeonViolet, fontWeight = FontWeight.Bold)
@@ -163,22 +178,8 @@ fun ScreenTimeScreen(
                     }
                 }
             }
+            Spacer(modifier = Modifier.height(16.dp))
         }
-
-        // Header
-        Text(
-            text = "QUẢN LÝ THỜI GIAN",
-            style = MaterialTheme.typography.displayMedium,
-            color = TextPrimary,
-            fontWeight = FontWeight.Bold
-        )
-        Text(
-            text = "Lịch sinh hoạt gia đình & Thống kê ứng dụng",
-            style = MaterialTheme.typography.bodyMedium,
-            color = TextSecondary
-        )
-
-        Spacer(modifier = Modifier.height(16.dp))
 
         // Progress Overview Card
         BentoCard(modifier = Modifier.fillMaxWidth()) {

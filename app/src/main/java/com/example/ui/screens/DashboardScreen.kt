@@ -26,9 +26,13 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.BatteryChargingFull
 import androidx.compose.material.icons.filled.BatteryUnknown
+import androidx.compose.material.icons.filled.Chat
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.FamilyRestroom
 import androidx.compose.material.icons.filled.GpsFixed
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.HourglassTop
 import androidx.compose.material.icons.filled.Insights
 import androidx.compose.material.icons.filled.Link
@@ -39,7 +43,9 @@ import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Send
+import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material.icons.filled.Timeline
+import androidx.compose.material.icons.filled.TouchApp
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -67,8 +73,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.model.EmotionTag
+import com.example.data.model.FamilyMessage
 import com.example.data.model.PairingRequest
 import com.example.data.model.PairingStatus
+import com.example.data.model.RequestStatus
+import com.example.data.model.RuleAuditEntry
 import com.example.data.model.UserRole
 import com.example.data.model.hasRealFix
 import com.example.ui.components.BentoCard
@@ -207,7 +216,7 @@ fun DashboardScreen(
                             }
                             Spacer(modifier = Modifier.height(4.dp))
                             Text(
-                                text = "💡 Lưu ý: Khi duyệt, vị trí GPS được ẩn an toàn nhưng kênh Chat và Gọi điện vẫn hoạt động bình thường.",
+                                text = "Lưu ý: Khi duyệt, vị trí GPS được ẩn an toàn nhưng kênh Chat và Gọi điện vẫn hoạt động bình thường.",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = NeonCyan
                             )
@@ -241,6 +250,11 @@ fun DashboardScreen(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
+                    // Ten hien thi cua chinh may nay; de trong thi goi theo vai
+                    // tro, khong bao gio tu che ra ten.
+                    val displayName = userProfile?.displayName?.trim()
+                        ?.ifEmpty { if (isChild) "Học sinh" else "Phụ huynh" }
+                        ?: if (isChild) "Học sinh" else "Phụ huynh"
                     Box {
                         Box(
                             modifier = Modifier
@@ -249,19 +263,31 @@ fun DashboardScreen(
                                 .background(FacebookBlue),
                             contentAlignment = Alignment.Center
                         ) {
+                            // Chu trong avatar phai la chu cai DAU TIEN cua ten
+                            // that. Truoc day gim dinh "H"/"P" theo vai tro, nen
+                            // moi nguoi dung deu chung mot chu va nguoi ten
+                            // "hah" van thay chu "P" — mot chu doan mau.
                             Text(
-                                text = if (isChild) "H" else "P",
+                                text = displayName.take(1).uppercase(),
                                 color = Color.White,
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 19.sp
                             )
                         }
-                        // Facebook Active Online Green Dot
+                        // Diem "trực tuyến" phai chay theo NetworkMonitor. Truoc
+                        // day no son xanh CO DINH: may mat mang cung bao dang
+                        // online. null = chua kiem tra xong thi bao xam, khong
+                        // doan la offline.
+                        val onlineTint = when (uiState.isOnline) {
+                            true -> NeonEmerald
+                            false -> NeonRose
+                            null -> TextMuted
+                        }
                         Box(
                             modifier = Modifier
                                 .size(13.dp)
                                 .clip(CircleShape)
-                                .background(NeonEmerald)
+                                .background(onlineTint)
                                 .border(2.dp, MaterialTheme.colorScheme.surface, CircleShape)
                                 .align(Alignment.BottomEnd)
                         )
@@ -271,14 +297,14 @@ fun DashboardScreen(
 
                     Column {
                         Text(
-                            text = userProfile?.displayName?.ifEmpty { if (isChild) "Học sinh" else "Phụ huynh" } ?: if (isChild) "Học sinh" else "Phụ huynh",
+                            text = displayName,
                             style = MaterialTheme.typography.titleMedium,
                             color = TextPrimary,
                             fontWeight = FontWeight.Bold
                         )
                         Text(
                             text = if (isChild) "Học sinh • ${studentCode.ifEmpty { "chưa có mã" }}"
-                            else "Vai trò: Phụ huynh 🛡️",
+                            else "Vai trò: Phụ huynh",
                             style = MaterialTheme.typography.labelSmall,
                             color = FacebookBlue
                         )
@@ -799,7 +825,7 @@ fun DashboardScreen(
                                 shape = RoundedCornerShape(10.dp)
                             ) {
                                 Text(
-                                    "Đổi hạn mức trong Cài đặt ➔",
+                                    "Đổi hạn mức trong Cài đặt →",
                                     fontSize = 12.sp,
                                     fontWeight = FontWeight.Bold
                                 )
@@ -818,7 +844,7 @@ fun DashboardScreen(
                                 contentColor = NeonCyan
                             )
                         ) {
-                            Text("Đi đến Quản lý Giờ dùng & Phân loại ứng dụng ➔", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            Text("Đi đến Quản lý Giờ dùng & Phân loại ứng dụng →", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                         }
                     }
                 }
@@ -897,7 +923,7 @@ fun DashboardScreen(
                                 contentColor = NeonRose
                             )
                         ) {
-                            Text("Cài đặt số điện thoại & Khung giờ SOS ➔", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            Text("Cài đặt số điện thoại & Khung giờ SOS →", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                         }
                     }
                 }
@@ -1034,46 +1060,36 @@ fun DashboardScreen(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        Button(
-                            onClick = onSendZenlyBump,
+                        // Icon vector thay vi emoji. Emoji do he dieu hanh ve
+                        // ra, nen cung mot nut o may khac nhau cho ra hinh
+                        // khac nhau (va trong anh chang man con bi lech size
+                        // so voi chu). Icon thi app kiem soat duoc mau.
+                        DashboardActionButton(
                             modifier = Modifier.weight(1f),
-                            shape = RoundedCornerShape(10.dp),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = SpaceCardElevated,
-                                contentColor = NeonAmber
-                            )
-                        ) {
-                            Text(
-                                text = "⚡ Chạm tay • " + bumpStateLabel(
-                                    uiState.lastBumpAt, uiState.lastBumpByName, System.currentTimeMillis()
-                                ),
-                                fontSize = 12.sp, fontWeight = FontWeight.Bold
-                            )
-                        }
-
-                        Button(
-                            onClick = { onNavigateToTab(3) },
+                            icon = Icons.Default.TouchApp,
+                            containerColor = SpaceCardElevated,
+                            contentColor = NeonAmber,
+                            label = "Chạm tay • " + bumpStateLabel(
+                                uiState.lastBumpAt, uiState.lastBumpByName, System.currentTimeMillis()
+                            ),
+                            onClick = onSendZenlyBump
+                        )
+                        DashboardActionButton(
                             modifier = Modifier.weight(1f),
-                            shape = RoundedCornerShape(10.dp),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = SpaceCardElevated,
-                                contentColor = NeonCyan
-                            )
-                        ) {
-                            Text("💬 Nhắn tin", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                        }
-
-                        Button(
-                            onClick = { onNavigateToTab(1) },
+                            icon = Icons.Default.Chat,
+                            containerColor = SpaceCardElevated,
+                            contentColor = NeonCyan,
+                            label = "Nhắn tin",
+                            onClick = { onNavigateToTab(3) }
+                        )
+                        DashboardActionButton(
                             modifier = Modifier.weight(1f),
-                            shape = RoundedCornerShape(10.dp),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = FacebookBlue,
-                                contentColor = Color.White
-                            )
-                        ) {
-                            Text("📍 Bản đồ", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                        }
+                            icon = Icons.Default.LocationOn,
+                            containerColor = FacebookBlue,
+                            contentColor = Color.White,
+                            label = "Bản đồ",
+                            onClick = { onNavigateToTab(1) }
+                        )
                     }
                 }
             }
@@ -1126,7 +1142,294 @@ fun DashboardScreen(
                     testTag = "used_stat_card"
                 )
             }
+
+            Spacer(modifier = Modifier.height(14.dp))
+
+            // ── Nửa dưới màn hình từng trống hoàn toàn ─────────────────────
+            // Ba the duoi day chi dung so lieu THAT da co trong `uiState`. The
+            // nao khong co noi dung thi bien han — mot khung "Chưa có gì"
+            // chi lam man hinh cang trong.
+
+            // (1) Phieu xin them gio. `extraTimeRequests` duoc listener nap vao
+            // tu luc mo app nhung CHUA TUNG duoc in ra dau, va hai tham so
+            // onApproveExtraTime / onRejectExtraTime cua man nay nam chet.
+            // Nghia la con xin them gio thi bo me khong bao gio thay.
+            val pendingExtra = uiState.extraTimeRequests
+                .filter { it.status == RequestStatus.PENDING }
+            if (pendingExtra.isNotEmpty() && !isChild) {
+                BentoCard(
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 14.dp),
+                    borderColor = NeonAmber
+                ) {
+                    Column {
+                        DashboardCardHeading(
+                            icon = Icons.Default.Schedule,
+                            tint = NeonAmber,
+                            title = "CHỜ BẠN DUYỆT",
+                            subtitle = "${pendingExtra.size} phiếu xin thêm giờ từ máy con"
+                        )
+                        pendingExtra.take(3).forEach { req ->
+                            val who = req.childName.ifEmpty { "Con" }
+                            val mins = req.minutesRequested
+                            Spacer(modifier = Modifier.height(10.dp))
+                            Text(
+                                text = if (mins > 0) "$who xin thêm $mins phút"
+                                else "$who xin thêm giờ, nhưng phiếu không kèm số phút",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = TextPrimary,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                text = req.reason.ifEmpty { "Con chưa nêu lý do." },
+                                style = MaterialTheme.typography.bodySmall,
+                                color = TextSecondary
+                            )
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                // Duyệt một phiếu không có số phút là tự tay đặt
+                                // hạn mức 0, nen nut nay chi mo khi co con so.
+                                if (mins > 0) {
+                                    Button(
+                                        onClick = { onApproveExtraTime(req.id, mins) },
+                                        modifier = Modifier.weight(1f).height(40.dp),
+                                        shape = RoundedCornerShape(10.dp),
+                                        colors = ButtonDefaults.buttonColors(
+                                            containerColor = NeonEmerald.copy(alpha = 0.18f),
+                                            contentColor = NeonEmerald
+                                        )
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Check,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(15.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text("Duyệt", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                    }
+                                }
+                                OutlinedButton(
+                                    onClick = { onRejectExtraTime(req.id) },
+                                    modifier = Modifier.weight(1f).height(40.dp),
+                                    shape = RoundedCornerShape(10.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Close,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(15.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("Từ chối", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // (2) Tin nhan gan nhat. `messages` chi duoc ve o tab Chat, nen
+            // bo mo app o Tong quan khong biet co tin dang doc.
+            val lastMessage: FamilyMessage? = uiState.messages.maxByOrNull { it.createdAt }
+            if (lastMessage != null) {
+                BentoCard(
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 14.dp),
+                    onClick = { onNavigateToTab(3) },
+                    testTag = "dashboard_last_message"
+                ) {
+                    Column {
+                        DashboardCardHeading(
+                            icon = Icons.Default.Chat,
+                            tint = NeonCyan,
+                            title = "TRÒ CHUYỆN GẦN NHẤT",
+                            subtitle = lastMessage.senderName.ifEmpty { "Máy bên kia" } +
+                                    " • " + minutesAgoLabel(lastMessage.createdAt, System.currentTimeMillis())
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            text = lastMessage.text.ifEmpty {
+                                lastMessage.emotion?.let { "Gửi cảm xúc $it" }
+                                    ?: "(tin nhắn không có chữ)"
+                            },
+                            style = MaterialTheme.typography.bodySmall,
+                            color = TextSecondary,
+                            maxLines = 2
+                        )
+                    }
+                }
+            }
+
+            // (3) Nhat ky noi quy. Danh sach nay o tab Cai dat rat day du, nhung
+            // nguoi mo app dau tien lai o Tong quan — noi can biet "ai vua doi
+            // noi quy cua con".
+            val recentAudit = uiState.ruleAudit
+                .sortedByDescending { it.createdAt }
+                .take(3)
+            if (recentAudit.isNotEmpty()) {
+                BentoCard(
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 14.dp),
+                    onClick = { onNavigateToTab(4) },
+                    testTag = "dashboard_rule_audit"
+                ) {
+                    Column {
+                        DashboardCardHeading(
+                            icon = Icons.Default.History,
+                            tint = NeonViolet,
+                            title = "NHẬT KÝ NỘI QUY",
+                            subtitle = "Ba thay đổi gần nhất giữa hai máy"
+                        )
+                        recentAudit.forEach { entry ->
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = ruleAuditLabel(entry),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = TextSecondary,
+                                    modifier = Modifier.weight(1f),
+                                    maxLines = 2
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = minutesAgoLabel(entry.createdAt, System.currentTimeMillis()),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = TextMuted
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Dong bo lan cuoi — chi in khi listener THUC SU keo duoc du lieu
+            // ve (lastRealtimeSyncAt = 0 nghia la chua lan nao).
+            if (uiState.lastRealtimeSyncAt > 0L) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Default.Sync,
+                        contentDescription = null,
+                        tint = TextMuted,
+                        modifier = Modifier.size(13.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = "Dữ liệu chung với máy con cách đây " +
+                                minutesAgoLabel(uiState.lastRealtimeSyncAt, System.currentTimeMillis()),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = TextMuted
+                    )
+                }
+            }
         }
     }
 }
 }
+
+/**
+ * Hang nut co icon trong the Thong tin may con. Truoc day nut nao cung dung
+ * mot ky tu bieu cam lam hieu. Ky do he dieu hanh ve, nen cung mot nut o hai
+ * may ra hai hinh va kich co lech so voi chu ben canh; icon vector thi app
+ * giu duoc mau va kich co.
+ */
+@Composable
+private fun DashboardActionButton(
+    modifier: Modifier = Modifier,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    containerColor: Color,
+    contentColor: Color,
+    label: String,
+    onClick: () -> Unit
+) {
+    Button(
+        onClick = onClick,
+        modifier = modifier.height(40.dp),
+        shape = RoundedCornerShape(10.dp),
+        colors = ButtonDefaults.buttonColors(
+            containerColor = containerColor,
+            contentColor = contentColor
+        )
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            modifier = Modifier.size(15.dp)
+        )
+        Spacer(modifier = Modifier.width(4.dp))
+        Text(label, fontSize = 12.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+    }
+}
+
+/** Nhan de chung cho cac the moi o duoi man Tong quan: icon + ten + mot dong phu. */
+@Composable
+private fun DashboardCardHeading(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    tint: Color,
+    title: String,
+    subtitle: String
+) {
+    Column {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = tint,
+                modifier = Modifier.size(18.dp)
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                text = title,
+                style = MaterialTheme.typography.labelSmall,
+                color = tint,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 1.sp
+            )
+        }
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(
+            text = subtitle,
+            style = MaterialTheme.typography.bodySmall,
+            color = TextSecondary
+        )
+    }
+}
+
+/**
+ * Cach doc mot moc thoi gian thanh "X phút trước". Cung kieu noi voi
+ * `bumpStateLabel` o man Vi tri de ba noi tren man hinh khong in ra ba cach
+ * noi khac nhau cho cung mot khoang thoi gian.
+ */
+private fun minutesAgoLabel(at: Long, nowMillis: Long): String {
+    if (at <= 0L) return "chưa có mốc thời gian"
+    val mins = (nowMillis - at) / 60_000L
+    return when {
+        mins < 1 -> "vừa xong"
+        mins < 60 -> "$mins phút trước"
+        mins < 1440 -> "${mins / 60} giờ trước"
+        else -> "hơn một ngày trước"
+    }
+}
+
+/**
+ * Mot dong nhat ky noi quy. `action` la chuoi luu trong Firestore, khong phai
+ * enum, nen gia tri la phai in nguyen van chu khong duoc doan thanh tieng Viet
+ * — doan sai la bien mot lan tu choi thanh mot lan duyet.
+ */
+private fun ruleAuditLabel(entry: RuleAuditEntry): String {
+    val who = entry.actorName.ifEmpty {
+        if (entry.actorRole == UserRole.CHILD) "Con" else "Phụ huynh"
+    }
+    val verb = when (entry.action) {
+        "de_xuat" -> "đề xuất"
+        "dong_y" -> "đã duyệt"
+        "tu_choi" -> "từ chối"
+        "rut" -> "đã rút"
+        "ap_dung" -> "áp dụng"
+        "lich_su" -> "lưu lịch sử"
+        else -> entry.action.ifEmpty { "thay đổi" }
+    }
+    val detail = entry.detail
+    return if (detail.isEmpty()) "$who $verb" else "$who $verb · $detail"
+}
+
