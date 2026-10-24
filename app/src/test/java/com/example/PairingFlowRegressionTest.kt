@@ -442,5 +442,18 @@ class PairingFlowRegressionTest {
             "Phụ đề khi chưa ghép nối phải nói thật là chỉ còn đường đăng xuất",
             settings.contains("chưa ghép nối — vào đây chỉ để đăng xuất")
         )
+
+        // Hop thu "Ngung dung tren may nay" tung dan nguoi doc toi nut "Huy lien
+        // ket" "o tren", ma nut do nam trong the vua bi an khi chua ghep noi: loi
+        // dan vao mot cho khong ton tai. Chi ai doc man hinh moi phat hien, nen
+        // no phai bi test chan bang chuoi cu the.
+        assertFalse(
+            "Hộp thoại ngừng dùng không được trỏ tới nút “Hủy liên kết ở trên” nữa",
+            settings.contains("Hủy liên kết” ở trên")
+        )
+        assertTrue(
+            "Hộp thoại phải có câu riêng cho máy chưa ghép nối",
+            settings.contains("chưa ghép nối nên không còn liên kết nào để gỡ")
+        )
     }
 }

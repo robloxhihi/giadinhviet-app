@@ -752,12 +752,21 @@ fun SettingsScreen(
             text = {
                 Text(
                     "Nút này ĐĂNG XUẤT khỏi máy này — máy sẽ không còn đọc được vị trí, " +
-                        "tin nhắn và nội quy của cặp đã ghép nối.\n\n" +
+                        "tin nhắn và nội quy của gia đình đã ghép nối.\n\n" +
                         "Nó KHÔNG xóa hồ sơ đang lưu trên máy chủ: quy tắc bảo mật của ứng " +
-                        "dụng chặn mọi yêu cầu tự xóa dữ liệu từ điện thoại. Muốn xóa hẳn " +
-                        "thì phải gỡ liên kết (nút “Hủy liên kết” ở trên — thu hồi quyền chia " +
-                        "sẻ trên cả hai máy) rồi yêu cầu người vận hành hệ thống xóa tài khoản " +
-                        "trong bảng điều khiển Firebase."
+                        "dụng chặn mọi yêu cầu tự xóa dữ liệu từ điện thoại. " +
+                        // Khi chưa ghép nối thì thẻ "QUẢN LÝ GHÉP NỐI" (và nút "Hủy liên
+                        // kết" trong đó) đã bị ẩn, nên câu "nút ... ở trên" trước đây dẫn
+                        // người đọc tới một chỗ không còn tồn tại trên màn hình.
+                        if (isPaired)
+                            "Muốn xóa hẳn thì phải gỡ liên kết trước bằng nút “Hủy liên kết” ở " +
+                                "thẻ Quản lý ghép nối trên đây (thu hồi quyền chia sẻ trên cả " +
+                                "hai máy), rồi yêu cầu người vận hành xóa tài khoản trong bảng " +
+                                "điều khiển Firebase."
+                        else
+                            "Máy này chưa ghép nối nên không còn liên kết nào để gỡ — đăng xuất " +
+                                "là cắt hết đường đọc dữ liệu trên máy. Hồ sơ trên máy chủ chỉ " +
+                                "người vận hành xóa được, qua bảng điều khiển Firebase."
                 )
             },
             confirmButton = {
