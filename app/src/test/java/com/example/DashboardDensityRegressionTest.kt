@@ -120,11 +120,19 @@ class DashboardDensityRegressionTest {
     @Test
     fun nutHanhDongKhongDungEmojiLamIcon() {
         val code = stripComments(read("DashboardScreen.kt"))
-        // Ký tự biểu cảm bị hệ điều hành vẽ, nên mỗi máy một hình. Dò theo
-        // khoảng mã hơn là dò từng emoji cụ thể.
-        val emoji = Regex("[\\u{1F300}-\\u{1FAFF}\\u{2600}-\\u{27BF}]")
-        val hits = emoji.findAll(code).map { it.value }.toList()
-        assertTrue("Tab Tổng quan vẫn còn ký tự biểu cảm trong mã chạy: $hits", hits.isEmpty())
+        // Ky tu bieu cam bi he dieu hanh ve, nen moi may ra mot hinh. Do theo
+        // khoang ma hon la do tung chu cu the.
+        //
+        // KHONG dung Regex viet theo kieu escape unicode `{1F300}` cua Kotlin:
+        // trinh dich Java khong nhan cach viet do (no chi dung `\` u voi dung
+        // bon chu hex), nen CI cua ban 53 chet vi PatternSyntaxException chu
+        // khong vi loi giao dien. Diem ma hoa (codePoint) la cach duy nhat dem
+        // dung mot ky tu nam ngoi mat tran UTF-16 nhu emoji: no la mot diem ma,
+        // khong phai hai chu.
+        val offenders = code.codePoints().filter { cp ->
+            (cp in 0x1F300..0x1FAFF) || (cp in 0x2600..0x27BF)
+        }.toArray().map { "U+" + Integer.toHexString(it).uppercase() }
+        assertTrue("Tab Tổng quan vẫn còn ký tự biểu cảm trong mã chạy: $offenders", offenders.isEmpty())
         assertTrue("Thiếu nút icon vector", code.contains("DashboardActionButton("))
         assertTrue("bumpStateLabel phải còn được dùng", code.contains("bumpStateLabel("))
     }
