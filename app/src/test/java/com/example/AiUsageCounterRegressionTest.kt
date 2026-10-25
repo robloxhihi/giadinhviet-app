@@ -21,24 +21,42 @@ import java.io.File
  */
 class AiUsageCounterRegressionTest {
 
+    /**
+     * Tim goc repo bang cach di nguoc tu thu muc chay test len den dau co
+     * `settings.gradle.kts` KOI VOI `firestore.rules`.
+     *
+     * Phan nay sinh ra tu that bai cua CI run #156 (ban 64.0): Gradle chay
+     * `:app:testDebugUnitTest` voi thu muc lam viec la `app/`, nen
+     * `File("firestore.rules")` truong thanh `app/firestore.rules` — MOT BAN
+     * CU 58 dong con de rules ngat nguo ("ai cung doc/ghi duoc", ke ca
+     * `allow delete` tren /users). Test do sai file va do that bai. Nay thi
+     * sinh provan: file rules doc nhat la file o goc, va chi co mot.
+     */
+    private fun repoRoot(): File {
+        var dir: File? = File(".").absoluteFile.canonicalFile
+        while (dir != null) {
+            if (File(dir, "settings.gradle.kts").exists() && File(dir, "firestore.rules").exists()) {
+                return dir
+            }
+            dir = dir.parentFile
+        }
+        error("Không tìm thấy thư mục gốc dự án (phải có settings.gradle.kts + firestore.rules)")
+    }
+
     private fun source(relative: String): String {
+        val root = repoRoot()
         val candidates = listOf(
-            File(relative),
-            File("app/$relative"),
-            File("../admin/$relative"),
-            File("admin/$relative")
+            File(root, "app/$relative"),
+            File(root, "admin/$relative"),
+            File(root, relative)
         )
         val file = candidates.firstOrNull { it.exists() }
             ?: error("Không tìm thấy tệp nguồn: $relative")
         return String(file.readBytes(), Charsets.UTF_8)
     }
 
-    private fun repoFile(name: String): String {
-        val candidates = listOf(File(name), File("../$name"))
-        val file = candidates.firstOrNull { it.exists() }
-            ?: error("Không tìm thấy tệp dự án: $name")
-        return String(file.readBytes(), Charsets.UTF_8)
-    }
+    private fun repoFile(name: String): String =
+        String(File(repoRoot(), name).readBytes(), Charsets.UTF_8)
 
     @Test
     fun demSoDuocGhiLenFirestoreBangIncrement() {

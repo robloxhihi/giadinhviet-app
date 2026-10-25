@@ -172,6 +172,14 @@ fun GoogleMapsStudentLocationCard(
     routePoints: List<Pair<Double, Double>> = emptyList(),
     stayDurationMillis: Long = -1L,
     lastUpdatedAt: Long = 0L,
+    /**
+     * Luc MAY NAY nhan duoc tai lieu (dong ho cua may dang xem), 0 = khong ro.
+     * `lastUpdatedAt` do may BEN KIA ghi bang `System.currentTimeMillis()` cua no,
+     * nen mot may con lech dong ho ve tuong lai lam `nowTick - lastUpdatedAt` am,
+     * ep ve 0 va the hien mot diem cu nhieu tieng nhu "vua cap nhat". Du lieu nhan
+     * o day la du duy nhat ma may nay co quyen noi la that.
+     */
+    receivedAtMs: Long = 0L,
     accuracyMeters: Float = 0f,
     headingDegrees: Float? = null,
     /** false => map khong ve marker, hien bang "dang do GPS" + nut Thu lai.
@@ -334,9 +342,15 @@ fun GoogleMapsStudentLocationCard(
         }
     }
 
-    // Tuổi của vị trí, tính bằng giây THẬT từ lastUpdatedAt tới nowTick.
-    val fixAgeSeconds: Long = if (lastUpdatedAt > 0) {
-        ((nowTick - lastUpdatedAt) / 1000L).coerceAtLeast(0L)
+    // Tuổi của vị trí, tính bằng giây THẬT từ lúc fix tới nowTick.
+    // Moc thoi gian la `receivedAtMs` (dong ho may nay) khi biet; chi khi khong co
+    // no thi quay lai dung dong ho may ben kia va noi ro ra.
+    val ageAnchorMs = if (receivedAtMs > 0L) receivedAtMs else lastUpdatedAt
+    val clockSkewSeconds = if (receivedAtMs > 0L && lastUpdatedAt > 0L) {
+        ((lastUpdatedAt - receivedAtMs) / 1000L)
+    } else 0L
+    val fixAgeSeconds: Long = if (ageAnchorMs > 0) {
+        ((nowTick - ageAnchorMs) / 1000L).coerceAtLeast(0L)
     } else -1L
     val isStaleFix = fixAgeSeconds > 180L
     val lastUpdateText = when {
@@ -344,6 +358,14 @@ fun GoogleMapsStudentLocationCard(
         fixAgeSeconds < 60 -> "${fixAgeSeconds}s trước"
         fixAgeSeconds < 3600 -> "${fixAgeSeconds / 60} phút trước"
         else -> "${fixAgeSeconds / 3600} giờ trước"
+    } + when {
+        // Lech dong ho la su that nguoi dung phai biet, khong can ho tu doan.
+        clockSkewSeconds > 120 ->
+            " (tính từ lúc máy này nhận; đồng hồ máy kia đi trước ${clockSkewSeconds / 60} phút)"
+        clockSkewSeconds < -120 ->
+            " (tính từ lúc máy này nhận; đồng hồ máy kia đi sau ${-clockSkewSeconds / 60} phút)"
+        receivedAtMs > 0L -> " (tính từ lúc máy này nhận)"
+        else -> ""
     }
 
     val pinColorInt = if (isStaleFix) {

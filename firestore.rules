@@ -7,14 +7,28 @@ rules_version = '2';
 // privacy_requests, messages, location_history) — chi me/con cua cap do
 // doc/ghi duoc.
 //
-// VAN CON MO, chua sua o day vi sua la co the lam hong tinh nang khac:
-//   - /locations/{userId}       : bat ky tai khoan nao doc/ghi duoc vi tri
-//   - /location_history/{id}    : (collection o ngon) bat ky ai doc/ghi
-//   - /sos_alerts/{alertId}     : bat ky ai doc/ghi
-//   - /calls/{callId}           : bat ky ai doc/ghi
-//   - /pairings/{id}            : bat ky ai doc (create/delete van rong)
-// Voi bai thi KHKT thi day la gioi han PHAI noi thang, tuyet doi khong
-// duoc noi "du lieu gia dinh duoc bao ve".
+// Ban 65.0 khat them 5 khe o ngon tung de nguyen ("bat ky tai khoan nao
+// duoc" = GPS ca nha, phieu SOS va tin hieu cuoc goi nam trong tay bat ky
+// ai co mot tai khoan mien phi):
+//   /locations        : chi chu may + nguoi DA GHEP NOI that (xem isPairedWith)
+//   /location_history : chi vet di chuyen CUA CHINH minh. Cap da ghep noi
+//                       dung `pairings/{id}/location_history` (da khat tu truoc)
+//   /sos_alerts       : chu may ghi, chu may + nguoi ghep noi doc
+//   /calls            : phia goi dat roomId = pairings/{id} nen id document
+//                       chinh la id ghep noi
+//   /pairings/{id}    : doc/da = hai nguoi trong cap (hoac quan tri),
+//                       tao = phai la mot trong hai nguoi do
+//   /pairing_requests : VÔ SINH (ban 59.0 bo PIN), den hoan toan
+//
+// VAN CON MO CO CHU DIEU, phai noi thang trong bai KHKT:
+//   - /users/{userId} doc duoc boi bat ky tai khoan nao: day la con duong duy
+//     nhat de may phu huynh tim duoc con khi GO GAY bang `studentCode`
+//     (findStudentByCode). That het khe nay la that bai chuc nang ghep noi.
+//   - So luong va noi dung cau hoi AI van do CHINH may client ghi len; rules
+//     o day giu con so (<=100, khong gia trong cung ngay) chu khong the biet
+//     may da goi that bao nhieu lan — chan cung can proxy (task #45).
+//   - Quy tac khong chan duoc IP: Firestore khong co bien IP, va dien thoai
+//     di dong doi IP lien tuc qua CGNAT.
 service cloud.firestore {
   match /databases/{database}/documents {
 
@@ -54,6 +68,43 @@ service cloud.firestore {
     function notBanned() {
       return !exists(/databases/$(database)/documents/bans/$(request.auth.uid));
     }
+
+    // CO GAP NOI THAT HAY CHUA — doi chieu HAI UID tren document ghep noi,
+    // khong bao gio tin chu document duoc hoi. Ly do phai tinh tay doi:
+    // `locations`, `sos_alerts`, `calls` nam ngon, ngoai document ghep noi,
+    // nen trong rules khong co san hai uid cua cap do; ma rules Firestore cung
+    // khong duoc phep truy van — chi get() duoc mot ID MA MINH TU TINH DUOC.
+    //
+    // Ba dieu kien: document ghep noi phai TON TAI, trang thai phai la
+    // 'PAIRED' (dung cai ma UI dang dung: activePairing.status ==
+    // PairingStatus.PAIRED — huy ghep la cat duong doc ngay), va
+    // {parentId, childId} phai khop dung {a, b}.
+    function pairOfTwo(pairingId, a, b) {
+      return isAuthenticated() &&
+        pairingId is string && pairingId != '' &&
+        exists(/databases/$(database)/documents/pairings/$(pairingId)) &&
+        get(/databases/$(database)/documents/pairings/$(pairingId)).data.status == 'PAIRED' &&
+        get(/databases/$(database)/documents/pairings/$(pairingId)).data.parentId in [a, b] &&
+        get(/databases/$(database)/documents/pairings/$(pairingId)).data.childId in [a, b] &&
+        get(/databases/$(database)/documents/pairings/$(pairingId)).data.parentId !=
+          get(/databases/$(database)/documents/pairings/$(pairingId)).data.childId;
+    }
+
+    // Cong thuc id ghep noi app dang tao (VesperaRepository.kt):
+    // "pair_" + uidPhuHuynh + "_" + uidHocSinh. Rules khong biet ben nao la
+    // cha ben nao la con nen phai thu CA HAI thu tu.
+    function isPairedWith(otherUid) {
+      return pairOfTwo('pair_' + request.auth.uid + '_' + otherUid, request.auth.uid, otherUid) ||
+        pairOfTwo('pair_' + otherUid + '_' + request.auth.uid, request.auth.uid, otherUid);
+    }
+
+    // ── VI TRI: CUA AI ──────────────────────────────────────────────────────
+    // Cac document o ngon luu chu nhan trong truong `userId` va id ghep noi
+    // trong truong `pairingId` (id document la `uid` hoac `uid_<timestamp>`).
+    // `pairingId` chi la MOT CANDI: doc ra xong van phai dua len document
+    // ghep noi that doi hai uid (pairOfTwo), nen mot tai khoan gian
+    // pairingId = "pair_<nha nguoi khac>" cung khong mo duoc du lieu cua ho.
+    // Thieu truong (kq la null) bi tu choi vi `is string`.
 
     // LUOT HOI AI MOT NGAY (ban 64.0). App nguoi dung tu dem va tu ghi len
     // `users/<uid>`, nen o day co hai tran:
@@ -98,23 +149,35 @@ service cloud.firestore {
     // Firestore rules khong co bien IP, va dien thoai di dong doi IP lien tuc
     // qua CGNAT nen "chan IP" vua khong lam duoc vua khong co nghia.
     match /bans/{uid} {
-      allow read: if isAuthenticated();
+      // Doc: chi chinh chu tai khoan (de app cua no biet minh bi cam va in
+      // ly do ra man hinh) hoac quan tri (danh sach nguoi bi cam). Truoc day
+      // `isAuthenticated()` nghia la bat ky ai cung liet ke duoc ai dang bi
+      // cam trong he thong.
+      allow read: if isAdmin() || (isAuthenticated() && request.auth.uid == uid);
       allow create, update, delete: if isAdmin();
     }
 
     // Pairings
     match /pairings/{pairingId} {
-      allow read: if isAuthenticated();
-      allow create: if isAuthenticated();
+      // Document nay chua ten hai ben, ma ghep noi, va co quan "ghi duoc
+      // duong di chuyen khong". Doc duoc boi chinh hai nguoi trong cap, cong
+      // them quan tri (app `:admin` can nhin danh sach ghep noi khi xu ly don).
+      allow read: if isPairMember(pairingId) || isAdmin();
+      // Tao ghep noi thi phai LA mot trong hai nguoi duoc ghi trong do —
+      // khong the "ghep noi" ho giùm hai nguoi khac (truoc day ai cũng tạo được).
+      allow create: if isAuthenticated() && notBanned() && (
+        request.resource.data.parentId == request.auth.uid ||
+        request.resource.data.childId == request.auth.uid
+      );
       // update phai thuoc ve hai ben cua chinh cap do (me hoac con) — day la
       // cho ghi "ai dang tat/bat ghi dinh vi" va trang thai ghep noi.
-      allow update: if isAuthenticated() && (
+      allow update: if notBanned() && (
         resource.data.parentId == request.auth.uid ||
         resource.data.childId == request.auth.uid ||
         request.resource.data.parentId == request.auth.uid ||
         request.resource.data.childId == request.auth.uid
       );
-      allow delete: if isAuthenticated();
+      allow delete: if isPairMember(pairingId);
 
       // NOI QUY GIA DINH. Hai ben deu ghi duoc vi co che me-con-dong-long
       // cho phep ca hai ben goi de xuat; quyen "tu duyet phieu cua minh" la
@@ -151,35 +214,107 @@ service cloud.firestore {
       }
     }
 
-    // Pairing requests
+    // Pairing requests — VÔ SINH từ bản 59.0 (bỏ mã PIN, phụ huynh gõ mã
+    // trực tiếp). Khong con dong code nao doc/ghi collection nay, nen no bi
+    // den hoan toan. Neu mot ban APK cu (<=58.0) van ghi vao day thi phep ghep
+    // noi cua ban DO that bai — do la gia phai tra cho viec "ai cung vao duoc
+    // hop thu ghep noi cua nguoi khac".
     match /pairing_requests/{requestId} {
-      allow read: if isAuthenticated();
-      allow create: if isAuthenticated();
-      allow update: if isAuthenticated();
-      allow delete: if isAuthenticated();
+      allow read, write: if isAdmin();
     }
 
     // Realtime locations
+    //
+    // `locations/<uid>` la document DUY NHAT chua toa do, pin, app dang dung
+    // cua mot may. Mo nhu cu (= bat ky tai khoan nao doc/ghi duoc) nghia la
+    // moi nguoi co mot tai khoan Firebase mien phi deu biet nha khac o dau,
+    // luc nao. Nay khe lai thanh: chu may, va nguoi DA GHEP NOI that — tim
+    // theo ca hai duong: cong thuc id hien tai, hoac `pairingId` ghi trong
+    // chinh document (cap ghep noi tao tu ban cu co the mang id khac cong
+    // thuc nay; ca hai duong deu doi hai uid tren document ghep noi that).
     match /locations/{userId} {
-      allow read, write: if isAuthenticated();
+      allow read: if isAuthenticated() && notBanned() &&
+        (request.auth.uid == userId ||
+         isPairedWith(userId) ||
+         pairOfTwo(resource.data.pairingId, request.auth.uid, userId));
+
+      // Chu document duoc ghi toan bo (app gui telemetry cua chinh no).
+      // Ngoai le DUY NHAT: phieu "gio trong quyen rieng" duoc phu huynh
+      // duyet, nen may PHU HUYNH phai ghi duoc len document cua con — va chi
+      // duoc doi hai truong that cua phep do. `set(..., merge)` khien
+      // request.resource.data la CA document sau khi hop nhat, nen phai so
+      // sanh voi resource.data bang diff() chu khong duoc kiem keys tran lang.
+      allow create: if notBanned() && (
+        request.auth.uid == userId ||
+        (isPairedWith(userId) &&
+         request.resource.data.keys().hasOnly(['isPrivacyActive', 'updatedAt']))
+      );
+      allow update: if notBanned() && (
+        request.auth.uid == userId ||
+        ((isPairedWith(userId) ||
+          pairOfTwo(resource.data.pairingId, request.auth.uid, userId)) &&
+         request.resource.data.diff(resource.data).affectedKeys()
+           .hasOnly(['isPrivacyActive', 'updatedAt']))
+      );
+      // Xoa vi tri thi khong ai duoc: do telemetry tu ghi/de tu nhien bi ghi
+      // de, va "xoa don duong di" la thu ma hoc sinh khong nen lam duoc.
+      allow delete: if false;
     }
 
     // Location history (Lịch sử vị trí đẩy lên Cloud)
+    //
+    // O ngon nay CHINH may ghi vet di chuyen cua no va CHINH no doc lai (app
+    // goi `observeLocationHistoryForUser(uid cua minh)` khi chua ghep noi;
+    // `whereEqualTo("userId", uid)` trong query khop het voi dieu kien duoi
+    // day nen Firestore khong tu choi query). Cap da ghep noi xem duong di
+    // qua `pairings/{id}/location_history` — da khoa theo isPairMember.
     match /location_history/{historyId} {
-      allow read, write: if isAuthenticated();
+      allow read: if isAuthenticated() && notBanned() &&
+        resource.data.userId == request.auth.uid;
+      allow create: if isAuthenticated() && notBanned() &&
+        request.resource.data.userId == request.auth.uid;
+      allow update: if isAuthenticated() && notBanned() &&
+        resource.data.userId == request.auth.uid &&
+        request.resource.data.userId == request.auth.uid;
+      allow delete: if false;
     }
 
     // SOS Alerts
+    //
+    // Phieu SOS do may co lap (`document("<uid>_<timestamp>")`), nen ghi chi
+    // duoc phep khi truong userId trong phieu dung la uid cua chinh may.
+    // Doc: chu may + nguoi ghep noi voi no (phu huynh phai nhin duoc duong
+    // day, do la toan bo y nghia cua nut SOS).
     match /sos_alerts/{alertId} {
-      allow read, write: if isAuthenticated();
+      allow read: if isAuthenticated() && notBanned() &&
+        (resource.data.userId == request.auth.uid ||
+         isPairedWith(resource.data.userId) ||
+         pairOfTwo(resource.data.pairingId, request.auth.uid, resource.data.userId));
+      allow create: if isAuthenticated() && notBanned() &&
+        request.resource.data.userId == request.auth.uid;
+      allow update, delete: if false;
     }
 
     // Calls (WebRTC signaling)
+    //
+    // SDP + danh sach ICE cua cuoc goi gia dinh. May goi dat
+    // `roomId = activePairing.id`, tuc id document CHINH LA id ghep noi, nen
+    // chi can kiem tra minh la mot ben cua cap do. Nhin `room_<uid>` la canh
+    // bao noi trong DashboardScreen khi CHUA ghep noi (khong co dau ben kia
+    // de ket noi) — giu cho may do doc/ghi duoc document cua chinh no.
     match /calls/{callId} {
-      allow read, write: if isAuthenticated();
+      allow read, write: if isAuthenticated() && notBanned() && (
+        (exists(/databases/$(database)/documents/pairings/$(callId)) &&
+         isPairMember(callId)) ||
+        callId == 'room_' + request.auth.uid
+      );
 
       match /{document=**} {
-        allow read, write: if isAuthenticated();
+        allow read, write: if isAuthenticated() && notBanned() && (
+          (exists(/databases/$(database)/documents/pairings/$(callId)) &&
+           isPairMember(callId)) ||
+          callId == 'room_' + request.auth.uid
+        );
       }
     }
   }

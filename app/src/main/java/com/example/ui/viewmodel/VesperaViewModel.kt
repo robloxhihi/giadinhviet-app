@@ -35,6 +35,7 @@ import com.example.service.blocker.ConsentPolicy
 import com.example.service.blocker.ProposeOutcome
 import com.example.data.model.DetailedAppUsage
 import com.example.service.AddressHelper
+import com.example.service.LocationFixSource
 import com.example.service.TelemetryAndUsageHelper
 import com.example.service.VesperaTelemetryService
 import com.example.service.sos.MeshPeer
@@ -75,6 +76,14 @@ data class VesperaUiState(
     val userProfile: UserProfile? = null,
     val activePairing: Pairing? = null,
     val partnerLocation: LocationData? = null,
+    /**
+     * Luc MAY NAY thuc nhan duoc phieu vi tri cua may kia (`System.
+     * currentTimeMillis()` cua may dang xem), 0 = chua nhan duoc phieu nao.
+     * `partnerLocation.updatedAt` la dong ho cua MAY BEN KIA — may chua do
+     * sai gio (may gia lap, may doi múi gio, hieu ung phong may mo lai) se
+     * gui mot moc tuong lai va "vua cap nhat" gia mot diem da chet tu lau.
+     */
+    val partnerFixReceivedAtMs: Long = 0L,
     val myLocation: LocationData? = null,
     val usageSchedule: UsageSchedule? = null,
     val usageCategories: List<AppCategoryUsage> = emptyList(),
@@ -707,9 +716,17 @@ class VesperaViewModel(
 
     private fun observePartnerLocation(partnerId: String) {
         locationJob?.cancel()
+        // Doi may duoc theo doi = phieu cu cua may khong con gia tri. Neu khong
+        // xoa, the ban do moi se in "vua cap nhat" cho mot diem cua nguoi cu.
+        _uiState.value = _uiState.value.copy(partnerLocation = null, partnerFixReceivedAtMs = 0L)
         locationJob = viewModelScope.launch {
             repository.observeLocation(partnerId).collect { loc ->
-                _uiState.value = _uiState.value.copy(partnerLocation = loc)
+                _uiState.value = _uiState.value.copy(
+                    partnerLocation = loc,
+                    // Dong ho MAY NAY, ghi ngay khi nhận duoc tai lieu — đây là
+                    // mốc duy nhất mà máy này có quyền nói là thật.
+                    partnerFixReceivedAtMs = if (loc != null) System.currentTimeMillis() else 0L
+                )
             }
         }
     }
@@ -1531,8 +1548,18 @@ class VesperaViewModel(
         val pairing = _uiState.value.activePairing
         val (batteryLevel, isCharging) = telemetryHelper.getBatteryInfo()
 
-        telemetryHelper.fetchCurrentLocation { loc ->
-            // loc == null = CHƯA CÓ GPS: giữ sentinel 0.0 của LocationData, không tọa độ mẫu.
+        // Goi `fetchLocationFix`, KHONG phai `fetchCurrentLocation`. Ban cu tra
+        // `null` roi in "Chưa lấy được GPS" ke ca khi may dang co mot diem wifi
+        // ±300 m bi bo vi sai so — tuc noi oan thiet bi khong dinh vi duoc. Bo loc
+        // o day GIUNG NGUYEN (chi diem vua do, duoi 100 m, khong mock moi duoc
+        // gui); chi thay dieu la giu lai LY DO that de noi voi nguoi dung.
+        telemetryHelper.fetchLocationFix { fix ->
+            val droppedFix = fix.location
+            // loc == null = KHONG GUI DUOC toa do: giu sentinel 0.0 cua LocationData,
+            // khong toa do mau.
+            val loc = droppedFix?.takeIf {
+                fix.source == LocationFixSource.LIVE_FIX && !fix.accuracyTooLow
+            }
             val lat = loc?.latitude ?: 0.0
             val lng = loc?.longitude ?: 0.0
             val acc = loc?.accuracy ?: 0f
@@ -1543,8 +1570,18 @@ class VesperaViewModel(
             val totalMins = detailed.sumOf { it.minutesUsed }
 
             viewModelScope.launch {
-                val noFixReason = telemetryHelper.missingPermissionReason()
-                    ?: "Chưa lấy được GPS nên chưa gửi vị trí (vẫn gửi pin và thói quen dùng máy)."
+                val noFixReason = when {
+                    loc == null && droppedFix != null && fix.accuracyTooLow ->
+                        "Máy định vị được nhưng sai số ±${droppedFix.accuracy.toInt()} m, vượt " +
+                            "${TelemetryAndUsageHelper.MAX_ACCEPTED_ACCURACY_METERS.toInt()} m nên " +
+                            "app chưa gửi vị trí này lên (chưa có vị trí nào khác để gửi)."
+                    loc == null && fix.source == LocationFixSource.STALE_CACHED_FIX ->
+                        "Điểm đang có là vị trí CŨ đo ${(fix.ageMs / 1000L).coerceAtMost(86_400L)} giây " +
+                            "trước; app chỉ gửi điểm vừa đo nên chưa gửi vị trí này lên."
+                    else -> fix.failureReason
+                        ?: telemetryHelper.missingPermissionReason()
+                        ?: "Chưa lấy được GPS nên chưa gửi vị trí (vẫn gửi pin và thói quen dùng máy)."
+                }
 
                 val realAddr = if (loc == null) {
                     "Chưa xác định được vị trí GPS"
@@ -1604,6 +1641,14 @@ class VesperaViewModel(
                             repository.updateLocation(locationData)
                         } catch (e: Exception) {
                             Log.w(TAG, "Failed to update location", e)
+                            // Truoc day chi Log.w: bam "Lam moi" khi loi ghi Firestore
+                            // (thieu quyen / bi cam / mat mang) thi man hinh KHONG thay
+                            // gi ca — khong loi, khong dong chu, ban do dung im va
+                            // nguoi dung tu nghi may chua do duoc GPS.
+                            _uiState.value = _uiState.value.copy(
+                                errorMessage = "Không tải được vị trí lên máy chủ: " +
+                                    (e.message ?: e.javaClass.simpleName)
+                            )
                         }
                     } else {
                         Log.i(TAG, "Bo qua updateLocation: chua co GPS that, tranh de 0/0 len toa do dang co.")

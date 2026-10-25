@@ -167,4 +167,107 @@ class MapHonestyRegressionTest {
             tiles.contains("tile.openstreetmap.org"))
         assertTrue("Comment phải giữ lại bằng chứng đo", raw.contains("HTTP 000"))
     }
+
+    // ── 4. Lô 65.0: thẻ bản đồ phải nói bằng ĐỒNG HỒ CỦA MÁY ĐANG CẦM ─────────
+
+    /**
+     * `LocationData.updatedAt` do may ben kia ghi bang
+     * `System.currentTimeMillis()` CUA NO, khong phai cua server. Mot may lech
+     * dong ho ve tuong lai (may gia lap, may doi múi gio, phuc hoi tu ban sao
+     * luu) khien `nowTick - updatedAt` AM, ep ve 0 -> the ban do in "vua cap
+     * nhat" cho mot diem da chet tu lau. May dang xem chi co mot du lieu dang
+     * tin duoc: luc CHINH NO nhan duoc phieu.
+     */
+    @Test
+    fun tuoiViTriPhaiTinhTheoDongHoCuaMayDangCam() {
+        val card = projectFile(
+            "src/main/java/com/example/ui/components/GoogleMapsStudentLocationCard.kt"
+        ).readText()
+        assertTrue("Card phải nhận được mốc máy này nhận phiếu",
+            card.contains("receivedAtMs: Long = 0L"))
+        assertTrue("Có mốc máy này thì KHÔNG được tin đồng hồ máy kia nữa",
+            card.contains("val ageAnchorMs = if (receivedAtMs > 0L) receivedAtMs else lastUpdatedAt"))
+        assertTrue("Phai noi ro lech dong ho may kia, dung im lang kieu '5 phút trước'",
+            card.contains("đồng hồ máy kia đi trước") &&
+                card.contains("đồng hồ máy kia đi sau"))
+        assertTrue("Phải ghi rõ tuổi tính từ lúc máy này nhận",
+            card.contains("(tính từ lúc máy này nhận)"))
+
+        val screen = projectFile(
+            "src/main/java/com/example/ui/screens/LocationScreen.kt"
+        ).readText()
+        assertTrue("The cua may kia phai duoc truyen moc nhan cua may nay",
+            screen.contains("receivedAtMs = uiState.partnerFixReceivedAtMs"))
+
+        val vm = stripComments(projectFile(
+            "src/main/java/com/example/ui/viewmodel/VesperaViewModel.kt"
+        ).readText())
+        assertTrue("ViewModel phải ghi đồng hồ MÁY NÀY khi nhận phiếu",
+            vm.contains("partnerFixReceivedAtMs = if (loc != null) System.currentTimeMillis() else 0L"))
+        assertTrue("Doi may duoc theo doi phai xoa moc cu, neu khong diem cua nguoi " +
+            "cu se in 'vừa cập nhật' trên máy mới",
+            vm.contains("partnerLocation = null, partnerFixReceivedAtMs = 0L"))
+    }
+
+    // ── 5. Lô 65.0: thẻ "máy này" và bản đồ "máy kia" khong duoc lan vao nhau ──
+
+    /**
+     * Ba loi nguoi dung bao "dinh vi tam bay" deu la loi HUONG DAN:
+     *  - "Thiết bị học sinh cần bật GPS và mở ứng dụng để cập nhật." sai mot nua
+     *    (toa do duoc day len tu dich vu chay nen, khong can mo app), va xui
+     *    nguoi dung mo app vo nghia trong khi van de that nam o quyen/mang may con.
+     *  - Nut "Cấp quyền vị trí" / "Kiểm tra lại" dat trong the mo ta MAY BAN,
+     *    Nhung da len ban do cua may CON -> phu huynh bam mieng mai van khong thay gi.
+     */
+    @Test
+    fun theMayNayVaBanDoMayKiaPhaiChuyenTRachRoRang() {
+        val screen = stripComments(projectFile(
+            "src/main/java/com/example/ui/screens/LocationScreen.kt"
+        ).readText())
+
+        assertTrue("Phải bỏ câu xui người dùng mở app phía con",
+            !screen.contains("cần bật GPS và mở ứng dụng"))
+        assertTrue("Phải nói thật: vị trí đi lên từ dịch vụ chạy nền",
+            screen.contains("không cần mở ứng dụng"))
+        assertTrue("Phải có dòng chỉ rõ thẻ này nói về máy nào",
+            screen.contains("Định vị trên máy bạn đang cầm"))
+        listOf(
+            "Cấp quyền cho máy này",
+            "Mở Cài đặt định vị máy này",
+            "Kiểm tra lại máy này"
+        ).forEach {
+            assertTrue("Nút phải nói rõ nó thay đổi MÁY NÀO: thiếu '$it'",
+                screen.contains(it))
+        }
+        assertTrue("Thẻ phải biết bản đồ đang chiếu máy khác",
+            screen.contains("mapShowsOtherDevice = isPaired"))
+        assertTrue("Da ghep noi thi phai noi thang: nut o day khong mo duoc diem cua con",
+            screen.contains("Các nút ở trên chỉ thay đổi máy bạn đang cầm"))
+    }
+
+    // ── 6. Lô 65.0: vi tri bi bo loc phai co LY DO, khong duoc im lang ────────
+
+    /**
+     * `fetchCurrentLocation` tra `null` khi diem vuot nguong sai so, nen may van
+     * dinh vi duoc (diem wifi ±300 m) ma man hinh bao "Chưa lấy được GPS" — tức
+     * noi oan thiet bi. Ngoai ra `updateLocation` bi tu choi (thieu quyen / bi cam
+     * / mat mang) chi ghi Log.w -> nguoi dung nhin ban do dung im va nghi may
+     * chua do GPS. Ca hai deu phai thanh loi nhin thay duoc.
+     */
+    @Test
+    fun diemBiBoLotVaLoiGhiPhaiDuocNoiRa() {
+        val raw = projectFile("src/main/java/com/example/ui/viewmodel/VesperaViewModel.kt").readText()
+        val vm = stripComments(raw)
+        assertTrue("Phai dung fetchLocationFix de con biet LY DO that",
+            vm.contains("telemetryHelper.fetchLocationFix { fix ->"))
+        assertTrue("Van chi gui diem VUA DO va duoi nguong sai so (khong phong long)",
+            vm.contains("fix.source == LocationFixSource.LIVE_FIX && !fix.accuracyTooLow"))
+        assertTrue("Sai số quá lớn phải được nói ra kèm con số",
+            vm.contains("Máy định vị được nhưng sai số ±"))
+        assertTrue("Điểm cached cũ phải bị gọi là điểm CŨ kèm tuổi",
+            vm.contains("Điểm đang có là vị trí CŨ đo"))
+        assertTrue("Lỗi ghi lên máy chủ phải hiện ra màn hình, không chỉ log",
+            vm.contains("errorMessage = \"Không tải được vị trí lên máy chủ: \""))
+        assertTrue("Comment phai giu lai vi sao doi API", raw.contains("fetchCurrentLocation"))
+    }
 }

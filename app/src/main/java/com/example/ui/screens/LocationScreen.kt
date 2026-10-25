@@ -213,6 +213,12 @@ fun LocationScreen(
         Spacer(modifier = Modifier.height(16.dp))
 
         LocationScanCard(
+            // Thẻ nay noi ve MAY BAN DANG CAM, ban do ben canh noi ve MAY KIA.
+            // Thieu co quan nay thi phu huynh thay "Định vị thật đang chạy" ngay
+            // canh "Chưa có vị trí thật", va bam "Cấp quyền" de mo diem cua con
+            // — van chang thay gi vi quyen dang thieu nam o may con.
+            mapShowsOtherDevice = isPaired,
+            partnerLabel = partnerName,
             hasPermission = uiState.hasLocationPermission,
             servicesEnabled = uiState.isLocationServicesEnabled,
             vpnActive = uiState.isVpnActive,
@@ -385,6 +391,10 @@ fun LocationScreen(
                     routePoints = partnerRoute,
                     stayDurationMillis = partnerStayMillis,
                     lastUpdatedAt = partnerLoc.updatedAt,
+                    // Mốc THỜI GIAN MÁY NÀY nhận được phiếu, không phải mốc máy
+                    // kia tự xưng: hai đồng hồ lệch nhau thì chữ "5 phút trước"
+                    // vẫn nói đúng sự thật với người đang cầm máy này.
+                    receivedAtMs = uiState.partnerFixReceivedAtMs,
                     accuracyMeters = partnerLoc.accuracy,
                     headingDegrees = null,
                     // May ben kia chua do duoc GPS => the "dang do GPS" + nut Thu lai,
@@ -441,7 +451,19 @@ fun LocationScreen(
                         )
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
-                            text = "Thiết bị học sinh cần bật GPS và mở ứng dụng để cập nhật.",
+                            // Ban cu noi "Thiet bi hoc sinh can bat GPS VA MO UNG DUNG"
+                            // — sai mot nua: toa do duoc day len tu dich vu chay nen,
+                            // khong can mo app. Noi vay la xui nguoi dung mo app vo
+                            // nghia trong khi van de that la may con tat / het mang /
+                            // chua co quyen.
+                            text = if (isChild)
+                                "Phụ huynh chưa gửi bản ghi vị trí nào lên máy chủ. Máy này chạy nền nên " +
+                                    "không cần mở ứng dụng để gửi — kiểm tra máy còn bật, còn mạng và đã " +
+                                    "cấp quyền vị trí."
+                            else
+                                "Máy con chưa gửi bản ghi vị trí nào lên máy chủ. Vị trí được gửi bởi dịch " +
+                                    "vụ chạy nền nên không cần mở ứng dụng phía con — kiểm tra máy con còn " +
+                                    "bật, còn mạng và đã cấp quyền vị trí.",
                             style = MaterialTheme.typography.bodySmall,
                             color = TextSecondary
                         )
@@ -909,6 +931,8 @@ internal fun bumpStateLabel(at: Long, byName: String, nowMillis: Long): String {
  */
 @Composable
 private fun LocationScanCard(
+    mapShowsOtherDevice: Boolean,
+    partnerLabel: String,
     hasPermission: Boolean,
     servicesEnabled: Boolean?,
     vpnActive: Boolean?,
@@ -959,6 +983,17 @@ private fun LocationScanCard(
 
     BentoCard(modifier = Modifier.fillMaxWidth(), borderColor = state.tint.copy(alpha = 0.6f)) {
         Column {
+            // Nho ten may ngay tren dau: khi da ghep noi, the nay noi ve MAY BAN
+            // dang cam con ban do ben canh noi ve may con. Khong co dong nay thi
+            // nguoi dung bam "Cấp quyền vị trí" de mo duoc diem cua con — va van
+            // chang thay gi.
+            Text(
+                text = "Định vị trên máy bạn đang cầm",
+                style = MaterialTheme.typography.labelSmall,
+                color = TextMuted,
+                fontWeight = FontWeight.Bold
+            )
+            Spacer(modifier = Modifier.height(8.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(
                     modifier = Modifier
@@ -995,13 +1030,27 @@ private fun LocationScanCard(
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 when {
                     !hasPermission -> {
-                        ScanActionButton("Cấp quyền vị trí", onGrant)
+                        ScanActionButton("Cấp quyền cho máy này", onGrant)
                         ScanActionButton("Mở Cài đặt app", onOpenAppSettings)
                     }
 
-                    servicesEnabled == false -> ScanActionButton("Mở Cài đặt định vị", onOpenLocationSettings)
-                    else -> ScanActionButton("Kiểm tra lại", onRescan)
+                    servicesEnabled == false ->
+                        ScanActionButton("Mở Cài đặt định vị máy này", onOpenLocationSettings)
+
+                    else -> ScanActionButton("Kiểm tra lại máy này", onRescan)
                 }
+            }
+
+            if (mapShowsOtherDevice) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = "Các nút ở trên chỉ thay đổi máy bạn đang cầm. Nếu bản đồ " +
+                        "của ${partnerLabel.ifEmpty { "máy đã ghép nối" }} thiếu điểm, phải làm " +
+                        "mấy bước đó trên máy kia — máy con tự gửi vị trí từ dịch vụ chạy nền, " +
+                        "không cần mở ứng dụng.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = TextMuted
+                )
             }
 
             if (vpnActive == true) {

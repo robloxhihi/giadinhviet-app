@@ -11,10 +11,24 @@ local.properties
 .env
 .env.local
 .env.*.local
+# Moi file .env bi loai tru, ngoai .env.example (ban mau khong chua key that,
+# duoc commit co y de nguoi khac biet ten bien can dat).
+.env.*
+!.env.example
 *.pem
 *.key
 *.pfx
 *-debug.log
+
+# Thu muc lam viec cua agent (settings, scratch, log). Chua duong dan may cua
+# nguoi dung va co the chua key → khong bao gio di theo repo.
+.qoder/
+
+# Key ky. `debug.keystore` o duoi van duoc commit CO Y (xem giai thich ben
+# duoi); cac key KHAC — ke upload, ke release, .jks — tuyet doi khong.
+*.keystore
+*.jks
+!debug.keystore
 
 # Debug keystore DUOC commit co y.
 # Day la keystore debug mac dinh cua Android, mat khau "android" va
