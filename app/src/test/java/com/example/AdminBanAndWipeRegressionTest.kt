@@ -85,7 +85,12 @@ class AdminBanAndWipeRegressionTest {
         assertTrue("Phải ghi uid trùng document id — rules đối chiếu",
             admin.contains("\"uid\" to target.uid"))
         assertTrue("expiresAt phải là Timestamp, không phải epoch millis",
-            admin.contains("com.google.firebase.firestore.Timestamp(java.util.Date(hetLuc))"))
+            admin.contains("com.google.firebase.Timestamp(java.util.Date(hetLuc))"))
+        // Lop Timestamp nam trong firebase-common (com.google.firebase), KHONG phai
+        // com.google.firebase.firestore — viet sai ten goi la CI chet o buoc
+        // :admin:compileDebugKotlin, sau khi toan bo 233 test nguon da xan green.
+        assertTrue("Không được dùng cái tên lớp không tồn tại com.google.firebase.firestore.Timestamp",
+            !admin.contains("com.google.firebase.firestore.Timestamp"))
         // Ghi expiresAt qua khu thi rules tu choi, nen chi ghi khi chon 7/30 ngay.
         val payloadBlock = admin.substringAfter("val payload = mutableMapOf").substringBefore(".await()")
         assertTrue("Chỉ ghi expiresAt khi chọn thời hạn (0 = vĩnh viễn, không ghi trường)",

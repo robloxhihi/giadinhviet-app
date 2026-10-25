@@ -490,7 +490,7 @@ private fun AdminApp() {
           // `expiresAt` do chinh app quan tri ghi len bang Timestamp, nen doc ve
           // phai la `Timestamp` — dung `as? Number` vi Firestore tra timestamp
           // duoi dang object, khong phai millis.
-          val until = (ban?.get("expiresAt") as? com.google.firebase.firestore.Timestamp)?.toMillis()
+          val until = (ban?.get("expiresAt") as? com.google.firebase.Timestamp)?.toMillis()
           AdminRow(
             uid = d.id,
             displayName = d.getString("displayName") ?: "(khong co ten)",
@@ -973,7 +973,7 @@ private fun AdminApp() {
             )
             if (hetLuc != null) {
               payload["expiresAt"] =
-                com.google.firebase.firestore.Timestamp(java.util.Date(hetLuc))
+                com.google.firebase.Timestamp(java.util.Date(hetLuc))
             }
             try {
               db().collection(BANS).document(target.uid).set(payload).await()
