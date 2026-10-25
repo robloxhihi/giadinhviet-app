@@ -351,7 +351,7 @@ private fun AdminApp() {
         return@Column
       }
 
-      Row(Arrangement.spacedBy(8.dp), Alignment.CenterVertically) {
+      Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
         Button(
           onClick = { refresh() },
           enabled = !busy,
@@ -427,7 +427,7 @@ private fun AdminApp() {
                     if (row.aiCalls < 0) "AI: chưa có số liệu" else "AI: ${row.aiCalls} lượt",
                     if (row.aiCalls < 0) TxtDim else if (rank in 1..3) Amber else Mint
                   )
-                  Row(Arrangement.spacedBy(4.dp)) {
+                  Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                     Chip(if (row.role == "PARENT") "PHỤ HUYNH" else "HỌC SINH", if (row.role == "PARENT") Violet else Mint)
                     if (row.banned) Chip("ĐANG BỊ CẤM", Rose)
                   }
@@ -440,7 +440,7 @@ private fun AdminApp() {
               if (row.banned && row.banReason.isNotEmpty()) {
                 Text("lý do cấm: ${row.banReason}", color = Rose, fontSize = 11.sp)
               }
-              Row(Arrangement.spacedBy(8.dp), Alignment.CenterVertically) {
+              Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 if (row.banned) {
                   OutlinedButton(onClick = {
                     scope.launch {
@@ -512,7 +512,7 @@ private fun AdminApp() {
       containerColor = CardBg,
       title = { Text("Cấm ${target.displayName}?", color = Txt) },
       text = {
-        Column(Arrangement.spacedBy(8.dp)) {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
           Text(
             "Ghi vào /bans/${target.uid}. Máy chủ sẽ từ chối đọc và ghi dữ liệu gia đình " +
               "của uid này — nhưng chỉ sau khi bạn bấm Publish cho firestore.rules trong " +
