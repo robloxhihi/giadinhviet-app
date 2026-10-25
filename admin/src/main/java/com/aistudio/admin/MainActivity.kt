@@ -371,12 +371,26 @@ private fun AdminApp() {
 
       if (status.isNotEmpty()) Text(status, color = Amber, fontSize = 12.sp)
 
-      // Tam so duoc kiem tra bang `aiCalls < 0` (chua co so lieu) luon ep xuong
-      // cuoi, de "Xep: AI" khong tao ra hang dau gia cho tai khoan chua tung goi.
-      val comparator: Comparator<AdminRow> =
-        if (sortByAi) compareByDescending<AdminRow> { if (it.aiCalls < 0) -1L else it.aiCalls }
-          .thenBy { it.displayName }
-        else compareBy<AdminRow, String> { it.displayName }.thenBy { it.uid }
+      // So sanh viet bang Comparator thu cong. Chuoi `compareBy<AdminRow, String>
+      // { it.displayName }` tung lam `:admin:compileDebugKotlin` chet ngay tren CI
+      // (Unresolved reference 'it' — buoc 63.0), nen khong dung chuoi suy kieu o
+      // day nua; thu do dung tren may nguoi viet nhung khong on dinh khi build.
+      val comparator = Comparator<AdminRow> { a, b ->
+        if (sortByAi) {
+          // Tai khoan chua duoc do (-1) luon ep xuong cuoi, de "Xep: AI" khong
+          // tao ra hang dau gia cho nguoi chua tung goi AI.
+          val ca = if (a.aiCalls < 0) -1L else a.aiCalls
+          val cb = if (b.aiCalls < 0) -1L else b.aiCalls
+          when {
+            cb > ca -> 1
+            cb < ca -> -1
+            else -> a.displayName.compareTo(b.displayName, ignoreCase = true)
+          }
+        } else {
+          val byName = a.displayName.compareTo(b.displayName, ignoreCase = true)
+          if (byName != 0) byName else a.uid.compareTo(b.uid)
+        }
+      }
 
       val shown = rows
         .filter {
