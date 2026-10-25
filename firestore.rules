@@ -10,17 +10,30 @@ rules_version = '2';
 // Ban 65.0 khat them 5 khe o ngon tung de nguyen ("bat ky tai khoan nao
 // duoc" = GPS ca nha, phieu SOS va tin hieu cuoc goi nam trong tay bat ky
 // ai co mot tai khoan mien phi):
-//   /locations        : chi chu may + nguoi DA GHEP NOI that (xem isPairedWith)
+//   /locations        : chi chu may + nguoi DA GHEP NOI that va DA DUOC BEN
+//                       KIA xac nhan (attestedPair), xem them ben duoi
 //   /location_history : chi vet di chuyen CUA CHINH minh. Cap da ghep noi
 //                       dung `pairings/{id}/location_history` (da khat tu truoc)
 //   /sos_alerts       : chu may ghi, chu may + nguoi ghep noi doc
 //   /calls            : phia goi dat roomId = pairings/{id} nen id document
 //                       chinh la id ghep noi
 //   /pairings/{id}    : doc/da = hai nguoi trong cap (hoac quan tri),
-//                       tao = phai la mot trong hai nguoi do
+//                       tao = phai LA cha cua cap do (moi tai khoan tao ghep
+//                       noi deu dung o vai phu huynh trong pairDirectly)
 //   /pairing_requests : VÔ SINH (ban 59.0 bo PIN), den hoan toan
 //
-// VAN CON MO CO CHU DIEU, phai noi thang trong bai KHKT:
+// Vi SAO "co document ghep noi" CHUA DU: document ghep noi do client tu ghi,
+// nen ke xau tu tao `pair_<minh>_<nan nhan>` voi status 'PAIRED' la duoc pairOfTwo
+// nhay tay. attestedPair bat them mot chan: CHINH MAY BEN KIA phai ghi
+// `activePairingId` len ho so cua no (users/{uid} chi isOwner sua duoc, ban
+// 55.0). Ke xa lai trong duoc ho, vi ho khong co cach nao ghi len may cua nan nhan.
+//
+// VAN CON MO CO Y, phai noi thang trong bai KHKT:
+//   - Mot may CHUA ghep noi, khi mo app, se tu nhan bat ky document ghep noi
+//     nao ghi ten no (findPairingFor + linkSelfToPairing) — tuc ke tan cong co
+//     the danh choi cua may dang trong trang thai "chua ai ghep". Chan tan goc
+//     can nut "chấp nhận" phia may con hoac ghép nối do server cap (task #46);
+//     rules mot minh thi khong lam duoc vi rules khong biet ai la ai.
 //   - /users/{userId} doc duoc boi bat ky tai khoan nao: day la con duong duy
 //     nhat de may phu huynh tim duoc con khi GO GAY bang `studentCode`
 //     (findStudentByCode). That het khe nay la that bai chuc nang ghep noi.
@@ -93,9 +106,24 @@ service cloud.firestore {
     // Cong thuc id ghep noi app dang tao (VesperaRepository.kt):
     // "pair_" + uidPhuHuynh + "_" + uidHocSinh. Rules khong biet ben nao la
     // cha ben nao la con nen phai thu CA HAI thu tu.
+    //
+    // NHUNG pairOfTwo MOT MINH THUA: document ghep noi do client tu ghi, nen
+    // bat ky tai khoan nao cung tao duoc `pair_<minh>_<nan nhan>` voi status
+    // 'PAIRED' (allow create chi can minh nam trong hai ten) — the la no mo
+    // duoc dinh vi cua nan nhan ma chua co ai dua tay. Ben kia phai TU XAC
+    // NHAN bang cach ghi `activePairingId` len ho so cua chinh no, va
+    // `users/{uid}` chi isOwner sua duoc (ban 55.0) nen loi do khong tai tao
+    // duoc. Do la "chinh chung hai chu" ma rules dam tin.
+    function attestedPair(pairingId, otherUid) {
+      return pairOfTwo(pairingId, request.auth.uid, otherUid) &&
+        exists(/databases/$(database)/documents/users/$(otherUid)) &&
+        'activePairingId' in get(/databases/$(database)/documents/users/$(otherUid)).data &&
+        get(/databases/$(database)/documents/users/$(otherUid)).data.activePairingId == pairingId;
+    }
+
     function isPairedWith(otherUid) {
-      return pairOfTwo('pair_' + request.auth.uid + '_' + otherUid, request.auth.uid, otherUid) ||
-        pairOfTwo('pair_' + otherUid + '_' + request.auth.uid, request.auth.uid, otherUid);
+      return attestedPair('pair_' + request.auth.uid + '_' + otherUid, otherUid) ||
+        attestedPair('pair_' + otherUid + '_' + request.auth.uid, otherUid);
     }
 
     // ── VI TRI: CUA AI ──────────────────────────────────────────────────────
@@ -163,19 +191,25 @@ service cloud.firestore {
       // duong di chuyen khong". Doc duoc boi chinh hai nguoi trong cap, cong
       // them quan tri (app `:admin` can nhin danh sach ghep noi khi xu ly don).
       allow read: if isPairMember(pairingId) || isAdmin();
-      // Tao ghep noi thi phai LA mot trong hai nguoi duoc ghi trong do —
-      // khong the "ghep noi" ho giùm hai nguoi khac (truoc day ai cũng tạo được).
-      allow create: if isAuthenticated() && notBanned() && (
-        request.resource.data.parentId == request.auth.uid ||
-        request.resource.data.childId == request.auth.uid
-      );
-      // update phai thuoc ve hai ben cua chinh cap do (me hoac con) — day la
-      // cho ghi "ai dang tat/bat ghi dinh vi" va trang thai ghep noi.
+      // Tao ghep noi thi phai LA nguoi dung o vai phu huynh trong document —
+      // khong the "ghep noi ho gium" hai nguoi khac, cung khong the tao mot
+      // document co `childId` la nan nhan de may nan nhan (dang chua ghep noi)
+      // tu nhan lay. App that luong nay o `pairDirectly`: CHUA document nao
+      // cung co parentId = uid dang dang nhap.
+      allow create: if isAuthenticated() && notBanned() &&
+        request.resource.data.parentId == request.auth.uid;
+      // Update phai dua tren hai ben cua document CU (resource.data), KHONG
+      // phai document moi. Vi sao ky: dieu kien "request.resource.data.childId
+      // == toi" cho phep mot tai khoan la ghi `childId = toi` len document
+      // ghep noi cua mot gia dinh khac — ngay khi xong, no LA thanh vien cua
+      // cap do va doc duoc het noi quy, tin nhan, duong di cua ho tu
+      // `pairings/<id>/*`. Voi `users/{uid}` doc duoc toan tap thi uid nan nhan
+      // la thu kiem duoc de tay, nen hai dong duoi day tung la cua ngo.
+      // Day la cho ghi "ai dang tat/bat ghi dinh vi" va trang thai ghep noi —
+      // ca hai thu deu do me hoac con lam, nen doi chieu ben CU la du.
       allow update: if notBanned() && (
         resource.data.parentId == request.auth.uid ||
-        resource.data.childId == request.auth.uid ||
-        request.resource.data.parentId == request.auth.uid ||
-        request.resource.data.childId == request.auth.uid
+        resource.data.childId == request.auth.uid
       );
       allow delete: if isPairMember(pairingId);
 
@@ -231,12 +265,14 @@ service cloud.firestore {
     // luc nao. Nay khe lai thanh: chu may, va nguoi DA GHEP NOI that — tim
     // theo ca hai duong: cong thuc id hien tai, hoac `pairingId` ghi trong
     // chinh document (cap ghep noi tao tu ban cu co the mang id khac cong
-    // thuc nay; ca hai duong deu doi hai uid tren document ghep noi that).
+    // thuc nay). Ca hai duong deu phai qua attestedPair: document ghep noi
+    // phai co that, PAIRED, khop hai uid, VA ben kia da tu ghi
+    // `activePairingId` len ho so cua chinh no.
     match /locations/{userId} {
       allow read: if isAuthenticated() && notBanned() &&
         (request.auth.uid == userId ||
          isPairedWith(userId) ||
-         pairOfTwo(resource.data.pairingId, request.auth.uid, userId));
+         attestedPair(resource.data.pairingId, userId));
 
       // Chu document duoc ghi toan bo (app gui telemetry cua chinh no).
       // Ngoai le DUY NHAT: phieu "gio trong quyen rieng" duoc phu huynh
@@ -252,7 +288,7 @@ service cloud.firestore {
       allow update: if notBanned() && (
         request.auth.uid == userId ||
         ((isPairedWith(userId) ||
-          pairOfTwo(resource.data.pairingId, request.auth.uid, userId)) &&
+          attestedPair(resource.data.pairingId, userId)) &&
          request.resource.data.diff(resource.data).affectedKeys()
            .hasOnly(['isPrivacyActive', 'updatedAt']))
       );
@@ -289,7 +325,7 @@ service cloud.firestore {
       allow read: if isAuthenticated() && notBanned() &&
         (resource.data.userId == request.auth.uid ||
          isPairedWith(resource.data.userId) ||
-         pairOfTwo(resource.data.pairingId, request.auth.uid, resource.data.userId));
+         attestedPair(resource.data.pairingId, resource.data.userId));
       allow create: if isAuthenticated() && notBanned() &&
         request.resource.data.userId == request.auth.uid;
       allow update, delete: if false;

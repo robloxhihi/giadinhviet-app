@@ -162,6 +162,12 @@ class RulesLockdownRegressionTest {
      * CANDI: pairOfTwo phai ton tai + PAIRED + {parentId, childId} khop dung
      * {a, b}. Neu bo mot trong ba dieu kien thi "gian pairingId = nha ke ben"
      * lai mo duoc du lieu cua ho.
+     *
+     * Nang cap ban 65.0: ba dieu kien do VAN chua du, vi chinh tai khoan tan
+     * cong tao duoc document `pair_<minh>_<nan nhan>` status PAIRED (no nam
+     * trong hai ten thiet ke). Mot lop xac nhan nua nam ben NGUOI BI DOI:
+     * attestedPair phai doc `users/<ben kia>.activePairingId`, la cho ma chi
+     * thiet bi cua ho ghi duoc.
      */
     @Test
     fun doiChieuHaiUidTrenDocumentGhepNoiChuKhongTinPairingId() {
@@ -176,10 +182,53 @@ class RulesLockdownRegressionTest {
         ).forEach { (needle, why) ->
             assertTrue("pairOfTwo $why (thiếu: $needle)", fn.contains(needle))
         }
+
+        val att = segment("function attestedPair(pairingId, otherUid) {")
+        assertTrue("attestedPair phải gọi pairOfTwo, không tự xử",
+            att.contains("pairOfTwo(pairingId, request.auth.uid, otherUid)"))
+        assertTrue("attestedPair phải đọc hồ sơ CỦA BEN KIA (ke tan cong khong ghi duoc)",
+            att.contains("get(/databases/$(database)/documents/users/$(otherUid)).data.activePairingId == pairingId"))
+        assertTrue("exists() phai di truoc get() de ho so khong ton tai khong lam loi dieu kien",
+            att.contains("exists(/databases/$(database)/documents/users/$(otherUid))"))
+        assertTrue("phai dung 'activePairingId' in ... de ho so cu thieu truong bi tu choi chu khong loi",
+            att.contains("'activePairingId' in get(/databases/$(database)/documents/users/$(otherUid)).data"))
+
         // Nguoi hoi phai duoc truyen bang request.auth.uid, khong phai mot gia
-        // tri client tu chon.
+        // tri client tu chon, va duong doc theo `pairingId` trong document cung
+        // phai qua lop xac nhan hai chu.
         assertTrue("Cặp phải được đối chiếu với request.auth.uid, không với uid đọc từ doc",
-            rules.contains("pairOfTwo(resource.data.pairingId, request.auth.uid, userId)"))
+            rules.contains("attestedPair(resource.data.pairingId, userId)"))
+        assertTrue("Phiếu SOS cũng đi qua attestedPair, không phải pairOfTwo trần",
+            rules.contains("attestedPair(resource.data.pairingId, resource.data.userId)"))
+    }
+
+    /**
+     * Hai khe con lai cua chinh document ghep noi — ca hai tung mo trong ban
+     * 65.0 dau tien va chi bi phat hien khi doc lai dieu kien nhu ke tan cong:
+     *  1. `allow update` dung `request.resource.data.childId == toi`: ke xau
+     *     tu them ten minh vao document cua gia dinh khac va tro thanh "thanh
+     *     vien" — mo tung `pairings/<id>/location_history`, `/messages`,
+     *     `/schedules` cua ho.
+     *  2. `allow create` cho phep ke tan cong tao document co `childId` la nan
+     *     nhan; may nan nhan CHUA ghep noi se tu nhan no (findPairingFor) va
+     *     de tang luon su xac nhan hai chu.
+     */
+    @Test
+    fun documentGhepNoiKhongChoGiaThuocVaKhongChoKeXauTuXuongTen() {
+        val pairings = block("/pairings/{pairingId}")
+        val upd = pairings.substringAfter("allow update:").substringBefore(";")
+        assertTrue("update phai doi ben CU, khong duoc tin `request.resource.data`",
+            !upd.contains("request.resource.data"))
+        assertTrue("update van phai cho ca hai ben that doi chieu voi resource.data",
+            upd.contains("resource.data.parentId == request.auth.uid") &&
+                upd.contains("resource.data.childId == request.auth.uid"))
+        assertTrue("create chi may PHU HUYNH lam duoc (pairDirectly luong parentId = uid minh)",
+            pairings.contains(
+                "allow create: if isAuthenticated() && notBanned() &&\n" +
+                    "        request.resource.data.parentId == request.auth.uid;"
+            ) &&
+                !pairings.contains("request.resource.data.childId == request.auth.uid")
+        )
     }
 
     /**
@@ -196,8 +245,8 @@ class RulesLockdownRegressionTest {
         assertTrue("Kotlin vẫn phải sinh id ghép nối theo công thức pair_<parent>_<child>",
             repo.contains("val pairingId = \"pair_\${parentProfile.id}_\${student.id}\""))
         assertTrue("Rules phải thử CẢ HAI thứ tự (không biết bên nào là cha)",
-            rules.contains("pairOfTwo('pair_' + request.auth.uid + '_' + otherUid") &&
-                rules.contains("pairOfTwo('pair_' + otherUid + '_' + request.auth.uid"))
+            rules.contains("attestedPair('pair_' + request.auth.uid + '_' + otherUid") &&
+                rules.contains("attestedPair('pair_' + otherUid + '_' + request.auth.uid"))
     }
 
     // ── 4. Ngoai le can giu: duyet phieu quyen rieng ──────────────────────────
