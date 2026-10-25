@@ -55,6 +55,7 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.data.AiUsageCounter
 import com.example.data.ai.DailyUsageStore
 import com.example.service.ai.AiKey
 import com.example.service.ai.AiModel
@@ -137,6 +138,8 @@ fun AiChatScreen(
             answer.onSuccess { text ->
                 turns = turns + ChatTurn("model", text)
                 history.save(turns)
+                // Mot luot tra loi xong moi duoc tinh; luot loi khong tinh.
+                AiUsageCounter.recordHit()
             }.onFailure { t ->
                 error = t.message ?: "Không nhận được câu trả lời."
             }

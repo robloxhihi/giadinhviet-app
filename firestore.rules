@@ -37,8 +37,10 @@ service cloud.firestore {
 
     // User profiles
     match /users/{userId} {
-      allow read: if isAuthenticated();
-      allow create, update: if isOwner(userId);
+      // notBanned(): tai khoan bi cam trong app quan tri mat het duong doc/ghi
+      // ho so — day la phan "lenh cam tro thanh hieu luc".
+      allow read: if isAuthenticated() && notBanned();
+      allow create, update: if isOwner(userId) && notBanned();
       allow delete: if false;
     }
 
@@ -48,17 +50,19 @@ service cloud.firestore {
       // trung ten trong MainActivity.kt; hai ben phai khop nhau.
     function isAdmin() {
       return isAuthenticated() && request.auth.uid in
-        ["YU2BwDqvahSh1hUWx9NRAdOwvG33"];
+        ["YU2BwDqvahSh1hUWx9NRAdOwvG33", "cSzzRXZzaVR83q2gQTnskhIxkzw2"];
+    }
+
+    // Tai khoan bi cam thi khong duoc doc/ghi bat ky thu gi cua gia dinh no.
+    // Day la noi lenh "Cam" trong app quan tri TRUOC tien thanh hieu luc —
+    // khong phai chi la mot dong ghi chu trong /bans.
+    function notBanned() {
+      return !exists(/databases/$(database)/documents/bans/$(request.auth.uid));
     }
 
     // /bans/{uid} — lenh cam theo uid. Day la con duong DUY NHAT co that:
     // Firestore rules khong co bien IP, va dien thoai di dong doi IP lien tuc
     // qua CGNAT nen "chan IP" vua khong lam duoc vua khong co nghia.
-    //
-    // LUU Y: moi lenh cam phai duoc MOT rule khac kiem tra lai luc doc/ghi du
-    // lieu gia dinh, neu khong no chi la mot dong ghi chu. Chan do chua lam o
-    // ban nay vi no se chan luon ca may cua chinh nguoi bi cam dang go — can
-    // thu tung man hinh truoc khi bat. Doc/ghi thu nay thi chi quan tri.
     match /bans/{uid} {
       allow read: if isAuthenticated();
       allow create, update, delete: if isAdmin();
