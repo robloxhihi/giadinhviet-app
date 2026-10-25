@@ -163,10 +163,15 @@ fun SettingsScreen(
             // no hen "tuy chinh giao dien sang toi, mau sac & quyen he thong":
             // "mau sac" da sai tu ban 40 (bang chon mau chu dao bi xoa, chi con
             // cong tac toi/sang), va ca ba thu do deu an khi may chua ghep noi.
+            // Ban 66.0: duoi dong nay khong con mot duong ra duy nhat. Nut "Xóa
+            // tài khoản và dữ liệu trên máy chủ" that su goi lenh xoa (rules da mo
+            // cho chinh chu), nen phu de pha ke ca duong do — neu van noi "chi de
+            // dang xuat" la noi thieu mot chuc nang dang nam ngay duoi.
             text = if (isPaired)
                 "Quyền hệ thống, nội quy chặn ứng dụng và chế độ sáng tối của giao diện"
             else
-                "Máy này chưa ghép nối — vào đây chỉ để đăng xuất khỏi máy.\n" +
+                "Máy này chưa ghép nối — vào đây chỉ để đăng xuất hoặc xóa tài khoản " +
+                    "khỏi máy chủ.\n" +
                     "Nội quy chặn ứng dụng, hồ sơ, quản lý ghép nối và cài đặt SOS " +
                     "sẽ trở lại ngay khi ghép nối xong ở mục Tổng quan.",
             style = MaterialTheme.typography.bodyMedium,
@@ -843,10 +848,23 @@ fun SettingsScreen(
                                             "ký ghép nối, tin nhắn cuộc gọi.\n\n"
                                     }
                                 )
-                                append(
-                                    "Xóa xong là KHÔNG hoàn tác được, và máy đang ghép nối với bạn " +
-                                        "mất luôn quyền xem dữ liệu của máy này.\n\n"
-                                )
+                                // Hai may o hai dau lien ket mat mat khong nhu nhau,
+                                // va the "QUAN LY GHET NOI" (co nut "Huy lien ket") da
+                                // bi an khi chua ghep noi — nen khong duoc chi "nut o
+                                // tren" cho may chua ghep noi nua.
+                                if (isPaired)
+                                    append(
+                                        "Xóa xong là KHÔNG hoàn tác được, và máy đang ghép " +
+                                            "nối với bạn mất luôn quyền xem dữ liệu của máy " +
+                                            "này.\n\n"
+                                    )
+                                else
+                                    append(
+                                        "Máy này chưa ghép nối nên không còn liên kết nào để gỡ " +
+                                            "— lệnh xóa chỉ lấy đi hồ sơ và dữ liệu riêng " +
+                                            "của tài khoản này trên máy chủ, và KHÔNG hoàn tác " +
+                                            "được.\n\n"
+                                    )
                                 append(
                                     "Nút này KHÔNG xóa được tài khoản Google của bạn: tài khoản " +
                                         "đăng nhập nằm ngoài tầm ứng dụng."

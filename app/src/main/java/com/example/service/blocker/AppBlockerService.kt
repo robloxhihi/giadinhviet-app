@@ -18,6 +18,7 @@ import android.widget.TextView
 import android.widget.Toast
 import com.example.data.FirestoreDb
 import com.example.data.model.StudySession
+import com.example.data.model.UserRole
 import com.example.data.model.UsageSchedule
 import com.google.firebase.firestore.ListenerRegistration
 import java.util.Calendar
@@ -194,6 +195,37 @@ class AppBlockerService : AccessibilityService() {
                     return@addSnapshotListener
                 }
                 val pairingId = userSnap?.getString("activePairingId").orEmpty()
+                // MAY PHU HUYNH KHONG BI CHAN BOI CHINH BO CHAN CUA NO.
+                //
+                // Bug that phat hien khi kiem thu ban 64.0 tren may gia lap: me
+                // dat han so phut cho con, roi may ME bi chinh BlockPolicy da ve
+                // Home voi "Hôm nay đã dùng hết thời gian cho phép." — vi bo chan
+                // doc dung `pairings/{activePairingId}/schedules/default_sched` ma
+                // khong hoi may nay dang o vai nao cua cap ghep noi. Noi quy gia
+                // dinh la thu AP LEN MAY CON, do phu huynh dat ra; ap len chinh may
+                // ra luat la mot cai bug khong phai mot chinh sach.
+                //
+                // Doc `role` bang cot phang chu khong bang `userSnap.toObject()`:
+                // `Models.kt` de mac dinh `role = PARENT`, nen ho so cu thieu truong
+                // `role` se deserialize thanh PARENT — va bo chan tat trên may cua
+                // mot em con chi vi ho so cua no thieu mot truong (fail-open). Khong
+                // co truong = chua bao gio xac nhan vai = van chan nhu cu.
+                val role = userSnap?.getString("role").orEmpty()
+                if (role == UserRole.PARENT.name) {
+                    scheduleReg?.remove()
+                    scheduleReg = null
+                    studyReg?.remove()
+                    studyReg = null
+                    watchedPairingId = null
+                    schedule = null
+                    study = null
+                    Log.i(
+                        TAG,
+                        "May nay la PHU HUYNH (role=PARENT) — bo chan khong chay: " +
+                            "lich noi quy ap len may con, khong ap len may dat ra luat"
+                    )
+                    return@addSnapshotListener
+                }
                 if (pairingId.isEmpty()) {
                     scheduleReg?.remove()
                     scheduleReg = null

@@ -583,4 +583,52 @@ class FixRegressionTest {
             shell.contains("bottom = if (selectedTab == 3) 152.dp else 104.dp")
         )
     }
+
+    /**
+     * (lỗi thật bắt được khi test 64.0 trên máy giả lập) Máy phụ huynh đặt luật
+     * cho con xong bị chính bộ chặn của mình đá về Home với dòng "Hôm nay đã dùng
+     * hết thời gian cho phép." AppBlockerService đọc nguyên `pairings/{id}/schedules`
+     * mà không hỏi máy này đang ở VAI NAO của cặp ghép nối, trong khi mọi nội quy
+     * trong app đều được viết theo giả định "áp lên máy con".
+     *
+     * Test giữ ba thứ một lúc:
+     *  - cổng role phải đứng TRƯỚC cả nhánh "chưa ghép nối" (nếu đứng sau thì
+     *    máy phụ huynh chưa ghép nối vẫn chạy hết vòng listener),
+     *  - phải đọc cột `role` trần, không deserialize qua `toObject()` — vì
+     *    Models.kt đặt mặc định `role = PARENT`, nên hồ sơ CHILD đời trước thiếu
+     *    trường sẽ biến thành PARENT và bộ chặn tắt trên máy của con (fail-open),
+     *  - tắt phải là tắt thật: gỡ cả hai listener và xóa cả lịch lẫn phiên học.
+     */
+    @Test
+    fun blockerDoesNotPunishTheParentWhoSetTheRules() {
+        val src = projectFile("src/main/java/com/example/service/blocker/AppBlockerService.kt").readText()
+        assertTrue("Phải import UserRole để so vai", src.contains("import com.example.data.model.UserRole"))
+
+        val listen = src.substringAfter("private fun listenSchedule()")
+        assertTrue("Phải đọc vai tro bang cot phang", listen.contains("getString(\"role\")"))
+        assertTrue(
+            "Phải so voi UserRole.PARENT.name (cot luu ten enum, khong phai so chuoi tay)",
+            listen.contains("role == UserRole.PARENT.name")
+        )
+        val gateAt = listen.indexOf("role == UserRole.PARENT.name")
+        val pairingAt = listen.indexOf("pairingId.isEmpty()")
+        assertTrue("Cổng role phải đứng trước nhánh chưa ghép nối", gateAt in 0 until pairingAt)
+        assertTrue(
+            "So bang ten enum, khong so string tay (đổi tên enum là đổi cả dữ liệu cũ)",
+            !listen.contains("role == \"PARENT\"")
+        )
+
+        val parentBranch = listen.substringAfter("role == UserRole.PARENT.name")
+            .substringBefore("return@addSnapshotListener")
+        listOf(
+            "scheduleReg?.remove()", "studyReg?.remove()",
+            "schedule = null", "study = null",
+            // Phai xa `watchedPairingId = null`, khong phai chi ngat listener: neu
+            // gia tri cu con giu thi lan ghep noi sau se bi `pairingId != watchedPairingId`
+            // chan, may khong bao gio doc lai duoc noi quy moi.
+            "watchedPairingId = null"
+        ).forEach {
+            assertTrue("Nhanh PHU HUYNH phai co '$it'", parentBranch.contains(it))
+        }
+    }
 }
