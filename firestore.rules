@@ -35,6 +35,26 @@ service cloud.firestore {
       );
     }
 
+    // QUAN TRI VIEN. Danh sach uid duoc lam quan tri, ghi thang vao day —
+    // khong the lay tu client vi client nao cung sua duoc code cua no.
+    // App `:admin` (package thanh.dev.app) cung kiem tra lai bang allowlist
+    // trung ten trong MainActivity.kt; hai ben phai khop nhau.
+    //
+    // Hai ham duoc dat TRUOC moi match block dung den no: Firestore ghi chu
+    // khai ham theo thu tu, de ham phia duoi mot block dang dung no la mot
+    // cach de rules tu choi deploy luc minh khong mong.
+    function isAdmin() {
+      return isAuthenticated() && request.auth.uid in
+        ["YU2BwDqvahSh1hUWx9NRAdOwvG33", "cSzzRXZzaVR83q2gQTnskhIxkzw2"];
+    }
+
+    // Tai khoan bi cam thi khong duoc doc/ghi ho so cua chinh no. Day la noi
+    // lenh "Cam" trong app quan tri TRUOC tien thanh hieu luc — khong phai chi
+    // la mot dong ghi chu trong /bans.
+    function notBanned() {
+      return !exists(/databases/$(database)/documents/bans/$(request.auth.uid));
+    }
+
     // User profiles
     match /users/{userId} {
       // notBanned(): tai khoan bi cam trong app quan tri mat het duong doc/ghi
@@ -42,22 +62,6 @@ service cloud.firestore {
       allow read: if isAuthenticated() && notBanned();
       allow create, update: if isOwner(userId) && notBanned();
       allow delete: if false;
-    }
-
-    // QUAN TRI VIEN. Danh sach uid duoc lam quan tri, ghi thang vao day —
-      // khong the lay tu client vi client nao cung sua duoc code cua no.
-      // App `:admin` (package thanh.dev.app) cung kiem tra lai bang allowlist
-      // trung ten trong MainActivity.kt; hai ben phai khop nhau.
-    function isAdmin() {
-      return isAuthenticated() && request.auth.uid in
-        ["YU2BwDqvahSh1hUWx9NRAdOwvG33", "cSzzRXZzaVR83q2gQTnskhIxkzw2"];
-    }
-
-    // Tai khoan bi cam thi khong duoc doc/ghi bat ky thu gi cua gia dinh no.
-    // Day la noi lenh "Cam" trong app quan tri TRUOC tien thanh hieu luc —
-    // khong phai chi la mot dong ghi chu trong /bans.
-    function notBanned() {
-      return !exists(/databases/$(database)/documents/bans/$(request.auth.uid));
     }
 
     // /bans/{uid} — lenh cam theo uid. Day la con duong DUY NHAT co that:
