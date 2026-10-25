@@ -57,6 +57,7 @@ import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.GoogleAuthProvider
 import com.google.firebase.firestore.DocumentReference
+import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.launch
@@ -475,9 +476,14 @@ private fun AdminApp() {
     scope.launch {
       try {
         val banDoc = mutableMapOf<String, Map<String, Any?>>()
+        // `getDate()` chi co tren DocumentSnapshot, khong co tren `data: Map`,
+        // nen giu ca snapshot: map dung cho ly do/pham vi, snapshot dung cho
+        // `expiresAt` vi truong do la Timestamp chu khong phai con so.
+        val banSnap = mutableMapOf<String, DocumentSnapshot>()
         try {
           db().collection(BANS).get().await().documents.forEach {
             banDoc[it.id] = it.data ?: emptyMap()
+            banSnap[it.id] = it
           }
         } catch (e: Exception) {
           status = "Doc /bans bi tu choi (firestore.rules chua Publish?): ${e.message}"
@@ -487,10 +493,15 @@ private fun AdminApp() {
         val now = System.currentTimeMillis()
         val out = users.documents.map { d ->
           val ban = banDoc[d.id]
-          // `expiresAt` do chinh app quan tri ghi len bang Timestamp, nen doc ve
-          // phai la `Timestamp` — dung `as? Number` vi Firestore tra timestamp
-          // duoi dang object, khong phai millis.
-          val until = (ban?.get("expiresAt") as? com.google.firebase.Timestamp)?.toMillis()
+          // `expiresAt` do chinh app quan tri ghi len bang Timestamp. Doc no bang
+          // `DocumentSnapshot.getDate()` — lop `com.google.firebase.Timestamp` KHONG
+          // co `toMillis()` (chi co getSeconds/getNanoseconds/toDate), va `data: Map`
+          // thi khong co getter nao ca, nen phai giu ca snapshot ben canh map.
+          val until = try {
+            banSnap[d.id]?.getDate("expiresAt")?.time
+          } catch (e: Exception) {
+            null
+          } ?: (ban?.get("expiresAt") as? Number)?.toLong()
           AdminRow(
             uid = d.id,
             displayName = d.getString("displayName") ?: "(khong co ten)",

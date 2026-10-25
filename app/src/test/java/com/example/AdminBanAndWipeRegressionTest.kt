@@ -91,6 +91,13 @@ class AdminBanAndWipeRegressionTest {
         // :admin:compileDebugKotlin, sau khi toan bo 233 test nguon da xan green.
         assertTrue("Không được dùng cái tên lớp không tồn tại com.google.firebase.firestore.Timestamp",
             !admin.contains("com.google.firebase.firestore.Timestamp"))
+        // Chieu DOC: `com.google.firebase.Timestamp` chi co getSeconds/
+        // getNanoseconds/toDate — khong co toMillis() (do la cua java.sql). Lenh
+        // cam do quan tri ghi ra, doc ve sai mot cai ten ham la toan bo bang
+        // "Cấm" biên thành "chay error", nen giu no bang chuoi.
+        assertTrue("Phải đọc expiresAt qua DocumentSnapshot.getDate()",
+            admin.contains("getDate(\"expiresAt\")?.time"))
+        assertTrue("Không được gọi toMillis() trên Timestamp", !admin.contains(".toMillis()"))
         // Ghi expiresAt qua khu thi rules tu choi, nen chi ghi khi chon 7/30 ngay.
         val payloadBlock = admin.substringAfter("val payload = mutableMapOf").substringBefore(".await()")
         assertTrue("Chỉ ghi expiresAt khi chọn thời hạn (0 = vĩnh viễn, không ghi trường)",
