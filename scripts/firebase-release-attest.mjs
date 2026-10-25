@@ -133,12 +133,19 @@ if (dbs.status !== 200) {
   console.error(`Liệt kê database that bai (HTTP ${dbs.status}): ${dbs.text.slice(0, 300)}`);
   process.exit(1);
 }
-const dbId = (dbs.json.databases || []).map((d) => d.databaseId)[0];
+// Project nay dung NAMED database, khong phai "(default)" — hai app Kotlin
+// cung layFirestore(DATABASE_ID). Truoc day script cham [0] trong danh sach
+// nen co the ghi nham vao "(default)" (rong), khong ai doc. Uu tien: env
+// FIRESTORE_DB_ID -> database dau tien ten bat dau "ai-studio-android-vespera"
+// -> "(default)" -> cai dau tien.
+const want = process.env.FIRESTORE_DB_ID || "ai-studio-android-vespera-f0b8eaec-ca07-4549-bb58-a45233ead3c3";
+const ids = (dbs.json.databases || []).map((d) => d.databaseId);
+const dbId = ids.includes(want) ? want : (ids.find((id) => id.startsWith("ai-studio-android-vespera")) ?? ids[0]);
 if (!dbId) {
   console.error("Project khong co database Firestore nao.");
   process.exit(1);
 }
-console.log(`Database: ${dbId}`);
+console.log(`Database: ${dbId} (danh sach: ${ids.join(", ")})`);
 
 const doc = {
   fields: {
@@ -148,7 +155,7 @@ const doc = {
     sha256: { stringValue: sha256hex },
     sha1: { stringValue: sha1hex },
     apkUrl: {
-      stringValue: `https://github.com/${process.env.GITHUB_REPOSITORY || "robloxhihi/giadinhviet-app"}/releases/download/${TAG}/GiaDinhViet.apk`
+      stringValue: `https://github.com/${process.env.GITHUB_REPOSITORY || "robloxhihi/giadinhviet-app"}/releases/download/${TAG}/${APK}`
     },
     signerSha1: { stringValue: certInfo ? certInfo.sha1 : "" },
     signerSha256: { stringValue: certInfo ? certInfo.sha256 : "" },

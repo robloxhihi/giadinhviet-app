@@ -81,22 +81,44 @@ jobs:
         fi
         echo "So dong trong .env: $(wc -l < .env)"
 
-    - name: Setup Gradle
-      uses: gradle/actions/setup-gradle@v3
-
-    - name: Ensure Gradle Wrapper exists
+    # gradlew + gradle-wrapper.jar da duoc commit vao repo (sinh mot lan bang
+    # workflow `.github/workflows/tool-gen-wrapper.yml`, tai ve tu artifact).
+    # Truoc day moi lan build phai chay `gradle wrapper` bang system Gradle:
+    # 71 giay tai/trung Gradle va sinh file — do an toan, khong lien quan APK.
+    - name: Kiem tra Gradle wrapper trong repo
       run: |
-        if [ ! -f "./gradlew" ]; then
-          VER="$(sed -n 's/.*gradle-\([0-9.][0-9.]*\)-bin.zip.*/\1/p' gradle/wrapper/gradle-wrapper.properties)"
-          echo "Dang sinh wrapper voi Gradle $VER"
-          gradle wrapper --gradle-version "$VER" --distribution-type bin
-        fi
+        test -f gradlew || { echo "::error::Thieu gradlew trong repo."; exit 1; }
+        test -f gradle/wrapper/gradle-wrapper.jar || { echo "::error::Thieu gradle-wrapper.jar."; exit 1; }
         chmod +x gradlew
+        echo "wrapper jar: $(sha256sum gradle/wrapper/gradle-wrapper.jar)"
 
-    - name: Run unit tests
-      # That bai o day thi khong con nghia gi dang APK: BlockPolicy quyet dinh
-      # cai gi bi khoa tren may hoc sinh.
-      run: ./gradlew :app:testDebugUnitTest --stacktrace
+    # Cache ~/.gradle day du (dependencies + local build cache + distribution).
+    # Do lan chay 40190751706: `actions/caches total_count 0` = moi lan chay
+    # nguoi hoan toan. Buoc nay in "Restored" thi truong hop nao cung tiet
+    # kiem 1-2 phut; in "miss" thi khong hai gi. Khong dung
+    # gradle/actions/setup-gradle nua vi no quan ly cung duong dan do -> hai
+    # bo dem cung ghi mot noi, de mot bo dem duy nhat noi day.
+    - name: Cache ~/.gradle
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.gradle/caches
+          ~/.gradle/wrapper
+          ~/.gradle/native
+        key: gradle-${{ runner.os }}-9.3.1-${{ hashFiles('**/*.gradle.kts', 'settings.gradle.kts', 'gradle/wrapper/gradle-wrapper.properties', 'gradle/libs.versions.toml') }}
+        restore-keys: |
+          gradle-${{ runner.os }}-9.3.1-
+          gradle-${{ runner.os }}-
+
+    - name: Test va build ca hai APK (mot lan go Gradle)
+      # That bai o test thi khong con nghia gi dang APK: BlockPolicy quyet dinh
+      # cai gi bi khoa tren may hoc sinh. Gradle chay theo thu tu task nen
+      # :app:assembleDebug va :admin:assembleDebug khong chay neu test do.
+      # Gop ba invocation thanh mot tiet kiem hai lan tai Gradle daemon +
+      # hai lan phan tich (configuration) du an.
+      run: |
+        ./gradlew :app:testDebugUnitTest :app:assembleDebug :admin:assembleDebug \
+          --stacktrace --warning-mode all
 
     - name: In ket qua test khi do
       if: failure()
@@ -144,14 +166,6 @@ jobs:
             print('Khong dang duoc bao cao:', e)
         PY
 
-    - name: Build Debug APK
-      run: ./gradlew assembleDebug --stacktrace --warning-mode all
-
-    - name: Build Admin Debug APK
-      # App quan tri (`thanh.dev.app`) la module rieng :admin, APK rieng, cai
-      # song song ben app chinh tren cung mot may.
-      run: ./gradlew :admin:assembleDebug --stacktrace --warning-mode all
-
     - name: Rename APK
       run: |
         cp app/build/outputs/apk/debug/app-debug.apk GiaDinhViet.apk
@@ -196,7 +210,7 @@ jobs:
     # va hash cua chinh file APK (de web/app doi chieu file tai ve).
     # Chay khi co FIREBASE_SA_JSON; khong co secret thi in mot thong bao roi
     # bo qua — build va release van xanh, khong gia nan da ghi duoc.
-    - name: Ghi SHA cua ban APK vao Firebase
+    - name: Ghi SHA cua ca hai ban APK vao Firebase
       if: startsWith(github.ref, 'refs/tags/v')
       env:
         FIREBASE_SA_JSON: ${{ secrets.FIREBASE_SA_JSON }}
@@ -205,4 +219,8 @@ jobs:
         CERT_SHA1="$(printf '%s\n' "$KT_OUT" | sed -n 's/^[[:space:]]*SHA1: //p' | head -1)"
         CERT_SHA256="$(printf '%s\n' "$KT_OUT" | sed -n 's/^[[:space:]]*SHA256: //p' | head -1)"
         echo "Chu ky debug: SHA1=${CERT_SHA1:-<khong doc duoc>}"
+        # App nguoi dung: tai lieu release_hashes/<tag>.
         CERT_SHA1="$CERT_SHA1" CERT_SHA256="$CERT_SHA256" node scripts/firebase-release-attest.mjs GiaDinhViet.apk "$GITHUB_REF_NAME"
+        # App Quan Tri Vien: module rieng, APK rieng -> tai lieu <tag>-admin,
+        # de web doi chieu duoc file nao tai ve la file nao.
+        CERT_SHA1="$CERT_SHA1" CERT_SHA256="$CERT_SHA256" node scripts/firebase-release-attest.mjs QuanTriVien.apk "$GITHUB_REF_NAME-admin"
