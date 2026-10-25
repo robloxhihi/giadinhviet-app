@@ -146,9 +146,33 @@ data class AdminRow(
   val role: String,
   val studentCode: String,
   val aiCalls: Long,
+  // `aiToday` la so luot HOI CUA RIENG HOM NAY do may nguoi dung ghi len
+  // (`aiUsageToday` + `aiUsageDay` trong firestore.rules, ban 64.0). -1 = tai
+  // khoan chua bao gio duoc do, khong phai "hom nay 0 luot".
+  val aiToday: Long,
+  // `false` khi tai khoan dung tren hai may hoac may lech dong ho: duoc phep
+  // nho lai so lieu cua ngay cu, vi du no thanh "hom nay im lang" sai.
+  val aiTodayFresh: Boolean,
   val banned: Boolean,
   val banReason: String
 )
+
+/**
+ * Nguong trong app nguoi dung (AiUsageCounter.WARN_AT / DAILY_LIMIT). Vi module
+ * `:admin` khong dung chung source voi `:app` nen phai ghi lai hai hang so nay,
+ * va do la ly do chung co chu thich o ca hai cho: doi nguong o day ma khong doi
+ * o ben kia la dua so lieu mau lech nhau.
+ */
+private const val AI_WARN_AT = 50L
+private const val AI_DAILY_LIMIT = 100L
+
+/** "yyyy-MM-dd" theo gio VN — trung cach tinh ngay cua AiUsageCounter. */
+private fun todayKeyVn(): String {
+  val calendar = java.util.Calendar.getInstance(
+    java.util.TimeZone.getTimeZone("Asia/Ho_Chi_Minh")
+  )
+  return java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).format(calendar.time)
+}
 
 @Composable
 private fun Chip(text: String, color: Color) {
@@ -174,6 +198,11 @@ private fun AdminApp() {
   var pass by remember { mutableStateOf("") }
   var query by remember { mutableStateOf("") }
   var sortByAi by remember { mutableStateOf(true) }
+  // Loc "chi ai vuot nguong hom nay" — day la con duong de NGUOI QUET dinh ai
+  // dang bi spam, con viec CAM van la mot nut bam cua ho. Ban dau ke ho tu dong
+  // cam khi du 100 luot, da doi: may cham may con tre, khong nen co chuyen do
+  // xay ra ma khong co ai xem lai.
+  var onlyOverQuota by remember { mutableStateOf(false) }
   var banTarget by remember { mutableStateOf<AdminRow?>(null) }
 
   val isAdmin = user?.uid?.let { it in ADMIN_UIDS } == true
@@ -192,6 +221,7 @@ private fun AdminApp() {
           status = "Doc /bans bi tu choi (firestore.rules chua Publish?): ${e.message}"
         }
         val users = db().collection(USERS).get().await()
+        val today = todayKeyVn()
         val out = users.documents.map { d ->
           AdminRow(
             uid = d.id,
@@ -200,14 +230,18 @@ private fun AdminApp() {
             role = d.getString("role") ?: "?",
             studentCode = d.getString("studentCode") ?: "",
             aiCalls = (d.get("aiCallCount") as? Number)?.toLong() ?: -1L,
+            aiToday = (d.get("aiUsageToday") as? Number)?.toLong() ?: -1L,
+            aiTodayFresh = d.getString("aiUsageDay") == today,
             banned = banDoc.containsKey(d.id),
             banReason = banDoc[d.id] ?: ""
           )
         }
         rows.clear()
         rows += out
+        val touched = out.count { it.aiTodayFresh && it.aiToday >= AI_WARN_AT }
         status = "${out.size} tai khoan  ·  ${out.count { it.banned }} dang bi cam  ·  " +
-          "${out.sumOf { if (it.aiCalls > 0) it.aiCalls else 0L }} luot goi AI da ghi nhan"
+          "${out.sumOf { if (it.aiCalls > 0) it.aiCalls else 0L }} luot goi AI da ghi nhan  ·  " +
+          "$touched tai khoan dat $AI_WARN_AT luot hom nay"
       } catch (e: Exception) {
         status = "Khong doc duoc: ${e.message}"
       } finally {
@@ -365,8 +399,23 @@ private fun AdminApp() {
           textStyle = MaterialTheme.typography.bodyMedium.copy(color = Txt)
         )
         OutlinedButton(onClick = { sortByAi = !sortByAi }) {
-          Text(if (sortByAi) "Xếp: AI" else "Xếp: tên", color = TxtDim, fontSize = 12.sp)
+          Text(if (sortByAi) "Xếp: hôm nay" else "Xếp: tên", color = TxtDim, fontSize = 12.sp)
         }
+      }
+
+      Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+        OutlinedButton(onClick = { onlyOverQuota = !onlyOverQuota }) {
+          Text(
+            if (onlyOverQuota) "Đang lọc: ≥ $AI_WARN_AT lượt hôm nay" else "Lọc: ≥ $AI_WARN_AT lượt hôm nay",
+            color = if (onlyOverQuota) Amber else TxtDim,
+            fontSize = 12.sp
+          )
+        }
+        Text(
+          "Chạm 100 lượt là app phía người dùng tự ngừng cho hỏi; ở đây không ai bị " +
+            "cấm tự động — muốn cấm thì bấm nút CẤM.",
+          color = TxtDim, fontSize = 11.sp, modifier = Modifier.weight(1f)
+        )
       }
 
       if (status.isNotEmpty()) Text(status, color = Amber, fontSize = 12.sp)
@@ -377,14 +426,25 @@ private fun AdminApp() {
       // day nua; thu do dung tren may nguoi viet nhung khong on dinh khi build.
       val comparator = Comparator<AdminRow> { a, b ->
         if (sortByAi) {
-          // Tai khoan chua duoc do (-1) luon ep xuong cuoi, de "Xep: AI" khong
-          // tao ra hang dau gia cho nguoi chua tung goi AI.
-          val ca = if (a.aiCalls < 0) -1L else a.aiCalls
-          val cb = if (b.aiCalls < 0) -1L else b.aiCalls
+          // Tie thu 1 la LUOT HOM NAY, tie thu 2 moi den tong ca doi. Y cua
+          // nguoi dung la "thang nao dang spam hom nay" — sap xep theo tong so
+          // thi mot tai khoan im lang nam nay lai ngot hang dau.
+          val ta = if (a.aiTodayFresh && a.aiToday >= 0) a.aiToday else -1L
+          val tb = if (b.aiTodayFresh && b.aiToday >= 0) b.aiToday else -1L
           when {
-            cb > ca -> 1
-            cb < ca -> -1
-            else -> a.displayName.compareTo(b.displayName, ignoreCase = true)
+            tb > ta -> 1
+            tb < ta -> -1
+            else -> {
+              // Tai khoan chua duoc do (-1) luon ep xuong cuoi, de "Xep" khong
+              // tao ra hang dau gia cho nguoi chua tung goi AI.
+              val ca = if (a.aiCalls < 0) -1L else a.aiCalls
+              val cb = if (b.aiCalls < 0) -1L else b.aiCalls
+              when {
+                cb > ca -> 1
+                cb < ca -> -1
+                else -> a.displayName.compareTo(b.displayName, ignoreCase = true)
+              }
+            }
           }
         } else {
           val byName = a.displayName.compareTo(b.displayName, ignoreCase = true)
@@ -394,14 +454,19 @@ private fun AdminApp() {
 
       val shown = rows
         .filter {
-          query.isBlank() ||
-            it.displayName.contains(query, true) ||
-            it.email.contains(query, true) ||
-            it.uid.contains(query, true) ||
-            it.studentCode.contains(query, true)
+          (!onlyOverQuota || (it.aiTodayFresh && it.aiToday >= AI_WARN_AT)) &&
+            (
+              query.isBlank() ||
+                it.displayName.contains(query, true) ||
+                it.email.contains(query, true) ||
+                it.uid.contains(query, true) ||
+                it.studentCode.contains(query, true)
+              )
         }
         .sortedWith(comparator)
-      val ranked: List<AdminRow> = shown.filter { it.aiCalls > 0 }.sortedByDescending { it.aiCalls }
+      val ranked: List<AdminRow> = shown.filter {
+        (it.aiTodayFresh && it.aiToday > 0) || it.aiCalls > 0
+      }
 
       LazyColumn(
         verticalArrangement = Arrangement.spacedBy(10.dp),
@@ -423,6 +488,22 @@ private fun AdminApp() {
                   Text(row.email.ifEmpty { "(khong co email)" }, color = TxtDim, fontSize = 12.sp)
                 }
                 Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                  // Cong them chuot duoi: 100 la do CHINH APP cat duong hoi,
+                  // mau hong la "nguoi dung nay hom nay khong goi AI duoc nua",
+                  // khong phai "da bi cam". Hai chuyen khong giong nhau.
+                  Chip(
+                    when {
+                      !row.aiTodayFresh || row.aiToday < 0 -> "Hôm nay: chưa đo"
+                      row.aiToday >= AI_DAILY_LIMIT -> "Hôm nay ${row.aiToday}/$AI_DAILY_LIMIT · đã chặn hỏi"
+                      else -> "Hôm nay ${row.aiToday}/$AI_DAILY_LIMIT"
+                    },
+                    when {
+                      !row.aiTodayFresh || row.aiToday < 0 -> TxtDim
+                      row.aiToday >= AI_DAILY_LIMIT -> Rose
+                      row.aiToday >= AI_WARN_AT -> Amber
+                      else -> Mint
+                    }
+                  )
                   Chip(
                     if (row.aiCalls < 0) "AI: chưa có số liệu" else "AI: ${row.aiCalls} lượt",
                     if (row.aiCalls < 0) TxtDim else if (rank in 1..3) Amber else Mint

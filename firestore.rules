@@ -55,12 +55,42 @@ service cloud.firestore {
       return !exists(/databases/$(database)/documents/bans/$(request.auth.uid));
     }
 
+    // LUOT HOI AI MOT NGAY (ban 64.0). App nguoi dung tu dem va tu ghi len
+    // `users/<uid>`, nen o day co hai tran:
+    //   aiQuotaFieldsValid  — con so khong duoc vuot 100, khong duoc am, va
+    //                         phai di kem chuoi ngay "yyyy-MM-dd".
+    //   aiQuotaNotShrunk    — trong CUNG mot ngay thi so do chi duoc tang. Day
+    //                         la tran that: xoa du lieu ung dung lam bo dem tren
+    //                         may ve 0, nhung viet len lai "1" se bi tu choi vi
+    //                         van con la ngay cu. Sang ngay moi (aiUsageDay khac)
+    //                         moi duoc bat dau lai tu 1.
+    // Nhin thang: cat 100 luot van la do app lam, vi cau hoi AI di thang len
+    // Gemini/OpenRouter bang khoa nam trong APK, khong qua Firebase. Muon chan
+    // cung o tang may chu thi can proxy (task #45), khong phai them rules.
+    function aiQuotaFieldsValid() {
+      return !('aiUsageToday' in request.resource.data) ||
+        (request.resource.data.aiUsageToday is int &&
+         request.resource.data.aiUsageToday >= 0 &&
+         request.resource.data.aiUsageToday <= 100 &&
+         'aiUsageDay' in request.resource.data &&
+         request.resource.data.aiUsageDay is string &&
+         request.resource.data.aiUsageDay.size() == 10);
+    }
+
+    function aiQuotaNotShrunk() {
+      return !('aiUsageToday' in request.resource.data) ||
+        resource.data.aiUsageDay != request.resource.data.aiUsageDay ||
+        resource.data.aiUsageToday <= request.resource.data.aiUsageToday;
+    }
+
     // User profiles
     match /users/{userId} {
       // notBanned(): tai khoan bi cam trong app quan tri mat het duong doc/ghi
       // ho so — day la phan "lenh cam tro thanh hieu luc".
       allow read: if isAuthenticated() && notBanned();
-      allow create, update: if isOwner(userId) && notBanned();
+      allow create: if isOwner(userId) && notBanned() && aiQuotaFieldsValid();
+      allow update: if isOwner(userId) && notBanned() &&
+        aiQuotaFieldsValid() && aiQuotaNotShrunk();
       allow delete: if false;
     }
 

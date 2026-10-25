@@ -77,6 +77,18 @@ import com.example.ui.theme.TextSecondary
 import kotlinx.coroutines.launch
 
 /**
+ * Loi hien khi tai khoan da dung het 100 luot hoi AI trong ngay hom nay.
+ *
+ * Noi ro ba dieu that: bao gio mo lai (0 gio), app KHONG goi len may chu AI nua
+ * (khong phai noi "khong duoc" ma van goi tham), va nguoi lon nhin thay con so o
+ * dau. Khong hen mo som bang tay admin vi app admin chua co nut go phong — ban
+ * hay khong la quyet dinh cua nguoi dung app do, con nguong nay tu mo theo ngay.
+ */
+private const val AI_EXHAUSTED_MESSAGE =
+    "Hôm nay máy này đã hỏi AI 100 lần nên app không gửi câu hỏi lên trợ lý nữa. " +
+        "Từ 0 giờ sẽ hỏi lại được. App Quản Trị Viên cho thấy tài khoản nào vừa chạm ngưỡng hôm nay."
+
+/**
  * "Trợ lý gia đình" — man hinh chat RIENG voi AI, mo tu the Tong quan.
  *
  * Khong dung `ChatScreen` (tab Chat): cho do noi voi Firestore va phai ghep
@@ -109,17 +121,36 @@ fun AiChatScreen(
     var keyDraft by remember { mutableStateOf("") }
     var keyVisible by remember { mutableStateOf(false) }
     var showStats by remember { mutableStateOf(false) }
+    // Luot hom nay nam trong SharedPreferences cua may nen doc duoc ca khi mat
+    // mang; LaunchedEffect ben duoi keo no len bang so that tren Firestore.
+    var quotaUsed by remember { mutableStateOf(AiUsageCounter.observeToday(context)) }
 
-    val stats = remember(turns.size, busy) { usage.summaryForAi() }
+    val stats = remember(turns.size, busy, quotaUsed) {
+        usage.summaryForAi() + "\n" + AiUsageCounter.quotaNote(context)
+    }
     val hasKey = AiKey.isUsable(key)
+    val exhausted = quotaUsed >= AiUsageCounter.DAILY_LIMIT
+    // Qua 50 luot thi noi truoc con bao nhieu, dung de den luc cat hay ho moi
+    // biet. Nguong va con so do chinh app dem, khong phai noi cho vui.
+    val nearLimit = !exhausted && quotaUsed >= AiUsageCounter.WARN_AT
 
     LaunchedEffect(turns.size, busy) {
         if (turns.isNotEmpty()) scroll.animateScrollTo(scroll.maxValue)
     }
 
+    LaunchedEffect(Unit) {
+        AiUsageCounter.syncFromFirestore(context) { total -> quotaUsed = total }
+    }
+
     fun send(question: String, report: Boolean = false) {
         val q = question.trim()
         if (q.isEmpty() || busy || !AiKey.isUsable(key)) return
+        // Cat TREN duong goi: het suot trong ngay thi khong mot request nao di
+        // len may chu AI nua, dung co tra loi roi dem tiep.
+        if (exhausted) {
+            error = AI_EXHAUSTED_MESSAGE
+            return
+        }
         val next = turns + ChatTurn("user", q)
         turns = next
         draft = ""
@@ -139,7 +170,8 @@ fun AiChatScreen(
                 turns = turns + ChatTurn("model", text)
                 history.save(turns)
                 // Mot luot tra loi xong moi duoc tinh; luot loi khong tinh.
-                AiUsageCounter.recordHit()
+                AiUsageCounter.recordHit(context)
+                quotaUsed = AiUsageCounter.observeToday(context)
             }.onFailure { t ->
                 error = t.message ?: "Không nhận được câu trả lời."
             }
@@ -231,6 +263,71 @@ fun AiChatScreen(
             style = MaterialTheme.typography.bodySmall,
             color = TextMuted
         )
+        Spacer(modifier = Modifier.height(14.dp))
+
+        // ── Nguong hoi AI trong ngay ───────────────────────────────────────
+        // So o day lay tu SharedPreferences va duoc doi chieu voi Firestore khi
+        // mo man, khong phai chi trang tri. Den 100 la khung do den va duong gui
+        // bi cat trong send(), request khong len may chu AI.
+        GlassCard(
+            modifier = Modifier.fillMaxWidth().testTag("ai_quota_bar"),
+            glow = if (exhausted) Premium.rose else if (nearLimit) Premium.amber else null,
+            contentPadding = 12.dp
+        ) {
+            Column {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Hỏi AI hôm nay",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = TextSecondary
+                    )
+                    Text(
+                        text = "$quotaUsed/${AiUsageCounter.DAILY_LIMIT}",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = if (exhausted) Premium.rose else if (nearLimit) Premium.amber else Premium.accent
+                    )
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(6.dp)
+                        .clip(RoundedCornerShape(3.dp))
+                        .background(SpaceCardBorder)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth(
+                                (quotaUsed.toFloat() / AiUsageCounter.DAILY_LIMIT)
+                                    .coerceIn(0f, 1f)
+                            )
+                            .height(6.dp)
+                            .clip(RoundedCornerShape(3.dp))
+                            .background(
+                                if (exhausted) Premium.rose
+                                else if (nearLimit) Premium.amber
+                                else Premium.accent
+                            )
+                    )
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = when {
+                        exhausted -> "Hết 100 lượt cho hôm nay. Không hỏi được nữa tới 0 giờ."
+                        nearLimit -> "Còn ${AiUsageCounter.DAILY_LIMIT - quotaUsed} lượt nữa thì tới giới hạn 100 lượt/ngày."
+                        else -> "Còn ${AiUsageCounter.DAILY_LIMIT - quotaUsed} lượt trong hôm nay."
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = TextMuted
+                )
+            }
+        }
+
         Spacer(modifier = Modifier.height(14.dp))
 
         if (!hasKey) {
@@ -450,9 +547,9 @@ fun AiChatScreen(
         Spacer(modifier = Modifier.height(10.dp))
 
         GradientButton(
-            text = "Xin AI phân tích hôm nay",
+            text = if (exhausted) "Hết lượt hỏi hôm nay" else "Xin AI phân tích hôm nay",
             icon = Icons.Default.AutoAwesome,
-            enabled = hasKey && !busy,
+            enabled = hasKey && !busy && !exhausted,
             onClick = { send("Dựa trên số liệu trên, hãy phân tích hôm nay của con và đưa giải pháp.", report = true) },
             modifier = Modifier.fillMaxWidth()
         )
@@ -479,21 +576,22 @@ fun AiChatScreen(
                 )
             )
             Spacer(modifier = Modifier.width(8.dp))
+            val canSend = hasKey && !busy && !exhausted && draft.isNotBlank()
             IconButton(
                 onClick = { send(draft) },
-                enabled = hasKey && !busy && draft.isNotBlank(),
+                enabled = canSend,
                 modifier = Modifier
                     .height(48.dp)
                     .width(48.dp)
                     .background(
-                        color = if (hasKey && !busy && draft.isNotBlank()) Premium.primaryBright else SpaceCardBorder,
+                        color = if (canSend) Premium.primaryBright else SpaceCardBorder,
                         shape = RoundedCornerShape(16.dp)
                     )
                     .testTag("ai_send_button")
             ) {
                 Icon(
                     imageVector = Icons.AutoMirrored.Filled.Send,
-                    contentDescription = "Gửi câu hỏi",
+                    contentDescription = if (exhausted) "Hết lượt hỏi hôm nay" else "Gửi câu hỏi",
                     tint = TextPrimary
                 )
             }
