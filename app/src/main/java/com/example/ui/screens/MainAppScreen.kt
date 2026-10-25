@@ -237,6 +237,9 @@ fun MainAppScreen(
                                 packages, reminderOnly, allowedApps, minutes, windowCode
                             )
                         },
+                        onDeleteAccount = { viewModel.deleteAccount() },
+                        onPreviewAccountDeletion = { viewModel.previewAccountDeletion() },
+                        onResetAccountDeletion = { viewModel.resetAccountDeletionState() },
                     )
                 }
                 }

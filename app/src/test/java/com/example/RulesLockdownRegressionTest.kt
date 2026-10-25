@@ -1,5 +1,6 @@
 package com.example
 
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
@@ -22,6 +23,8 @@ import java.io.File
  *  3. Cong thuc id ghep noi trong Kotlin va trong rules khop nhau.
  *  4. Lenh Cam phai cat duong du lieu dinh vi, khong chi cat ho so.
  *  5. Ham phai duoc khai BAO TRUOC noi dung no (bai hoc commit 5cc4367).
+ *  6. (66.0) Lenh Cam phai co pham vi + tu duoc han; tu xoa tai khoan phai theo
+ *     DUNG THU TU, va khong ai xoa duoc vet di chuyen khi ho so con nguyen.
  */
 class RulesLockdownRegressionTest {
 
@@ -282,12 +285,193 @@ class RulesLockdownRegressionTest {
             .forEach { path ->
                 assertTrue("$path phai co notBanned()", block(path).contains("notBanned()"))
             }
-        assertTrue("/users van phai khong cho xoa (ban 55.0)",
-            block("/users/{userId}").contains("allow delete: if false;"))
+    }
+
+    // ── 4b. Lenh cam 66.0: co PHAM VI, co HAN, tu mo duoc ────────────────────
+
+    /**
+     * App quan tri co bon nut cam (7 ngay / 30 ngay / vinh vien / cam hoi AI),
+     * tat ca deu ghi mot document `bans/<uid>`. Toan bo ngu nghia nam trong hai
+     * truong `scope` va `expiresAt`, nen neu rules doc sai hai truong ay thi bon
+     * nut kia cho ra bon lenh giong het nhau. Hai loi that tung xuyen o day:
+     *  1. Quen `exists()` truoc khi `get()` → voi tai khoan CHUA bi cam, rules
+     *     ERROR va tu choi moi yeu cau cua chinh no (app bi xac dinh nhan).
+     *  2. Doc `banDoc().scope` khi document cu (63.0) khong co truong do → cung
+     *     la rules ERROR. Vi vay phai co `!('scope' in banDoc())` o dau.
+     */
+    @Test
+    fun lenhCamCoPhamViVaTuMoDungHan() {
+        val still = segment("function banStillRunning() {")
+        assertTrue("khong co expiresAt = vinh vien (dung nhu lenh cam ban cu)",
+            still.contains("!('expiresAt' in banDoc())"))
+        assertTrue("co expiresAt thi phai so voi request.time (thoi gian MAY CHU, " +
+            "khong dong ho may cua ngu bi cam)",
+            still.contains("banDoc().expiresAt > request.time"))
+
+        val forFn = segment("function isBannedFor(kind) {")
+        val exists = forFn.indexOf("exists(/databases/$(database)/documents/bans/$(request.auth.uid))")
+        val get = forFn.indexOf("banStillRunning()")
+        assertTrue("exists() phai di TRUOC banStillRunning() de tai khoan chua bi " +
+            "cam khong bi rules ERROR", exists in 0 until get)
+        assertTrue("scope 'ALL' phai cat ca app lan AI",
+            forFn.contains("banDoc().scope == 'ALL'"))
+        assertTrue("lenh cam cu khong co scope van phai la 'cam app'",
+            forFn.contains("!('scope' in banDoc())"))
+
+        assertTrue("notBanned() = cam dung app", segment("function notBanned() {").contains("isBannedFor('ALL')"))
+        assertTrue("notAiBanned() = chi cam hoi AI", segment("function notAiBanned() {").contains("isBannedFor('AI')"))
+    }
+
+    /**
+     * Lenh cam do quan tri ghi len phai tro DUNG nguoi (uid trong document = uid
+     * trong id), dung PHAM VI (chi 'ALL' hoac 'AI' — mot typo nhu 'all' se khien
+     * lenh cam vo hoc ma khong bao), va han phai O TUONG LAI. Ly do khong chan
+     * `expiresAt` qua khus: `isBannedFor()` doc truong nay, nen mot lenh cam da
+     * het han duoc ghi len se mo nguoc (con document, khong ai hieu sao no mo).
+     */
+    @Test
+    fun banGhiLenPhaiTroDungNguoiDungPhamViDungTuongLai() {
+        val w = segment("function banWriteIsValid(targetUid) {")
+        listOf(
+            "request.resource.data.uid == targetUid" to "phải trỏ đúng người bị cấm",
+            "request.resource.data.scope in ['ALL', 'AI']" to "phải chặn typo scope",
+            "request.resource.data.expiresAt > request.time" to "hạn cấm phải ở tương lai (server time)",
+            "request.resource.data.expiresAt is timestamp" to "expiresAt phải là timestamp"
+        ).forEach { (needle, why) ->
+            assertTrue("banWriteIsValid $why (thiếu: $needle)", w.contains(needle))
+        }
+
+        val bans = block("/bans/{uid}")
+        assertTrue("chi quan tri duoc ghi/xoa lenh cam",
+            bans.contains("allow create, update: if isAdmin() && banWriteIsValid(uid);") &&
+                bans.contains("allow delete: if isAdmin();"))
+        assertTrue("lenh cam cua ai thi nguoi ay doc duoc (de app in ly do ra man hinh)",
+            bans.contains("isAuthenticated() && request.auth.uid == uid"))
+        assertTrue("khong duoc liet ke toan bo nguoi bi cam cho bat ky tai khoan nao",
+            !bans.contains("allow read: if isAuthenticated();"))
+    }
+
+    /**
+     * "Cam hoi AI" trong app quan tri chi co THE cat duong ghi bo dem luu tren
+     * /users — cau goi AI that di thang len nha cung cap. Test nay giu dung cai
+     * that do: dung mot dieu kien `notAiBanned()` tran lang se chan luon ca
+     * cap nhat ten/lop cua mot tai khoan bi cam AI, con thieu no thi lenh cam
+     * AI chi la chu.
+     */
+    @Test
+    fun camAIchiCatDuongGhiBoDemKhongCatHoSo() {
+        val users = block("/users/{userId}")
+        val upd = statementIn(users, "update")
+        assertTrue("update /users phai biet den lenh cam AI", upd.contains("notAiBanned()"))
+        assertTrue("lenh cam AI chi cat khi cham vao bo dem", upd.contains("!aiQuotaTouched()"))
+        assertTrue("so sanh bo dem phai dung diff() vi set(merge) tra ve ca document",
+            segment("function aiQuotaTouched() {").contains(".diff(resource.data).affectedKeys()"))
+        // Cam AI khong duoc cham vao doc/tao/da ho so.
+        assertTrue("read /users khong duoc dung notAiBanned",
+            !statementIn(users, "read").contains("notAiBanned"))
+        assertTrue("delete /users khong duoc dung notAiBanned (nguoi bi cam AI van phai " +
+            "tu rut duoc du lieu theo chinh sach quyen rieng)",
+            !statementIn(users, "delete").contains("notAiBanned"))
+    }
+
+    // ── 4c. Tu xoa tai khoan 66.0: thu tu bi rang buoc bang rules ─────────────
+
+    /**
+     * Nut "Xóa tài khoản" dan mot chuong trinh don du lieu, va moi buoc don deu
+     * la mot lenh delete bi rules chan neu no den SOM HOAC MUON. Dieu kien
+     * `accountIsBeingDeleted` phan biet "don tai khoan" voi "xoa don duong di de
+     * an duong": mot may con nguyen ho so thi khong duoc xoa vi tri cua no.
+     * Dao nguoc cung vay — xoa ho so roi ma chua don vet thi vet con lai nam
+     * duoi ten mot nguoi khong con ton tai, nen app phai don het theo dung thu
+     * tu (users/<uid> TRUOC).
+     */
+    @Test
+    fun tuXoaTaiKhoanBiRangBuocBangThuTu() {
+        val fn = segment("function accountIsBeingDeleted(userId) {")
+        assertTrue("phai la chinh chu (hoac dieu kien se mo lenh xoa cho ca the gioi)",
+            fn.contains("isOwner(userId)"))
+        assertTrue("dieu kien la HO SO KHONG CON ton tai, khong phai con ton tai",
+            fn.contains("!exists(/databases/$(database)/documents/users/$(userId))"))
+
+        val users = block("/users/{userId}")
+        assertTrue("/users: chu tai khoan tu xoa duoc khi chua bi cam, hoac quan tri xoa",
+            users.contains("allow delete: if (isOwner(userId) && notBanned()) || isAdmin();"))
+
+        val loc = statementIn(block("/locations/{userId}"), "delete")
+        assertTrue("locations: chi don khi ho so da mat hoac quan tri ra tay",
+            loc.contains("accountIsBeingDeleted(userId)"))
+        assertTrue("locations: KHONG duoc mo lenh xoa cho chu may khi ho so con " +
+            "ton tai (hoc sinh xoa vet de an duong di)",
+            !loc.contains("request.auth.uid == userId"))
+
+        assertTrue("location_history: vet cua ai thi theo do",
+            statementIn(block("/location_history/{historyId}"), "delete")
+                .contains("accountIsBeingDeleted(resource.data.userId)"))
+        assertTrue("sos_alerts: phieu SOS cung bi don theo tai khoan",
+            statementIn(block("/sos_alerts/{alertId}"), "delete")
+                .contains("accountIsBeingDeleted(resource.data.userId)"))
+        assertTrue("sos_alerts: phieu da lap van khong ai sua duoc",
+            block("/sos_alerts/{alertId}").contains("allow update: if false;"))
+
+        val audit = blockUnderPairing("/rule_audit/{entryId}")
+        assertTrue("nhat ky noi quy van khong SUA duoc",
+            statementIn(audit, "update").contains("if false"))
+        assertTrue("nhat ky chi XOA duoc khi quan tri don hoac tai khoan dang bi don",
+            audit.contains("isAdmin() ||") &&
+                audit.contains("accountIsBeingDeleted(request.auth.uid)"))
+        assertTrue("pairings: quan tri don duoc document ghep noi (tai khoan thu nghiem)",
+            statementIn(block("/pairings/{pairingId}"), "delete").contains("isAdmin()"))
+    }
+
+    /** Lay than cua mot subcollection nam DUOI `pairings/{pairingId}` (nho 6 dau cach). */
+    private fun blockUnderPairing(path: String): String =
+        segment("\n      match $path {", "\n      }")
+
+    /** Mot cau `allow <kung>: ...;` duy nhat trong doan, khong ke comment. */
+    private fun statementIn(text: String, keyword: String): String =
+        text.substringAfter("allow $keyword").substringBefore(";")
+
+    /**
+     * Nut "Xóa tài khoản" phia `:admin` chi chay duoc neu quan tri LIET KE duoc
+     * document cua nguoi bi don: Firestore khong co lenh xoa theo truong, khong
+     * tu xoa subcollection, va client khong co Admin SDK. Ban 66.0 vi the mo
+     * `isAdmin()` vao duong DOC o ba collection ngon + sau subcollection duoi
+     * ghep noi. Test nay giu hai thu:
+     *  1. Duong do VANG that — thieu mot cho la mot nhom du lieu khong ai xoa
+     *     duoc, va bien nhan "da xoa N muc" luon luon sai.
+     *  2. `isAdmin()` nam ben NGOAI va TRUOC `notBanned()` — lenh cam khong duoc
+     *     chen vao duong quan tri don rac, va dat dau tien tranh loi `get()` tren
+     *     document da bi xoa.
+     */
+    @Test
+    fun quanTriLietKeDuocDeDonTaiKhoan() {
+        listOf("/locations/{userId}", "/location_history/{historyId}", "/sos_alerts/{alertId}")
+            .forEach { path ->
+                val read = statementIn(block(path), "read")
+                assertTrue("$path: read phai mo cho quan tri", read.contains("isAdmin() ||"))
+                assertTrue("$path: isAdmin() phai di TRUOC notBanned()",
+                    read.indexOf("isAdmin()") < read.indexOf("notBanned()"))
+            }
+        val calls = block("/calls/{callId}")
+        assertEquals(
+            "calls: ca document cha lan subcollection deu phai cho quan tri don " +
+                "(neu khong thi bien nhan xoa thieu mot nhom khong lay lai duoc)",
+            2,
+            Regex("allow read, write: if isAdmin\\(\\) \\|\\|").findAll(calls).count()
+        )
+        listOf(
+            "/schedules/{scheduleId}", "/agreements/{agreementId}", "/extra_time/{requestId}",
+            "/privacy_requests/{requestId}", "/messages/{messageId}", "/location_history/{historyId}"
+        ).forEach { sub ->
+            assertTrue("pairings$sub: phai la thanh vien hoac quan tri",
+                blockUnderPairing(sub).contains(
+                    "allow read, write: if isPairMember(pairingId) || isAdmin();"
+                )
+            )
+        }
     }
 
     // ── 5. Thu tu khai bao ham ───────────────────────────────────────────────
-
     /**
      * Firestore khai ham theo thu tu: de mot ham dung ham chua khai bao la ly
      * do rules tu choi deploy luc minh khong mong (commit 5cc4367).

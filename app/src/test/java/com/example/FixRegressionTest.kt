@@ -198,18 +198,69 @@ class FixRegressionTest {
     }
 
     /**
-     * `firestore.rules` chan `allow delete: if false` cho /users/{uid}, nen
-     * nut "xóa tài khoản" khong the xoa gi. Noi such la noi tran; nay phai noi
-     * dung viec xay ra (dang xuat) + huong dan thu tuc con lai.
+     * (đổi chiều ở bản 66.0) Từ bản 55.0 `firestore.rules` chặn
+     * `allow delete: if false`, nên nút "xóa tài khoản" chỉ đăng xuất và test
+     * bắt màn hình phải tự nhận là "KHÔNG xóa hồ sơ". Bản 66.0 mở quyền tự xóa
+     * cho CHÍNH CHỦ nên câu đó giờ mới là câu sai — giữ lại là đánh lừa người
+     * dùng theo chiều ngược.
+     *
+     * Cái vẫn ngoài tầm một client: tài khoản trong Firebase Authentication
+     * (email + mật khẩu) — client không có Admin SDK. Vì vậy màn hình phải nói
+     * rõ "đăng nhập của bạn vẫn còn", và nút bấm phải hứa đúng phạm vi nó làm
+     * được ("Xóa dữ liệu trên máy chủ", không phải "xóa tài khoản Google").
      */
     @Test
     fun settings_accountActionDoesNotOverclaim() {
         val src = projectFile("src/main/java/com/example/ui/screens/SettingsScreen.kt").readText()
         assertTrue(
-            "Không được hứa xóa vĩnh viễn khi nút chỉ đăng xuất",
+            "Không được hứa xóa tài khoản Google — chỉ xóa được dữ liệu trong app",
+            !Regex("x[óo]a\\s+(hẳn|vĩnh viễn|toàn bộ|luôn)?\\s*tài khoản Google", RegexOption.IGNORE_CASE)
+                .containsMatchIn(src)
+        )
+        assertTrue(
+            "Lời hứa cũ (nút không xóa gì trên máy chủ) đã sai từ bản 66.0",
+            !src.contains("KHÔNG xóa hồ sơ")
+        )
+        assertTrue("Phải nói thẳng đăng nhập Google vẫn còn sau khi xóa", src.contains("ĐĂNG NHẬP CỦA BẠN VẪN CÒN"))
+        assertTrue("Phải nói vì sao không xóa được đăng nhập", src.contains("Firebase Authentication"))
+        assertTrue(
+            "Nút xác nhận phải hứa đúng phạm vi: dữ liệu trên máy chủ",
+            src.contains("Xóa dữ liệu trên máy chủ")
+        )
+        // Quy tắc cũ vẫn còn giá trị: đừng hứa hẹn "chính sách quyền riêng tư"
+        // mà app không có.
+        assertTrue(
+            "Không được hứa xóa vĩnh viễn theo chính sách quyền riêng tư",
             !src.contains("xóa vĩnh viễn theo chính sách quyền riêng tư")
         )
-        assertTrue("Phải nói rõ nút không xóa dữ liệu máy chủ", src.contains("KHÔNG xóa hồ sơ"))
+    }
+
+    /**
+     * Nut "Xóa tài khoản" phai la mot chuong trinh don THAT, va thu tu cua no bi
+     * rules rang buoc: `accountIsBeingDeleted` chi cho don vi tri / vet di chuyen
+     * / phieu SOS / nhat ky noi quy khi `users/<uid>` KHONG CON. Dao thu tu thi
+     * toan bo cac lenh sau bi 403, va nguoi dung nhan duoc bien nhan "da xoa"
+     * trong khi GPS cua ho van nam tren may chu.
+     */
+    @Test
+    fun xoaTaiKhoanDonDuLieuTheoDungThuTu() {
+        val repo = projectFile("src/main/java/com/example/data/repository/VesperaRepository.kt").readText()
+        val wipe = repo.substringAfter("suspend fun deleteAccount(")
+        assertTrue("Phải có lệnh xóa hồ sơ", wipe.contains("db.collection(\"users\").document(userId).delete()"))
+        assertTrue(
+            "Hồ sơ phải bị xóa TRƯỚC các dữ liệu khác (rules: accountIsBeingDeleted)",
+            wipe.indexOf("collection(\"users\")") < wipe.indexOf("inventory.locationDocs")
+        )
+        assertTrue("Phải đếm số mục xóa được để in biên nhận", repo.contains("data class WipeOutcome"))
+        assertTrue(
+            "Không được xóa ghép nối trước subcollection: isPairMember cần document đó còn nguyên",
+            wipe.indexOf("inventory.pairingChildDocs") < wipe.indexOf("inventory.pairingDocs")
+        )
+        val settings = projectFile("src/main/java/com/example/ui/screens/SettingsScreen.kt").readText()
+        assertTrue("Màn Cài đặt phải gọi thẳng lệnh xóa", settings.contains("onClick = onDeleteAccount"))
+        val shell = projectFile("src/main/java/com/example/ui/screens/MainAppScreen.kt").readText()
+        assertTrue("ViewModel phải được nối vào nút xóa", shell.contains("viewModel.deleteAccount()"))
+        assertTrue("Phải đếm trước khi mở hộp thoại", shell.contains("viewModel.previewAccountDeletion()"))
     }
 
     /**

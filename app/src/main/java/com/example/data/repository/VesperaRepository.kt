@@ -19,6 +19,7 @@ import com.example.service.blocker.ConsentPolicy
 import com.example.data.model.UserProfile
 import com.example.data.model.UserRole
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.firestore.DocumentReference
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
 import com.google.firebase.firestore.SetOptions
@@ -196,6 +197,159 @@ class VesperaRepository(private val db: FirebaseFirestore, private val auth: Fir
             "activePairingId", "",
             "pairedWith", ""
         ).await()
+    }
+
+    // ── TỰ XÓA TÀI KHOẢN (bản 66.0) ─────────────────────────────────────────
+    //
+    // `firestore.rules` từng chặn `allow delete: if false` ở /users vì sợ người
+    // dùng bấm nhầm. Bản 66.0 mở đường đó cho CHÍNH CHỦ, và Nut "Xóa tài khoản"
+    // phải giao đủ thứ mà nó hứa — nếu chỉ xóa `users/<uid>` thì GPS, vết di
+    // chuyển, phiếu SOS và nhật ký nội quy vẫn nằm lại trên máy chủ dưới tên
+    // một người không còn hồ sơ.
+    //
+    // THỨ TỰ Ở ĐÂY KHÔNG PHẢI TÙY CHỌN: rules chỉ cho xóa locations /
+    // location_history / sos_alerts / rule_audit khi document `users/<uid>`
+    // ĐÃ KHÔNG CÒN (`accountIsBeingDeleted`). Xóa ngược lại thì mọi lệnh sau
+    // đều 403. Vì vậy `users/<uid>` luôn là phát đạn đầu tiên.
+
+    /** Những gì một tài khoản đang giữ trên máy chủ, đếm được trước khi xóa. */
+    data class AccountInventory(
+        val userId: String,
+        val locationDocs: List<DocumentReference> = emptyList(),
+        val historyDocs: List<DocumentReference> = emptyList(),
+        val sosDocs: List<DocumentReference> = emptyList(),
+        val callDocs: List<DocumentReference> = emptyList(),
+        val pairingDocs: List<DocumentReference> = emptyList(),
+        val pairingChildDocs: List<DocumentReference> = emptyList(),
+    ) {
+        /** Tổng số document ngoài hồ sơ — con số app in ra để người dùng biết thật. */
+        val total: Int
+            get() = locationDocs.size + historyDocs.size + sosDocs.size + callDocs.size +
+                pairingDocs.size + pairingChildDocs.size
+    }
+
+    /** @param deleted số document đã xóa, @param failed nhãn nhóm KHÔNG xóa được. */
+    data class WipeOutcome(val deleted: Int, val failed: List<String>)
+
+    /**
+     * Liệt kê toàn bộ document thuộc về [userId]. Chạy TRƯỚC khi xóa hồ sơ, vì
+     * hết hồ sơ thì máy khác (và cả rules) mất luôn mốc để đoán tài liệu nào là
+     * của ai. Mot query KHONG duoc lam loi toan bo luong: tai khoan chua bao gio
+     * dung tinh nao (chua co `locations`, chua lap phieu SOS nao) thi read bi
+     * tu choi la chuyen thuong, con cac thu khac van phai don duoc.
+     */
+    suspend fun inventoryForDeletion(userId: String): AccountInventory {
+        if (userId.isEmpty()) return AccountInventory(userId)
+
+        suspend fun refs(build: suspend () -> List<DocumentReference>, why: String) =
+            runCatching { build() }.getOrElse {
+                Log.w(TAG, "inventoryForDeletion: $why", it)
+                emptyList()
+            }
+
+        val locationDocs = listOf(db.collection("locations").document(userId))
+        val historyDocs = refs(
+            { db.collection("location_history").whereEqualTo("userId", userId).get().await()
+                .documents.map { it.reference } },
+            "location_history"
+        )
+        val sosDocs = refs(
+            { db.collection("sos_alerts").whereEqualTo("userId", userId).get().await()
+                .documents.map { it.reference } },
+            "sos_alerts"
+        )
+
+        // Ghép nối: máy này có thể là parentId hoặc childId. Firestore không có
+        // query OR nên phải chạy hai lần rồi tự loại trùng.
+        val pairingDocs = mutableListOf<DocumentReference>()
+        for (field in listOf("parentId", "childId")) {
+            refs(
+                { db.collection("pairings").whereEqualTo(field, userId).get().await()
+                    .documents.map { it.reference } },
+                "pairings.$field"
+            ).forEach { if (it !in pairingDocs) pairingDocs.add(it) }
+        }
+
+        // Subcollection của từng ghép nối. `rule_audit` chỉ xóa được khi hồ sơ
+        // đã mất (accountIsBeingDeleted trong rules) — thu vao nay va thu tu
+        // xoa o `deleteAccount` bao dam dieu do.
+        val childDocs = mutableListOf<DocumentReference>()
+        for (pairRef in pairingDocs) {
+            for (sub in listOf(
+                "schedules", "rule_audit", "agreements", "extra_time",
+                "privacy_requests", "messages", "location_history"
+            )) {
+                childDocs.addAll(
+                    refs(
+                        { pairRef.collection(sub).get().await().documents.map { it.reference } },
+                        "${pairRef.id}/$sub"
+                    )
+                )
+            }
+        }
+
+        // `calls/<pairingId>` la tin hieu WebRTC cua ghep noi, `calls/room_<uid>`
+        // la phong rieng khi chua ghep noi. Khong doc duoc danh sach nay sau khi
+        // document ghep noi bi xoa, nen lay id tu danh sach da liet ke.
+        val callDocs = (pairingDocs.map { db.collection("calls").document(it.id) } +
+            db.collection("calls").document("room_$userId")).distinct()
+
+        return AccountInventory(
+            userId = userId,
+            locationDocs = locationDocs,
+            historyDocs = historyDocs,
+            sosDocs = sosDocs,
+            callDocs = callDocs,
+            pairingDocs = pairingDocs,
+            pairingChildDocs = childDocs,
+        )
+    }
+
+    /**
+     * Xóa sạch dấu vết của một tài khoản trên máy chủ. Trả về số document thực
+     * xóa được và danh sách chỗ thất bại — app phải nói đủ hai con số đó, không
+     * được hứa "đã xóa toàn bộ" khi một nửa still bị rules chặn.
+     *
+     * Không có transaction: lệnh xóa chỉ chạy được theo đúng THỨ TỰ (hồ sơ
+     * trước, phần còn lại sau) và Firestore transaction không cho phép đọc lại
+     * rules ở giữa. Mỗi phát là một lệnh độc lập, lỗi ở bước sau không hoàn tác
+     * bước trước — đó chính là lý do app phải giữ lại biên nhận để in ra.
+     */
+    suspend fun deleteAccount(userId: String, inventory: AccountInventory): WipeOutcome {
+        if (userId.isEmpty()) return WipeOutcome(0, listOf("máy này chưa đăng nhập"))
+        var done = 0
+        val failed = mutableListOf<String>()
+
+        // BUOC 1 — ho so. That bai (thuong la tai khoan dang bi cam) thi dung
+        // lai: phia sau chac chan bi rules chan vi ho so van con.
+        try {
+            db.collection("users").document(userId).delete().await()
+            done++
+        } catch (e: Exception) {
+            Log.w(TAG, "deleteAccount: khong xoa duoc ho so", e)
+            return WipeOutcome(0, listOf("Hồ sơ trên máy chủ vẫn còn (bị chặn hoặc mất mạng)"))
+        }
+
+        val batches = listOf(
+            "vị trí" to inventory.locationDocs,
+            "lịch sử vị trí" to inventory.historyDocs,
+            "phiếu SOS" to inventory.sosDocs,
+            "tin hiệu cuộc gọi" to inventory.callDocs,
+            "nội quy & nhật ký ghép nối" to inventory.pairingChildDocs,
+            "ghép nối" to inventory.pairingDocs,
+        )
+        for ((label, refs) in batches) {
+            for (ref in refs) {
+                try {
+                    ref.delete().await()
+                    done++
+                } catch (e: Exception) {
+                    Log.w(TAG, "deleteAccount: bo qua ${ref.path}", e)
+                    if (label !in failed) failed.add(label)
+                }
+            }
+        }
+        return WipeOutcome(done, failed)
     }
 
     /**

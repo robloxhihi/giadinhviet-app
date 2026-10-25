@@ -2,10 +2,12 @@ rules_version = '2';
 // TRANG THAI FILE NAY (doc ky truoc khi deploy):
 //
 // Da khat: noi quy (`pairings/{id}/schedules`), nhat ky noi quy
-// (`pairings/{id}/rule_audit` — chi them, khong sua/xoa), va cac thu
-// collection con lai nam DUOI document ghep noi (agreements, extra_time,
-// privacy_requests, messages, location_history) — chi me/con cua cap do
-// doc/ghi duoc.
+// (`pairings/{id}/rule_audit` — chi them, khong sua; xoa duoc khi quan tri don
+// hoac khi tai khoan dang bi don), va cac thu collection con lai nam DUOI
+// document ghep noi (agreements, extra_time, privacy_requests, messages,
+// location_history) — chi me/con cua cap do doc/ghi duoc, cong them quan tri
+// (66.0: quan tri muon don tai khoan thi phai liet ke duoc nhung thu do; Firestore
+// khong tu xoa subcollection cua mot document).
 //
 // Ban 65.0 khat them 5 khe o ngon tung de nguyen ("bat ky tai khoan nao
 // duoc" = GPS ca nha, phieu SOS va tin hieu cuoc goi nam trong tay bat ky
@@ -21,6 +23,32 @@ rules_version = '2';
 //                       tao = phai LA cha cua cap do (moi tai khoan tao ghep
 //                       noi deu dung o vai phu huynh trong pairDirectly)
 //   /pairing_requests : VÔ SINH (ban 59.0 bo PIN), den hoan toan
+//
+// BAN 66.0 — bon thay doi ve CHINH SACH, khong phai ve lop ke:
+//   1. LENH CAM co PHAM VI va co HAN. `bans/<uid>` them `scope` ('ALL' = cam
+//      dung app nhu cu, 'AI' = chi cat duong ghi bo dem hoi AI) va `expiresAt`
+//      (co = tu mo sau 7/30 ngay, khong co = vinh vien den khi quan tri bam
+//      "Bỏ cấm"). Lenh cam cua ban cu (63.0, chi uid + reason) van hieu la
+//      "cam app, vinh vien" — moi dieu kien deu dung `in` kiem truong truoc.
+//   2. TU XOA TAI KHOAN. `allow delete` o /users tung la `if false` (ban 55.0)
+//      vi lo con nham. Nay mo cho CHU tai khoan (khi khong bi cam) va QUAN TRI.
+//      App dan bang nut "Xóa tài khoản": xoa users/<uid> TRUOC, roi moi don
+//      locations, vet di chuyen, phieu SOS, nhat ky + thu collection cua ghep
+//      noi. Rules phan biet dong do voi "xoa don duong di de an duong" bang
+//      accountIsBeingDeleted(): vi tri chi xoa duoc khi ho so KHONG CON, nen
+//      mot may con nguyen ho so khong the xoa het vet cua no.
+//      Trần khong vuot duoc o day: client khong co Admin SDK nen KHONG the
+//      xoa tai khoan trong Authentication (email + mat khau). App phai noi
+//      thang dieu do, dung la dua them nut "xoa" o nhung cho khong xoa duoc.
+//   3. CAM AI chi cat duong bo dem tren /users, khong cat noi dung cu goi —
+//      cau hoi AI di thang tu may len nha cung cap bang khoa trong APK.
+//   4. QUAN TRI DUOC DOC LIET KE Moi collection cua nguoi dung (/locations,
+//      /location_history, /sos_alerts va sau subcollection duoi /pairings).
+//      Day la thay doi CO Y, khong phai su li xi: "xóa tài khoản" phia quan tri
+//      phai biet duoc document id thi moi xoa duoc cai do — Firestore khong co
+//      lenh xoa theo truong, khong tu xoa subcollection, va app khong co Admin
+//      SDK. Nguoi co quyen nay la hai uid trong ham isAdmin() duoi day (cung la
+//      allowlist trong `:admin`), tuc quyen quan tri = quyen doc ca nuoc.
 //
 // Vi SAO "co document ghep noi" CHUA DU: document ghep noi do client tu ghi,
 // nen ke xau tu tao `pair_<minh>_<nan nhan>` voi status 'PAIRED' la duoc pairOfTwo
@@ -75,11 +103,64 @@ service cloud.firestore {
         ["YU2BwDqvahSh1hUWx9NRAdOwvG33", "cSzzRXZzaVR83q2gQTnskhIxkzw2"];
     }
 
+    // LENH CAM — ban 66.0: cam co PHAM VI va co THOI HAN.
+    //
+    // Document `bans/<uid>` la lenh cam duoc ghi boi quan tri (create/update/
+    // delete chi isAdmin). Bon truong:
+    //   scope     'ALL' = cam dung app (nhu cu), 'AI' = chi cam hoi tro ly AI
+    //   expiresAt timestamp mo = tu mo sau han; KHONG co truong = vinh vien
+    //                   den khi quan tri bam "Bỏ cấm"
+    //   reason / bannedBy / bannedAt de in ra tren app khi bi cam
+    //
+    // Legacy (ban 63.0 ghi len chi co uid + reason): khong scope, khong
+    // expiresAt => van hieu la "cam dung app, vinh vien" dung nhu cu. Vi vay
+    // moi dieu kien o day deu phai dung `in` kiem truong truoc khi doc — doc
+    // truong khong co tren document la rules ERROR, ma rules ERROR thi tu choi
+    // TOAN BO yeu cau, ke ca yeu cau cua nguoi khong lien quan.
+    function banDoc() {
+      return get(/databases/$(database)/documents/bans/$(request.auth.uid)).data;
+    }
+
+    // Se khong duoc goi khi document chua ton tai: rules khong "truyen ngan"
+    // qua ten tai mot document khong co, nen exists() phai nam o ben goi.
+    function banStillRunning() {
+      return !('expiresAt' in banDoc()) || banDoc().expiresAt > request.time;
+    }
+
+    // 'ALL' cat mot luc ca app lan AI; 'AI' chi cat AI.
+    function isBannedFor(kind) {
+      return exists(/databases/$(database)/documents/bans/$(request.auth.uid)) &&
+        banStillRunning() &&
+        (!('scope' in banDoc()) || banDoc().scope == 'ALL' || banDoc().scope == kind);
+    }
+
     // Tai khoan bi cam thi khong duoc doc/ghi ho so cua chinh no. Day la noi
     // lenh "Cam" trong app quan tri TRUOC tien thanh hieu luc — khong phai chi
     // la mot dong ghi chu trong /bans.
     function notBanned() {
-      return !exists(/databases/$(database)/documents/bans/$(request.auth.uid));
+      return !isBannedFor('ALL');
+    }
+
+    // "Cam hoi AI" trong app quan tri: cat duong ghi bo dem len /users, de
+    // so lieu hom nay khong con la cho client tu cat guc duoc. KHONG the cat
+    // duoc Goi AI that su tu day — cau hoi di thang tu may len nha cung cap
+    // bang khoa nam trong APK (task #45 mới chan tan goc duoc).
+    function notAiBanned() {
+      return !isBannedFor('AI');
+    }
+
+    // "Tai khoan dang bi xoa" = chinh chu da XA document users/<uid> cua minh
+    // roi, va dang don cac document con lai. Day la cach duy nhat de rules phan
+    // biet mot lenh "xoa vi tri" nam trong dong bo chay bang nut "Xóa tài
+    // khoản" voi lenh xoa rieng mot dung luong de an duong di — truong hop sau
+    // van bi chan ngat o /locations khi ho so con ton tai.
+    //
+    // Thu tu DUY NHAT app duoc phep chay: users/<uid> truoc, roi toi locations
+    // va vet di chuyen. Dao nguoc thi lenh xoa bi tu choi va app phai noi ro
+    // dieu do.
+    function accountIsBeingDeleted(userId) {
+      return isOwner(userId) &&
+        !exists(/databases/$(database)/documents/users/$(userId));
     }
 
     // CO GAP NOI THAT HAY CHUA — doi chieu HAI UID tren document ghep noi,
@@ -158,31 +239,75 @@ service cloud.firestore {
 
     function aiQuotaNotShrunk() {
       return !('aiUsageToday' in request.resource.data) ||
+        !('aiUsageDay' in resource.data) ||
+        !('aiUsageToday' in resource.data) ||
         resource.data.aiUsageDay != request.resource.data.aiUsageDay ||
         resource.data.aiUsageToday <= request.resource.data.aiUsageToday;
+    }
+
+    // "Lang phi nay co cham vao bo dem AI khong?" — dung de lenh "cam hoi AI"
+    // trong app quan tri chi cat duong ghi bo dem, khong cat luon duong cap
+    // nhat ho so (ten, lop, anh dai dien) cua mot tai khoan dang bi cam AI.
+    // So sanh bang diff() vi `set(merge)` tra ve DOCUMENT SAU KHI HOP NHAT,
+    // nen nhin tran lang se thay "ca document" va doai sai.
+    // `resource` chi ton tai trong update/create nen ham nay chi dung o update.
+    function aiQuotaTouched() {
+      return request.resource.data.diff(resource.data).affectedKeys()
+        .hasAny(['aiUsageToday', 'aiUsageDay']);
     }
 
     // User profiles
     match /users/{userId} {
       // notBanned(): tai khoan bi cam trong app quan tri mat het duong doc/ghi
       // ho so — day la phan "lenh cam tro thanh hieu luc".
+      //
+      // allow delete (doi tu `if false` o ban 55.0): chu TAI KHOAN duoc tu xoa
+      // ho so cua minh — do la quyen rieng tu ma app phai thua theo, va nut
+      // "Xóa tài khoản" trong app dan nguoi dung toi mot lenh that. Nguoi dung
+      // KHONG xoa duoc khi dang bi cam (phai hoac mo cam, hoac quan tri xoa).
+      // QUAN TRI xoa duoc ho so cua bat ky ai, day la duong de don tai khoan
+      // thu nghiem ma khong can mo bang dieu khi Firebase.
+      //
+      // Trần không vượt được ở đây: rules khong cat duoc tai khoan trong
+      // Authentication (email + mat khau), vi client khong co Admin SDK. Xoa
+      // het document roi thi dang nhap lai van con, va mo app se tao document
+      // moi — app phai noi dieu nay thang ra tren man hinh.
       allow read: if isAuthenticated() && notBanned();
       allow create: if isOwner(userId) && notBanned() && aiQuotaFieldsValid();
       allow update: if isOwner(userId) && notBanned() &&
-        aiQuotaFieldsValid() && aiQuotaNotShrunk();
-      allow delete: if false;
+        aiQuotaFieldsValid() && aiQuotaNotShrunk() &&
+        (notAiBanned() || !aiQuotaTouched());
+      allow delete: if (isOwner(userId) && notBanned()) || isAdmin();
     }
 
     // /bans/{uid} — lenh cam theo uid. Day la con duong DUY NHAT co that:
     // Firestore rules khong co bien IP, va dien thoai di dong doi IP lien tuc
     // qua CGNAT nen "chan IP" vua khong lam duoc vua khong co nghia.
+    // Mot lenh Cam ghi len phai tro dung nguoi, dung pham vi, va neu co han
+    // thi han phai o TUONG LAI. Ly do khong chan `expiresAt` qua khus: document
+    // `bans/<uid>` ton tai = lenh cam con hieu luc theo ban 63.0, ma
+    // `isBannedFor()` o tren doc truong nay — mot lenh cam da het han duoc ghi
+    // len se KHONG bi mo tu dong ma bi "vinh vien nguoc" (con document ma
+    // khong ai nhin ra vi sao no mo). App phai xoa document khi mo cam.
+    function banWriteIsValid(targetUid) {
+      return isAuthenticated() &&
+        request.resource.data.uid == targetUid &&
+        request.resource.data.scope in ['ALL', 'AI'] &&
+        (!('expiresAt' in request.resource.data) ||
+          (request.resource.data.expiresAt is timestamp &&
+            request.resource.data.expiresAt > request.time)) &&
+        (!('reason' in request.resource.data) ||
+          request.resource.data.reason is string);
+    }
+
     match /bans/{uid} {
       // Doc: chi chinh chu tai khoan (de app cua no biet minh bi cam va in
       // ly do ra man hinh) hoac quan tri (danh sach nguoi bi cam). Truoc day
       // `isAuthenticated()` nghia la bat ky ai cung liet ke duoc ai dang bi
       // cam trong he thong.
       allow read: if isAdmin() || (isAuthenticated() && request.auth.uid == uid);
-      allow create, update, delete: if isAdmin();
+      allow create, update: if isAdmin() && banWriteIsValid(uid);
+      allow delete: if isAdmin();
     }
 
     // Pairings
@@ -211,40 +336,56 @@ service cloud.firestore {
         resource.data.parentId == request.auth.uid ||
         resource.data.childId == request.auth.uid
       );
-      allow delete: if isPairMember(pairingId);
+      allow delete: if isPairMember(pairingId) || isAdmin();
+
+      // Bay (7) block ben duoi (schedules / rule_audit / agreements / extra_time /
+      // privacy_requests / messages / location_history) deu co `|| isAdmin()`,
+      // boi nut "Xóa tài khoản" phia quan tri (ban 66.0) khong chi xoa document
+      // ghep noi — Firestore KHONG tu xoa subcollection cua no, va muon don
+      // tung thu thi quan tri phai doc duoc danh sach. Quyen do rong, nen hay
+      // xem no nhu quyen cua chu project: ADMIN_UIDS va ham isAdmin() o phia
+      // tren la noi duy nhat cap quyen nay, khong phai client.
 
       // NOI QUY GIA DINH. Hai ben deu ghi duoc vi co che me-con-dong-long
       // cho phep ca hai ben goi de xuat; quyen "tu duyet phieu cua minh" la
       // quy tac UI, kiem tra o ConsentPolicy.kt (chua phai o day).
       match /schedules/{scheduleId} {
-        allow read, write: if isPairMember(pairingId);
+        allow read, write: if isPairMember(pairingId) || isAdmin();
       }
 
-      // Nhat ky noi quy: chi them, khong sua, khong xoa — de khong ai xoa
-      // duoc vet cua viec minh da doi luat.
+      // Nhat ky noi quy: KHONG sua duoc — sua la gia mau, ma nhat ky la thu
+      // de ngai "me doi luat vao luc nao". Xoa thi chi duoc trong HAI truong
+      // hop: quan tri don tai khoan, hoac chinh chu dang bi don (nut "Xóa tài
+      // khoản": ho so users/<uid> da mat ma document ghep noi con nguyen).
+      // Muon xoa duoc nhat ky thi app phai don subcollection TRUOC khi xoa
+      // document ghep noi — isPairMember() get() tren document do, document
+      // mat roi thi lenh xoa bi tu choi (dung y: khong de lai vet ma khong ai
+      // don duoc nua).
       match /rule_audit/{entryId} {
         allow read, create: if isPairMember(pairingId);
-        allow update, delete: if false;
+        allow update: if false;
+        allow delete: if isAdmin() ||
+          (isPairMember(pairingId) && accountIsBeingDeleted(request.auth.uid));
       }
 
       match /agreements/{agreementId} {
-        allow read, write: if isPairMember(pairingId);
+        allow read, write: if isPairMember(pairingId) || isAdmin();
       }
 
       match /extra_time/{requestId} {
-        allow read, write: if isPairMember(pairingId);
+        allow read, write: if isPairMember(pairingId) || isAdmin();
       }
 
       match /privacy_requests/{requestId} {
-        allow read, write: if isPairMember(pairingId);
+        allow read, write: if isPairMember(pairingId) || isAdmin();
       }
 
       match /messages/{messageId} {
-        allow read, write: if isPairMember(pairingId);
+        allow read, write: if isPairMember(pairingId) || isAdmin();
       }
 
       match /location_history/{historyId} {
-        allow read, write: if isPairMember(pairingId);
+        allow read, write: if isPairMember(pairingId) || isAdmin();
       }
     }
 
@@ -269,10 +410,16 @@ service cloud.firestore {
     // phai co that, PAIRED, khop hai uid, VA ben kia da tu ghi
     // `activePairingId` len ho so cua chinh no.
     match /locations/{userId} {
-      allow read: if isAuthenticated() && notBanned() &&
-        (request.auth.uid == userId ||
-         isPairedWith(userId) ||
-         attestedPair(resource.data.pairingId, userId));
+      // 66.0: `isAdmin()` dat len TRUOC tien. Ly do khong phai muon "doc len
+      // cua nguoi khac" cho vui — nut "Xóa tài khoản" phia quan tri phai LIET
+      // KE duoc document cua nguoi bi don thi moi xoa duoc tung cai: Firestore
+      // khong co lenh xoa theo truong, va app quan tri khong co Admin SDK. Dat
+      // dau tien con de lenh doc khong bi loi `get()` khi ho so da bi xoa.
+      allow read: if isAdmin() ||
+        (isAuthenticated() && notBanned() &&
+          (request.auth.uid == userId ||
+           isPairedWith(userId) ||
+           attestedPair(resource.data.pairingId, userId)));
 
       // Chu document duoc ghi toan bo (app gui telemetry cua chinh no).
       // Ngoai le DUY NHAT: phieu "gio trong quyen rieng" duoc phu huynh
@@ -292,9 +439,11 @@ service cloud.firestore {
          request.resource.data.diff(resource.data).affectedKeys()
            .hasOnly(['isPrivacyActive', 'updatedAt']))
       );
-      // Xoa vi tri thi khong ai duoc: do telemetry tu ghi/de tu nhien bi ghi
-      // de, va "xoa don duong di" la thu ma hoc sinh khong nen lam duoc.
-      allow delete: if false;
+      // Xoa vi tri: KHONG mo cho chu may khi ho so con ton tai — do telemetry
+      // tu ghi de, va "xoa don duong di" la thu ma hoc sinh khong nen lam duoc
+      // (no giau duoc het vet, con hon tat GPS). Buong khi ho so da bi xoa that
+      // su (accountIsBeingDeleted) hoac khi quan tri ra tay.
+      allow delete: if accountIsBeingDeleted(userId) || isAdmin();
     }
 
     // Location history (Lịch sử vị trí đẩy lên Cloud)
@@ -304,15 +453,24 @@ service cloud.firestore {
     // `whereEqualTo("userId", uid)` trong query khop het voi dieu kien duoi
     // day nen Firestore khong tu choi query). Cap da ghep noi xem duong di
     // qua `pairings/{id}/location_history` — da khoa theo isPairMember.
+    //
+    // `isAdmin()` trong dieu kien doc la phan bat buoc cua nut "Xóa tài khoản"
+    // phia quan tri: id cua vet di chuyen la ngau nhien, khong doc duoc danh
+    // sach thi khong the xoa tung cai.
     match /location_history/{historyId} {
-      allow read: if isAuthenticated() && notBanned() &&
-        resource.data.userId == request.auth.uid;
+      allow read: if isAdmin() ||
+        (isAuthenticated() && notBanned() &&
+          resource.data.userId == request.auth.uid);
       allow create: if isAuthenticated() && notBanned() &&
         request.resource.data.userId == request.auth.uid;
       allow update: if isAuthenticated() && notBanned() &&
         resource.data.userId == request.auth.uid &&
         request.resource.data.userId == request.auth.uid;
-      allow delete: if false;
+      // Vet di chuyen cua ai thi theo do: chu may don duoc khi ho so cua no
+      // da bi xoa (nut "Xóa tài khoản"), quan tri don bat ky luc nao. Query
+      // `whereEqualTo("userId", uid)` cua app khop dieu kien nay nen khong bi
+      // Firestore tu choi lien dai.
+      allow delete: if accountIsBeingDeleted(resource.data.userId) || isAdmin();
     }
 
     // SOS Alerts
@@ -322,13 +480,21 @@ service cloud.firestore {
     // Doc: chu may + nguoi ghep noi voi no (phu huynh phai nhin duoc duong
     // day, do la toan bo y nghia cua nut SOS).
     match /sos_alerts/{alertId} {
-      allow read: if isAuthenticated() && notBanned() &&
-        (resource.data.userId == request.auth.uid ||
-         isPairedWith(resource.data.userId) ||
-         attestedPair(resource.data.pairingId, resource.data.userId));
+      // `isAdmin()` dau tien: quan tri don tai khoan phai liet ke duoc phieu
+      // SOS cua nguoi do (id dang form `<uid>_<timestamp>` nhung khong the suy
+      // ra timestamp), va de lenh doc khong bi loi `get()` khi da xong ho so.
+      allow read: if isAdmin() ||
+        (isAuthenticated() && notBanned() &&
+          (resource.data.userId == request.auth.uid ||
+           isPairedWith(resource.data.userId) ||
+           attestedPair(resource.data.pairingId, resource.data.userId)));
       allow create: if isAuthenticated() && notBanned() &&
         request.resource.data.userId == request.auth.uid;
-      allow update, delete: if false;
+      // Phieu SOS da lap thi khong ai duoc sua (do la chung cu, khong phai
+      // ban nhap); xoa chi khi tai khoan dang bi don that su hoac quan tri
+      // don cho chu tai khoan.
+      allow update: if false;
+      allow delete: if accountIsBeingDeleted(resource.data.userId) || isAdmin();
     }
 
     // Calls (WebRTC signaling)
@@ -338,19 +504,24 @@ service cloud.firestore {
     // chi can kiem tra minh la mot ben cua cap do. Nhin `room_<uid>` la canh
     // bao noi trong DashboardScreen khi CHUA ghep noi (khong co dau ben kia
     // de ket noi) — giu cho may do doc/ghi duoc document cua chinh no.
+    //
+    // `isAdmin()` o day la cho ban 66.0: don tai khoan (nguoi dung tu xoa hoac
+    // quan tri xoa) thi `calls/<pairingId>` cung phai xoa duoc, neu khong thi
+    // bien dong "da xoa N muc" cua app luon luon sai vi mot nhom ma khong ai
+    // lay lai duoc.
     match /calls/{callId} {
-      allow read, write: if isAuthenticated() && notBanned() && (
+      allow read, write: if isAdmin() || (isAuthenticated() && notBanned() && (
         (exists(/databases/$(database)/documents/pairings/$(callId)) &&
          isPairMember(callId)) ||
         callId == 'room_' + request.auth.uid
-      );
+      ));
 
       match /{document=**} {
-        allow read, write: if isAuthenticated() && notBanned() && (
+        allow read, write: if isAdmin() || (isAuthenticated() && notBanned() && (
           (exists(/databases/$(database)/documents/pairings/$(callId)) &&
            isPairMember(callId)) ||
           callId == 'room_' + request.auth.uid
-        );
+        ));
       }
     }
   }

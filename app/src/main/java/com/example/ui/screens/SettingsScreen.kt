@@ -84,6 +84,7 @@ import com.example.ui.theme.FacebookBlue
 import com.example.ui.theme.TextMuted
 import com.example.ui.theme.TextPrimary
 import com.example.ui.theme.TextSecondary
+import com.example.ui.viewmodel.AccountDeletionState
 import com.example.ui.viewmodel.VesperaUiState
 
 @Composable
@@ -97,6 +98,11 @@ fun SettingsScreen(
     onSaveSosSchedule: (Boolean, Int, Int) -> Unit = { _, _, _ -> },
     onUpdateProfile: (String, String) -> Unit = { _, _ -> },
     onUpdateBlockRules: (List<String>, Boolean, List<String>, Int, String) -> Unit = { _, _, _, _, _ -> },
+    // "Xóa tài khoản" (ban 66.0): ba nut phai co ba duong ve ViewModel, vi hop
+    // thoai can biet dem duoc bao nhieu muc TRUOC khi bam va reset khi dong lai.
+    onDeleteAccount: () -> Unit = {},
+    onPreviewAccountDeletion: () -> Unit = {},
+    onResetAccountDeletion: () -> Unit = {},
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val scrollState = rememberScrollState()
@@ -691,8 +697,16 @@ fun SettingsScreen(
 
                 Spacer(modifier = Modifier.height(8.dp))
 
+                // Nut XOA THAT (ban 66.0). Tu ban 55.0 den ban 65.0 nut nay chi
+                // dang xuat vi `firestore.rules` chan `allow delete: if false`;
+                // rules da mo cho chu tai khoan nen chu chuoi nay phai doi thanh
+                // chuc nang that — va van phai noi het nhung gi NO KHONG lam
+                // duoc (tai khoan Google, quyen Accessibility tren may).
                 Button(
-                    onClick = { showDeleteAccountDialog = true },
+                    onClick = {
+                        showDeleteAccountDialog = true
+                        onPreviewAccountDeletion()
+                    },
                     modifier = Modifier.fillMaxWidth().testTag("delete_account_btn"),
                     shape = RoundedCornerShape(12.dp),
                     colors = ButtonDefaults.buttonColors(
@@ -702,7 +716,7 @@ fun SettingsScreen(
                 ) {
                     Icon(imageVector = Icons.Default.DeleteForever, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text("Ngừng dùng trên máy này (đăng xuất)")
+                    Text("Xóa tài khoản và dữ liệu trên máy chủ")
                 }
             }
         }
@@ -740,51 +754,149 @@ fun SettingsScreen(
         )
     }
 
-    // "Delete account" Dialog
+    // "Xóa tài khoản" Dialog (bản 66.0)
     //
-    // NUT NAY KHONG XOA TAI KHOAN. `firestore.rules` da chan:
-    //   match /users/{userId} { allow delete: if false }
-    // nen khong client nao xoa duoc ho so cua minh, va noi "xóa vĩnh viễn theo
-    // chính sách quyền riêng tư" roi chi dang xuat la noi mot duong lam mot
-    // duong — nguoi dung tuong data da het trong khi van no nam tren may chủ.
-    // Doi thanh noi dung THAT: dang xuat + huong dan thu tuc xoa day du.
+    // Bon trang thai, va moi trang thai phai NOI DUNG CAI THAT:
+    //   Idle     - phep thu. Dem duoc bao nhieu muc thi noi bao nhieu muc; may
+    //              chua tra loi (preview == null) thi phai bao "chua dem duoc",
+    //              khong duoc gia dinh la 0 roi noi "khong con gi".
+    //   Working  - dang chay, khoa nut lai (bam hai lan la goi lenh xoa hai lan).
+    //   Done     - bien nhan: X muc da di, nhung nhom nao VAN CON LAI. Luon
+    //              phai co mat sau cua lenh xoa, vi rules chua duoc Publish tren
+    //              production thi moi lenh deu 403 ma mat nguoi dung khong biet.
+    //   Failed   - chua xoa duoc gi ca.
+    //
+    // Hai thu app KHONG the lam va phai noi thang: (1) xoa tai khoan Google -
+    // no nam trong Firebase Authentication, client khong co Admin SDK; (2) tat
+    // quyen "Truy cập được thiết bị" (accessibility) cua bo chan app - do la
+    // cai dat he thong, chi nguoi dung tu tat duoc.
     if (showDeleteAccountDialog) {
+        val deletion = uiState.accountDeletion
+        val preview = uiState.accountDeletionPreviewCount
+        val receipt = deletion as? AccountDeletionState.Done
         AlertDialog(
-            onDismissRequest = { showDeleteAccountDialog = false },
-            title = { Text("Ngừng dùng trên máy này?") },
-            text = {
+            onDismissRequest = {
+                if (deletion !is AccountDeletionState.Working) {
+                    showDeleteAccountDialog = false
+                    onResetAccountDeletion()
+                }
+            },
+            title = {
                 Text(
-                    "Nút này ĐĂNG XUẤT khỏi máy này — máy sẽ không còn đọc được vị trí, " +
-                        "tin nhắn và nội quy của gia đình đã ghép nối.\n\n" +
-                        "Nó KHÔNG xóa hồ sơ đang lưu trên máy chủ: quy tắc bảo mật của ứng " +
-                        "dụng chặn mọi yêu cầu tự xóa dữ liệu từ điện thoại. " +
-                        // Khi chưa ghép nối thì thẻ "QUẢN LÝ GHÉP NỐI" (và nút "Hủy liên
-                        // kết" trong đó) đã bị ẩn, nên câu "nút ... ở trên" trước đây dẫn
-                        // người đọc tới một chỗ không còn tồn tại trên màn hình.
-                        if (isPaired)
-                            "Muốn xóa hẳn thì phải gỡ liên kết trước bằng nút “Hủy liên kết” ở " +
-                                "thẻ Quản lý ghép nối trên đây (thu hồi quyền chia sẻ trên cả " +
-                                "hai máy), rồi yêu cầu người vận hành xóa tài khoản trong bảng " +
-                                "điều khiển Firebase."
-                        else
-                            "Máy này chưa ghép nối nên không còn liên kết nào để gỡ — đăng xuất " +
-                                "là cắt hết đường đọc dữ liệu trên máy. Hồ sơ trên máy chủ chỉ " +
-                                "người vận hành xóa được, qua bảng điều khiển Firebase."
+                    when {
+                        receipt != null -> "Đã xóa dữ liệu trên máy chủ"
+                        deletion is AccountDeletionState.Failed -> "Chưa xóa được gì"
+                        deletion is AccountDeletionState.Working -> "Đang xóa…"
+                        else -> "Xóa tài khoản này?"
+                    }
                 )
             },
+            text = {
+                // Bien nhan dai hon man hinh tren may nho, nen phai cuon duoc.
+                Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+                    Text(
+                        when {
+                            receipt != null -> buildString {
+                                append(
+                                    "Đã xóa ${receipt.deleted} mục trên máy chủ: hồ sơ, vị trí " +
+                                        "hiện tại, lịch sử di chuyển, phiếu SOS, nội quy và nhật " +
+                                        "ký ghép nối."
+                                )
+                                if (receipt.failed.isNotEmpty()) {
+                                    append(
+                                        "\n\nVẪN CÒN TRÊN MÁY CHỦ: ${receipt.failed.joinToString(", ")} " +
+                                            "(quy tắc bảo mật chặn hoặc mất mạng). Những mục đó vẫn " +
+                                            "mang tên tài khoản này - bấm thử lại, hoặc nhờ quản trị " +
+                                            "viên xóa trong app Quản Trị Viên."
+                                    )
+                                }
+                                append(
+                                    "\n\nĐĂNG NHẬP CỦA BẠN VẪN CÒN: tài khoản Google nằm trong " +
+                                        "Firebase Authentication, ứng dụng không có quyền xóa nó. " +
+                                        "Đăng nhập lại bằng đúng tài khoản đó sẽ tạo một hồ sơ " +
+                                        "TRỐNG, không phải hồ sơ vừa xóa."
+                                )
+                                append(
+                                    "\n\nTrên máy này, app đã xóa bộ đếm lượt hỏi AI, lịch sử chat " +
+                                        "và luật chặn app. Quyền “Truy cập được thiết bị” " +
+                                        "(accessibility) và quyền hiển thị đè là cài đặt Android - " +
+                                        "bạn phải tự tắt trong Cài đặt hệ thống."
+                                )
+                            }
+                            deletion is AccountDeletionState.Failed ->
+                                deletion.reason +
+                                    "\n\nChưa có mục nào bị xóa. Kiểm tra mạng, hoặc hỏi người vận " +
+                                        "hành xem quy tắc bảo mật của ứng dụng đã được bật chưa."
+                            deletion is AccountDeletionState.Working ->
+                                "Đang gỡ dữ liệu khỏi máy chủ. Giữ màn hình này mở tới khi app hiện " +
+                                    "biên nhận."
+                            else -> buildString {
+                                append(
+                                    when (preview) {
+                                        null -> "Ứng dụng chưa đếm được dữ liệu của tài khoản này " +
+                                            "trên máy chủ - có thể máy chưa có mạng, hoặc quy tắc " +
+                                            "bảo mật mới chưa được bật.\n\n"
+                                        0 -> "Ngoài hồ sơ, máy chủ không còn giữ mục nào khác cho " +
+                                            "tài khoản này.\n\n"
+                                        else -> "Máy chủ đang giữ $preview mục ngoài hồ sơ: vị trí " +
+                                            "hiện tại, lịch sử di chuyển, phiếu SOS, nội quy và nhật " +
+                                            "ký ghép nối, tin nhắn cuộc gọi.\n\n"
+                                    }
+                                )
+                                append(
+                                    "Xóa xong là KHÔNG hoàn tác được, và máy đang ghép nối với bạn " +
+                                        "mất luôn quyền xem dữ liệu của máy này.\n\n"
+                                )
+                                append(
+                                    "Nút này KHÔNG xóa được tài khoản Google của bạn: tài khoản " +
+                                        "đăng nhập nằm ngoài tầm ứng dụng."
+                                )
+                            }
+                        }
+                    )
+                }
+            },
             confirmButton = {
-                TextButton(
-                    onClick = {
-                        showDeleteAccountDialog = false
-                        onSignOut()
+                if (receipt != null || deletion is AccountDeletionState.Failed) {
+                    // Bien nhan xong thi duong ra khoi may van la dang xuat.
+                    TextButton(
+                        onClick = {
+                            showDeleteAccountDialog = false
+                            onResetAccountDeletion()
+                            onSignOut()
+                        }
+                    ) {
+                        Text("Đăng xuất khỏi máy này", color = NeonRose, fontWeight = FontWeight.Bold)
                     }
-                ) {
-                    Text("Đăng xuất ngay", color = NeonRose, fontWeight = FontWeight.Bold)
+                } else {
+                    TextButton(
+                        // Chua tai ho so ve thi khong co uid de xoa, dung mo lenh
+                        // xoa "cho ai do".
+                        enabled = deletion !is AccountDeletionState.Working &&
+                            userProfile != null,
+                        onClick = onDeleteAccount
+                    ) {
+                        Text(
+                            if (deletion is AccountDeletionState.Working) "Đang xóa…"
+                            else "Xóa dữ liệu trên máy chủ",
+                            color = NeonRose,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showDeleteAccountDialog = false }) {
-                    Text("Quay lại", color = TextSecondary)
+                if (deletion is AccountDeletionState.Working) {
+                    TextButton(onClick = {}) { Text("…", color = TextMuted) }
+                } else {
+                    TextButton(
+                        onClick = {
+                            showDeleteAccountDialog = false
+                            onResetAccountDeletion()
+                        }
+                    ) {
+                        Text(if (receipt != null) "Đóng" else "Giữ lại dữ liệu", color = TextSecondary)
+                    }
                 }
             },
             containerColor = DialogSurface,

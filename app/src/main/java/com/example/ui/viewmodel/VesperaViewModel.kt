@@ -59,6 +59,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.coroutines.resume
 import java.security.MessageDigest
+import java.io.File
 import java.util.UUID
 
 private const val TAG = "VesperaViewModel"
@@ -163,8 +164,32 @@ data class VesperaUiState(
      */
     val blockRulesError: String? = null,
     /** Nhat ky noi quy: ai doi gi, luc nao, ben kia duyet hay tu choi. */
-    val ruleAudit: List<RuleAuditEntry> = emptyList()
+    val ruleAudit: List<RuleAuditEntry> = emptyList(),
+    /**
+     * Luồng "Xóa tài khoản" (bản 66.0). Ba trang thai phai tach lam ba, vi man
+     * hinh doit NOI KHAC NHAU cho tung cai: dang chay (khoa nut, dung cho bam
+     * twice), xong nhung bi rules chan mot phan (nguoi dung phai biet duoc
+     * phan con lai), va that bai hoan toan (may chua Publish rules / tai khoan
+     * dang bi cam). Dung gop vao `successMessage`: bi dong co che xoa tin nhan
+     * toan cuc va nguoi dung con lai man hinh voi mot cai nut khong ro ket qua.
+     */
+    val accountDeletion: AccountDeletionState = AccountDeletionState.Idle,
+    /** So document con thu dc khi tai khoan bi cam — de in ra TRUOC khi xoa. */
+    val accountDeletionPreviewCount: Int? = null
 )
+
+/**
+ * Trang thai cua nut "Xóa tài khoản". `Done.deleted` la con so THAT tu may chu
+ * tra ve (tinh theo document delete() thanh cong), `Done.failed` la ten tung
+ * nhom KHONG xoa duoc — app phai in ca hai chu khong duoc noi "đã xóa tất cả"
+ * khi mot nhom van con.
+ */
+sealed class AccountDeletionState {
+    object Idle : AccountDeletionState()
+    object Working : AccountDeletionState()
+    data class Done(val deleted: Int, val failed: List<String>) : AccountDeletionState()
+    data class Failed(val reason: String) : AccountDeletionState()
+}
 
 /**
  * Trang thai luu bang luat chan ung dung. Nguoi dung phai nhin thay duoc ca 4
@@ -1894,6 +1919,117 @@ class VesperaViewModel(
 
     fun signOut() {
         auth.signOut()
+    }
+
+    /**
+     * uid dang dung: lay tu ho so truoc, vi sau khi xoa thi `auth.currentUser`
+     * van con (tai khoan Google khong the xoa tu client) trong khi ho so da mat
+     * — can dung dung cai ma luon luon co truoc luc bam.
+     */
+    private fun currentUserId(): String? =
+        _uiState.value.userProfile?.id?.takeIf { it.isNotEmpty() }
+            ?: auth.currentUser?.uid?.takeIf { it.isNotEmpty() }
+
+    /**
+     * Dem truoc so document se bi don. Hop thoai "Xóa tài khoản" in con so nay
+     * ra de nguoi dung biet minh sap mat gi thay vi mo mot cai hop doan lenh.
+     */
+    fun previewAccountDeletion() {
+        val userId = currentUserId() ?: return
+        viewModelScope.launch {
+            val count = try {
+                repository.inventoryForDeletion(userId).total
+            } catch (e: Exception) {
+                Log.w(TAG, "previewAccountDeletion", e)
+                null
+            }
+            _uiState.value = _uiState.value.copy(accountDeletionPreviewCount = count)
+        }
+    }
+
+    /**
+     * Nut "Xóa tài khoản" — ban 66.0. Day la lenh duy nhat trong app xoa du lieu
+     * tren may chu, va thu tu cua no bi rules rang buoc (`accountIsBeingDeleted`:
+     * vi tri, vet di chuyen, phieu SOS va nhat ky noi quy chi xoa duoc khi ho so
+     * `users/<uid>` KHONG CON), nen `VesperaRepository.deleteAccount` phai gay
+     * ho so truoc khi don phan lai.
+     *
+     * KHONG the xoa tai khoan Google: client khong co Admin SDK, nen email + mat
+     * khau van nam trong Firebase Authentication. App phai noi thang dieu do —
+     * dang nhap lai bang dung tai khoan ay se tao mot ho so trong.
+     */
+    fun deleteAccount() {
+        val userId = currentUserId()
+        if (userId == null) {
+            _uiState.value = _uiState.value.copy(
+                accountDeletion = AccountDeletionState.Failed("Máy này chưa đăng nhập tài khoản nào.")
+            )
+            return
+        }
+        _uiState.value = _uiState.value.copy(accountDeletion = AccountDeletionState.Working)
+        viewModelScope.launch {
+            val outcome = try {
+                repository.deleteAccount(userId, repository.inventoryForDeletion(userId))
+            } catch (e: Exception) {
+                Log.w(TAG, "deleteAccount that bai", e)
+                null
+            }
+            if (outcome == null) {
+                _uiState.value = _uiState.value.copy(
+                    accountDeletion = AccountDeletionState.Failed(
+                        "Không liên lạc được với máy chủ — chưa xóa gì cả."
+                    )
+                )
+                return@launch
+            }
+            if (outcome.deleted > 0) clearLocalDeviceData()
+            _uiState.value = _uiState.value.copy(
+                accountDeletion = AccountDeletionState.Done(outcome.deleted, outcome.failed),
+                // Ho so khong con tren may chu: moi thu phat sinh tu no (vi tri,
+                // ghep noi, noi quy) deu vo nghia, de lai thi man hinh van hien
+                // du lieu cua mot tai khoan da chet.
+                userProfile = null,
+                activePairing = null,
+                partnerLocation = null,
+                myLocation = null,
+                messages = emptyList(),
+                ruleAudit = emptyList(),
+                locationHistory = emptyList(),
+                usageSchedule = null
+            )
+        }
+    }
+
+    /**
+     * Dong hop thoai xong thi tra ve `Idle`, neu khong lan mo hop thoai ke tiep
+     * se hien bien nhan cua lan truoc va nguoi dung tuong la vua xoa them.
+     */
+    fun resetAccountDeletionState() {
+        _uiState.value = _uiState.value.copy(
+            accountDeletion = AccountDeletionState.Idle,
+            accountDeletionPreviewCount = null
+        )
+    }
+
+    /**
+     * Don du lieu rieng TRÊN MÁY: SharedPreferences (bộ đếm hỏi AI, key AI,
+     * lich su chat, luat chan app, GPS lu khi mat mang, so dien thoi SOS).
+     *
+     * Xoa ca tep chu khong xoa tung khoa: moi lan them mot khoa moi la them mot
+     * noi du lieu co the sot lai. `Context.dataDir` (API 24) tra ve thu muc
+     * rong cua ung dung nen `File.delete()` binh thuong dung duoc.
+     */
+    private fun clearLocalDeviceData() {
+        val ctx = context ?: return
+        runCatching {
+            File(ctx.dataDir, "shared_prefs").listFiles()?.forEach { file ->
+                if (!file.delete()) Log.w(TAG, "không xóa được local file ${file.name}")
+            }
+        }.onFailure { Log.w(TAG, "clearLocalDeviceData", it) }
+        runCatching { ctx.cacheDir.listFiles()?.forEach { it.delete() } }
+        // Dich vu duoi nen van con chay thi no se ghi lai telemetry/bo dem ngay
+        // sau khi don — phai bat no dung lai.
+        runCatching { VesperaTelemetryService.stop(ctx) }
     }
 
     fun setDarkMode(enabled: Boolean) {

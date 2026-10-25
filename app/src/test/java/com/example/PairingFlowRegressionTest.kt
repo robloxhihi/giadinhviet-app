@@ -423,7 +423,10 @@ class PairingFlowRegressionTest {
             countOf(Regex("BentoCard\\("), afterGate)
         )
         assertTrue("Thẻ còn lại phải có nút đăng xuất", afterGate.contains("sign_out_btn"))
-        assertTrue("Thẻ còn lại phải có nút ngừng dùng", afterGate.contains("delete_account_btn"))
+        // TestTag `delete_account_btn` từ bản 55.0 gắn cho nút CHỈ đăng xuất (rules
+        // khi đó chặn mọi lệnh xóa). Bản 66.0 mở quyền tự xóa cho chính chủ nên
+        // cùng tag đó giờ là nút "Xóa tài khoản và dữ liệu trên máy chủ".
+        assertTrue("Thẻ còn lại phải có nút xóa tài khoản", afterGate.contains("delete_account_btn"))
 
         listOf(
             "grant_permissions_button",
