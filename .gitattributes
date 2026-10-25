@@ -1,0 +1,17 @@
+# Runner cua GitHub Actions chay tren Linux. `core.autocrlf=true` tren may
+# Windows se bien gradlew thanh CRLF khi checkout -> "bash\r: not found",
+# va khi commit lai thi blob bi nhiem CR. File nay dinh huong lai: wrapper va
+# script shell luon LF, jar va file moi truong luon binary.
+* text=auto
+
+gradlew          text eol=lf
+*.sh             text eol=lf
+gradlew.bat      text eol=crlf
+*.bat            text eol=crlf
+
+*.jar            binary
+*.keystore       binary
+*.png            binary
+*.webp           binary
+*.apk            binary
+*.mp4            binary
