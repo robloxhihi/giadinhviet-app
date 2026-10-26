@@ -5,10 +5,11 @@ import android.content.Context
 /**
  * Model nguoi dung co the chon trong tro ly gia dinh.
  *
- * `id` cua Gemini la chuoi dieu huong (`gemini`), khong phai ten model that:
- * `GeminiClient` tu do chon model va tu thay model phong khi 503, nen khong
- * trung phat ten o day. Voi OpenRouter thi `id` la ten model nguyen van ma
- * OpenRouter can.
+ * `id` la ten model nguyen van ma Orcarouter can (doi chieu bang
+ * `GET /v1/models`). Gemini da bi xoa khoi bo chon o ban 69.0: `id = "gemini"`
+ * chi la chuoi dieu huong cho `GeminiClient`, ma khoa GEMINI_API_KEY chua tung
+ * ton tai trong repo — mot lua chon luc nao cung bao "chưa có khoá" thi khong
+ * phai la mot lua chon, va nguoi dung yeu cau xoa thang no.
  */
 data class AiModel(
     val id: String,
@@ -23,7 +24,12 @@ data class AiModel(
      */
     val free: Boolean = false
 ) {
-    enum class Provider { GEMINI, OPENROUTER }
+    /**
+     * OPENROUTER la ten MA HOAT DONG cua Orcarouter (object `OpenRouterClient`),
+     * giu nguyen de khong pha ba noi test mo filepath. NHA CUNG CAP THAT la
+     * orcarouter.ai — xem ghi chu trong `OpenRouterClient`.
+     */
+    enum class Provider { OPENROUTER }
 }
 
 object AiModels {
@@ -46,13 +52,6 @@ object AiModels {
     // 2026-10-22: Orcarouter dung hau to `-free`, va goi that bang key cua chu
     // tai khoan thi `deepseek/deepseek-v4-flash-free` tra loi tieng Viet, 0 dong.
     val all: List<AiModel> = listOf(
-        AiModel(
-            id = "gemini",
-            label = "Gemini",
-            provider = AiModel.Provider.GEMINI,
-            note = "Của Google — cần khoá AI Studio. Đã đo: trả lời tiếng Việt đúng khuôn.",
-            free = true
-        ),
         // NHA CUNG CAP LA ORCAROUTER (orcarouter.ai), KHONG PHAI OpenRouter.
         // Do tren chinh `GET https://www.orcarouter.ai/v1/models` ngay
         // 2026-10-22 (209 model) va goi that bang key cua chu tai khoan:
@@ -64,49 +63,60 @@ object AiModels {
         // hoan toan trong khi van HTTP 200 — do la chat trang xoan ma nguoi
         // dung khong hieu tai sao. `OpenRouterClient` dat max_tokens du lon
         // va bao khi noi dung trong.
+        // NHAN (label) KHONG con chu "miễn phí"/"Free" tu 69.0 — nguoi dung yeu
+        // cau ngay 2026-10-26: "bỏ chữ free đằng sau mấy cái ai hiển thị trong
+        // app". Chi sua chu hien ra: `id` van nguyen van nhu do tren
+        // `GET /v1/models` vi no la hop dong voi may chu (doi id la 404), con
+        // `free` va `note` giu nguyen de khong ai doc bang model nay ma tuong
+        // chung tra tien — gia van ghi "0 đồng" o note, chi bo cach dem tien
+        // vao ten goi.
         AiModel(
             id = "deepseek/deepseek-v4-flash-free",
-            label = "DeepSeek V4 Flash (miễn phí)",
+            label = "DeepSeek V4 Flash",
             provider = AiModel.Provider.OPENROUTER,
             note = "Orcarouter · 0 đồng. Đã đo thật: trả lời tiếng Việt, 2,5 giây.",
             free = true
         ),
         AiModel(
             id = "deepseek/deepseek-v4.1-flash-free",
-            label = "DeepSeek V4.1 Flash (miễn phí)",
+            label = "DeepSeek V4.1 Flash",
             provider = AiModel.Provider.OPENROUTER,
             note = "Orcarouter · 0 đồng. Đã đo thật: bản mới hơn, chậm hơn một chút.",
             free = true
         ),
         AiModel(
             id = "z-ai/glm-5.3-flash-free",
-            label = "GLM 5.3 Flash (miễn phí)",
+            label = "GLM 5.3 Flash",
             provider = AiModel.Provider.OPENROUTER,
-            note = "Orcarouter · 0 đồng. Đã đo thật: viết dài nhất trong nhóm miễn phí.",
+            note = "Orcarouter · 0 đồng. Đã đo thật: viết dài nhất trong nhóm này.",
             free = true
         ),
         AiModel(
             id = "orcarouter/free",
-            label = "Orcarouter Free (tự chọn)",
+            label = "Orcarouter (tự chọn)",
             provider = AiModel.Provider.OPENROUTER,
-            note = "Orcarouter · 0 đồng. Hệ thống tự picking model miễn phí đang nhàn nhất.",
+            note = "Orcarouter · 0 đồng. Hệ thống tự picking model đang nhàn nhất.",
             free = true
         ),
         // Chi con model MIEN PHI. Hai model tra phi (deepseek/deepseek-v4-flash
         // va z-ai/glm-5.3-flash) da go theo yeu cau ngay 2026-10-23 — giu lai la
         // bang model dem tien cua nguoi dung trong khi bon thu mien phi da do
         // chay that.
+        //
+        // 69.0: model "gemini" cung bi xoa theo yeu cau cua nguoi dung. Tai
+        // may nao tung chon Gemini thi `selectedId` tra ve chuoi cu, `find()`
+        // khong thay nen roi ve model Orcarouter mien phi — khong co vo, cung
+        // khong co goi mot provider da bi cat.
     )
 
-    /** Model Orcarouter mac dinh: bao luu la thu da DO MIEN PHI, khong phai thu tra phi. */
+    /** Model Orcarouter mac dinh: bao luu la thu da duoc do MIEN PHI, khong phai thu tra phi. */
     val defaultOpenRouter: AiModel
         get() = all.first { it.provider == AiModel.Provider.OPENROUTER && it.free }
 
     /**
-     * Mac dinh cua app. Khong phai `all.first()` nua: thu nhat trong bang la
-     * Gemini, ma Gemini khong co khoa trong ban cai (repo thieu secret
-     * `GEMINI_API_KEY`), nen roi ve no la chat im lang. Roi ve model Orcarouter
-     * mien phi la thu duy nhat da do goi duoc bang khoa di san.
+     * Mac dinh cua app. Tu 69.0 day cung la model DUY NHAT co the chay: Gemini
+     * tung dung dau bang nhung khong co khoa trong ban cai (repo thieu secret
+     * `GEMINI_API_KEY`), nen roi ve no la chat im lang.
      */
     val default: AiModel get() = defaultOpenRouter
 
@@ -131,20 +141,18 @@ object AiModels {
             .edit().putString(FIELD_SELECTED_V2, safe).apply()
     }
 
-    /** Khoá đang có hiệu lực cho provider của model này. */
+    /** Khoá đang có hiệu lực cho model này — từ 69.0 chi con mot loai khoa. */
     fun keyFor(context: Context, model: AiModel): String = when (model.provider) {
-        AiModel.Provider.GEMINI -> AiKey.effective(context)
         AiModel.Provider.OPENROUTER -> AiKey.effectiveOpenRouter(context)
     }
 
     fun keyLabel(model: AiModel): String = when (model.provider) {
-        AiModel.Provider.GEMINI -> "khoá Gemini"
         AiModel.Provider.OPENROUTER -> "khoá Orcarouter"
     }
 
     /**
      * Mot lan goi, mot model duoc chon — khong thu lan luot nhieu model nhu
-     * `GeminiClient.chat` lam: nguoi dung chon DeepSeek ma nhan ve noi dung
+     * `GeminiClient.chat` tung lam: nguoi dung chon DeepSeek ma nhan ve noi dung
      * cua GLM thi khong con la model ho chon nua.
      */
     suspend fun chat(
@@ -155,7 +163,6 @@ object AiModels {
         stats: String,
         report: Boolean = false
     ): Result<String> = when (model.provider) {
-        AiModel.Provider.GEMINI -> GeminiClient.chat(apiKey, history, question, stats, report)
         AiModel.Provider.OPENROUTER -> OpenRouterClient.chat(apiKey, model.id, history, question, stats, report)
     }
 }

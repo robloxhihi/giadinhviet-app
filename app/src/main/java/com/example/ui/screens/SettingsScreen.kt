@@ -411,6 +411,7 @@ fun SettingsScreen(
                 savedAtMillis = uiState.blockRulesSavedAtMillis,
                 audit = uiState.ruleAudit,
                 errorText = uiState.blockRulesError,
+                targetChildName = pairing?.childName.orEmpty(),
                 onUpdate = onUpdateBlockRules,
             )
         }

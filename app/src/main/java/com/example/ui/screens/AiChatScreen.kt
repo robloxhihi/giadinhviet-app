@@ -58,8 +58,8 @@ import androidx.compose.ui.unit.sp
 import com.example.data.AiUsageCounter
 import com.example.data.ai.DailyUsageStore
 import com.example.service.ai.AiKey
-import com.example.service.ai.AiModel
 import com.example.service.ai.AiModels
+import com.example.service.ai.AiPrompt
 import com.example.service.ai.ChatHistoryStore
 import com.example.service.ai.ChatTurn
 import com.example.ui.components.GlassButton
@@ -97,9 +97,11 @@ private const val AI_EXHAUSTED_MESSAGE =
  * may, nen cau tra loi Khong the la mot loi khuyen chung chung ap cho moi
  * nha. Do la ly do nguoi dung yeu cau "khong demo".
  *
- * Khoa AI lay theo `AiKey` va theo tung provider: Gemini can khoa AI Studio,
- * ba model DeepSeek/GLM can khoa OpenRouter. Chon model o day quyet luon khoa
- * va client duoc dung; man hinh tu hoi khi chua co, khong gui request vo nghia.
+ * Khoa AI lay theo `AiKey`. Tu ban 69.0 chi con MOT nha cung cap (Orcarouter):
+ * Gemini da bi xoa khoi bo chon vi khoa cua no chua tung nam trong repo, va
+ * mot lua chon luc mo app cung chi bao "chưa có khoá" thi khong phai lua chon.
+ * Chon model o day quyet luon khoa duoc dung; man hinh tu hoi khi chua co,
+ * khong gui request vo nghia.
  */
 @Composable
 fun AiChatScreen(
@@ -156,13 +158,18 @@ fun AiChatScreen(
         draft = ""
         busy = true
         error = null
+        // 69.0: so lieu chi di theo khi nguoi dung that su hoi. Truoc day moi
+        // luot deu kem `summaryForAi()` nen model luc nao cung co the doc lai ca
+        // bang thong ke — nguoi dung phan nan "nó đọc j hết, quá hạn chế". Nut
+        // "Phan tich" (report) van duoc so lieu day du.
+        val withData = report || AiPrompt.wantsDeviceData(q)
         scope.launch {
             val answer = AiModels.chat(
                 model = model,
                 apiKey = key,
                 history = next.dropLast(1),
                 question = q,
-                stats = usage.summaryForAi(),
+                stats = if (withData) usage.summaryForAi() else "",
                 report = report
             )
             busy = false
@@ -209,8 +216,7 @@ fun AiChatScreen(
         Spacer(modifier = Modifier.height(14.dp))
 
         // ── Chon model ─────────────────────────────────────────────────────
-        // Moi model mot kieu: Gemini can khoa AI Studio, ba model DeepSeek/GLM
-        // goi qua OpenRouter can khoa OpenRouter. Chon o day quyet luon khung
+        // Bo chon chi con model Orcarouter (69.0): chon o day quyet luon khung
         // nhap khoa ben duoi, de nguoi dung khong phai doan tai sao "luu khoa
         // roi van hoi".
         Text(
@@ -345,8 +351,7 @@ fun AiChatScreen(
                         onValueChange = { keyDraft = it },
                         placeholder = {
                             Text(
-                                if (model.provider == AiModel.Provider.OPENROUTER)
-                                    "Dán khoá orcarouter.ai vào đây" else "Dán khoá AI Studio vào đây",
+                                    "Dán khoá orcarouter.ai vào đây",
                                 color = TextMuted, fontSize = 13.sp
                             )
                         },
@@ -382,9 +387,10 @@ fun AiChatScreen(
                         icon = Icons.Default.AutoAwesome,
                         onClick = {
                             if (keyDraft.isNotBlank()) {
-                                if (model.provider == AiModel.Provider.OPENROUTER)
-                                    AiKey.saveOpenRouter(context, keyDraft)
-                                else AiKey.save(context, keyDraft)
+                                // Tu 69.0 chi con mot loai khoa (Orcarouter):
+                                // Gemini bi xoa nen khong con nhanh "save" nao
+                                // khac de ma nguoi dung phai doan.
+                                AiKey.saveOpenRouter(context, keyDraft)
                                 keyDraft = ""
                                 key = AiModels.keyFor(context, model)
                             }
@@ -464,9 +470,10 @@ fun AiChatScreen(
             ) {
                 if (turns.isEmpty()) {
                     Text(
-                        text = "Chào bạn. Tôi xem được số liệu sử dụng máy mà app đang đo trên thiết bị này: " +
-                            "số phút hôm nay, hạn mức, số lần bộ chặn giữ lại và những ứng dụng dùng nhiều nhất. " +
-                            "Hỏi tôi điều gì đó, hoặc bấm nút bên dưới.",
+                        text = "Cứ hỏi tôi như hỏi một trợ lý AI bình thường — giải thích, lên ý tưởng, " +
+                            "viết giúp tin nhắn cho con.\n" +
+                            "Tôi chỉ đọc số liệu của máy (phút dùng hôm nay, hạn mức, số lần bị chặn, " +
+                            "vị trí) khi bạn hỏi thẳng hoặc bấm nút phân tích.",
                         style = MaterialTheme.typography.bodyMedium,
                         color = TextSecondary,
                         modifier = Modifier.padding(vertical = 8.dp)

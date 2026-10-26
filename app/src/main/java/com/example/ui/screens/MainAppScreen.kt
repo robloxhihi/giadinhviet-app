@@ -166,7 +166,12 @@ fun MainAppScreen(
                             onOpenChat = { selectedTab = 3 },
                             onRequestExtraTime = { showExtraTimeDialog = true },
                             onRequestPrivacyClick = { showPrivacyDialog = true },
-                            onSignOut = { viewModel.signOut() }
+                            onSignOut = { viewModel.signOut() },
+                            // May hoc sinh doi avatar bang chinh hop thu cua no:
+                            // duong ghi nam ben duoi (users/{uid}) o may con cung
+                            // bi Firestore chan neu rules chi cho chu ho so la
+                            // phu huynh — do la ly do truoc day "doi khong duoc".
+                            onAvatarPicked = { base64 -> viewModel.updateAvatar(base64) }
                         )
                     } else {
                         DashboardScreen(

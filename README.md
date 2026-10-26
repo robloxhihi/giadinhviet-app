@@ -53,8 +53,10 @@ một nút vừa bị ẩn khi chưa ghép nối. Release cũ bị xoá, tag chu
 APK mang tag này đều là `versionCode 61` — muốn biết chính xác bản nào, so SHA-256 của
 file với con số in trên trang tải về.
 
-Muốn build bằng Android Studio: mở thư mục này, tạo `.env` chứa `GEMINI_API_KEY`
-(xem `.env.example` — không commit key thật), rồi chạy `assembleDebug`.
+Muốn build bằng Android Studio: mở thư mục này, tạo `.env` chứa `OPENROUTER_API_KEY`
+(xem `.env.example` — không commit key thật), rồi chạy `assembleDebug`. Từ bản 69.0 đây
+là khoá AI duy nhất: tuỳ chọn Gemini cùng `GeminiClient.kt` và secret `GEMINI_API_KEY` đã
+bị gỡ hẳn, vì repo chưa từng có khoá đó nên nút chọn chỉ sinh ra một cuộc chat im lặng.
 
 ## Kiểm thử
 

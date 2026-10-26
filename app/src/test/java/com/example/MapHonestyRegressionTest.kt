@@ -125,9 +125,10 @@ class MapHonestyRegressionTest {
      * `ordinal` của enum MapLayer chính là giá trị lưu trong SharedPreferences
      * "map_view"/"layer2". Cắm một lớp mới vào giữa sẽ âm thầm đổi lớp của người
      * dùng đang dùng sang lớp khác khi mở lại app. Ban 67.0 cắt 6 lop xuong 3
-     * (chi con HYBRID, SATELLITE, ESRI_STREET) nen bat buoc phai co ham
-     * migratedLayerIndex() chuyen chi so cu, va lop moi them sau nay van phai
-     * nam CUOI enum.
+     * (HYBRID, SATELLITE, va mot lop chi tiet), 69.0 doi thanh vien thu ba tu
+     * ESRI_STREET sang STREET — cung nam o chi so 2 nen chi so da luu van dung
+     * nghia. Bat buoc van phai co migratedLayerIndex() va lop moi them sau nay
+     * phai nam CUOI enum.
      */
     @Test
     fun detailStreetLayerIsAppendedLastSoStoredOrdinalsStayValid() {
@@ -136,7 +137,7 @@ class MapHonestyRegressionTest {
         )
         val enumBody = card.substringAfter("private enum class MapLayer(")
             .substringBefore("\n}")
-        val order = listOf("HYBRID", "SATELLITE", "ESRI_STREET")
+        val order = listOf("HYBRID", "SATELLITE", "STREET")
             .map { it to enumBody.indexOf("\n    $it(") }
 
         order.forEach { (name, index) ->
@@ -152,12 +153,20 @@ class MapHonestyRegressionTest {
             "Cắt enum phải kèm hàm chuyển chỉ số cũ (migratedLayerIndex), nếu không người dùng bị nhảy lớp",
             card.contains("private fun migratedLayerIndex(stored: Int)")
         )
+        // Ten lop phai goi dung cai no hien: 69.0 bo chu "OSM" vi nguoi dung bao
+        // lop do mo ("osm lỏ quá") trong khi no la nen duong pho Google.
+        assertFalse(
+            "Không được gọi lớp nền Google là OSM trước khi đo lại host OSM thật",
+            card.contains("\"OSM chi tiết\"")
+        )
     }
 
     /**
      * tile.openstreetmap.org đo ngày 2026-10-21 và 2026-10-23 đều không trả về
-     * HTTP nào; Carto Voyager trả đúng một ảnh lỗi 2049 byte ở mọi zoom. Lớp
-     * "chi tiết" vì thế phải dùng nguồn đã đo là có tile thật.
+     * HTTP nào; Carto Voyager trả đúng một ảnh lỗi 2049 byte ở mọi zoom. Esri
+     * World_Street_Map thi tai duoc nhung bi chan z17 trong file, con Google
+     * `lyrs=m` do hom 2026-10-26 co anh that khac md5 den z21 — nen lop chi tiet
+     * phai dung chinh host Google ma hai lop kia dung.
      */
     @Test
     fun detailLayerUsesAMeasuredWorkingHostNotADeadOne() {
@@ -168,12 +177,12 @@ class MapHonestyRegressionTest {
         // thích vì sao KHONG dùng host đó. So sánh trên toàn văn bản sẽ đỏ vì lý do
         // sai, nên phải cắt comment trước.
         val tiles = stripComments(raw)
-        assertTrue("Lớp đường phố chi tiết phải lấy từ Esri World_Street_Map",
-            tiles.contains("World_Street_Map"))
-        assertTrue("Esri Street phải khoá max zoom theo kết quả đo thật (z18 là ô xám)",
-            tiles.contains("ESRI_STREET_MAX_ZOOM = 17"))
-        assertTrue("Mã nguồn tile phải trỏ host ArcGIS đã đo được tile thật",
-            tiles.contains("server.arcgisonline.com"))
+        assertTrue("Lớp đường phố chi tiết phải là Google `lyrs=m` (da do co that toi z21)",
+            Regex("\"GoogleStreet\",\\s*\"m\"").containsMatchIn(tiles))
+        assertTrue("Nen Google phai duoc phep phong to toi tran do da do (z21)",
+            tiles.contains("GOOGLE_MAX_ZOOM = 21"))
+        assertTrue("Mã nguồn tile phải trỏ host Google đã đo được tile thật",
+            tiles.contains("mt1.google.com"))
         assertFalse("Không được trỏ host tile.openstreetmap.org đã chết trong code",
             tiles.contains("tile.openstreetmap.org"))
         assertTrue("Comment phải giữ lại bằng chứng đo", raw.contains("HTTP 000"))

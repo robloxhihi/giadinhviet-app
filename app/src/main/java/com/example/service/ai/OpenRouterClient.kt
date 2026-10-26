@@ -7,13 +7,17 @@ import kotlinx.coroutines.withContext
 
 /**
  * Goi Orcarouter (`https://www.orcarouter.ai/v1/chat/completions`) bang
- * HttpURLConnection — cung kieu goi nhu `GeminiClient`, khong them dependency.
+ * HttpURLConnection — goi truc tiep, khong them dependency.
  *
  * Ten object van giu `OpenRouterClient` vi doi ten no keo theo ba noi test dang
  * mo filepath; dieu quan trong da duoc sua: host that la orcarouter.ai, chu
  * khong phai openrouter.ai. Goi nham host thi key that bi tu choi 401
  * "Invalid API key" va moi luong AI cua app che't — day la loi da phat hien khi
  * do lai vao ngay 2026-10-22.
+ *
+ * Day la NHA CUNG CAP AI DUY NHAT con lai: ban 69.0 xoa Gemini (khoa
+ * GEMINI_API_KEY chua tung ton tai trong repo nen nut chon do chi la mot lua
+ * chon chet), va `ChatTurn`/`AiException` nay nam trong `AiTypes.kt`.
  *
  * Dung cho nhung model Google khong co: DeepSeek va GLM. `model` lay nguyen
  * chuoi id cua Orcarouter da doi chieu voi `GET https://www.orcarouter.ai/v1/models`
@@ -27,7 +31,7 @@ import kotlinx.coroutines.withContext
  * lon va `handle` phao ra khi noi dung trong, khong duoc im lang tra chat trang.
  *
  * Key di bang `Authorization: Bearer`, khong nam trong URL (URL de bi ghi vao
- * log tai lieu mang). Payload dung dung `AiPrompt.system` nhu Gemini de moi
+ * log tai lieu mang). Payload dung dung `AiPrompt.system` de moi
  * model tra loi theo cung một khuôn — nguoi dung switch model thi khong
  * chuyển sang một kiểu trình bày khác.
  */
@@ -48,7 +52,7 @@ object OpenRouterClient {
     ): Result<String> {
         if (!AiKey.isUsable(apiKey)) {
             return Result.failure(
-                GeminiClient.AiException(
+                AiException(
                     "Chưa có khoá Orcarouter. Nhập khoá để gọi ${model}."
                 )
             )
@@ -62,10 +66,10 @@ object OpenRouterClient {
                         lastError = outcome.message
                         if (attempt < 2) delay(1_500)
                     }
-                    is Call.Fatal -> return@withContext Result.failure(GeminiClient.AiException(outcome.message))
+                    is Call.Fatal -> return@withContext Result.failure(AiException(outcome.message))
                 }
             }
-            Result.failure(GeminiClient.AiException(lastError))
+            Result.failure(AiException(lastError))
         }
     }
 
@@ -140,7 +144,7 @@ object OpenRouterClient {
 
     /** Tach rieng de test doi chieu duoc payload ma khong goi mang. */
     fun buildBody(model: String, history: List<ChatTurn>, question: String, stats: String, report: Boolean = false): Map<String, Any> {
-        // `ChatTurn` luu theo ngon ngu cua Gemini ("model"); Orcarouter goi
+        // `ChatTurn` luu theo ngon ngu "user"/"model"; Orcarouter goi
         // tro ly la "assistant", nen phai doi ngay khi don — neu khong lich su
         // chat bi hieu thanh mot chuoi tin nhan cua cung mot phia.
         val messages = mutableListOf<Map<String, Any>>(

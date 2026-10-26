@@ -22,6 +22,7 @@ import com.example.data.model.UserRole
 import com.example.data.model.UsageSchedule
 import com.google.firebase.firestore.ListenerRegistration
 import java.util.Calendar
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 
@@ -48,17 +49,32 @@ class AppBlockerService : AccessibilityService() {
             private set
     }
 
-    private var schedule: UsageSchedule? = null
+    /**
+     * Noi quy cua TUNG cap ghep noi, khoa theo `pairingId`.
+     *
+     * Mot ho so con co the duoc nhieu ba me cung ghep (ban 68.0), va moi cap
+     * ghep co `pairings/<id>/schedules/default_sched` cua rieng no. Truoc day
+     * bo chan chi doc `users/{uid}.activePairingId` — mot truong duy nhat, bi
+     * lan truot "dua luat cu ve may cu" ghi de: nguoi ghep sau cung lan truot
+     * gia tri do, nen luat cua nguoi ghep truoc do may con khong bao gio chay
+     * theo. Tu 69.0 doc ca mang `activePairingIds` va ap dung DONG THOI: cap
+     * nao noi chan thi chan (nguoi dung khong phai doan luat nao dang thang).
+     */
+    private val schedules = ConcurrentHashMap<String, UsageSchedule>()
 
     /**
-     * Phien hoc tap trung ba me bat tu xa. Doc tu document `pairings/{id}`
-     * chu khong tu `schedules/default_sched`: xem ly do trong `StudySession`.
+     * Phien hoc tap trung ba me bat tu xa, cung theo tung cap. Doc tu document
+     * `pairings/{id}` chu khong tu `schedules/default_sched`: xem ly do trong
+     * `StudySession`.
      */
-    private var study: StudySession? = null
+    private val studySessions = ConcurrentHashMap<String, StudySession>()
+
+    private val scheduleRegs = ConcurrentHashMap<String, ListenerRegistration>()
+    private val studyRegs = ConcurrentHashMap<String, ListenerRegistration>()
     private var userReg: ListenerRegistration? = null
-    private var studyReg: ListenerRegistration? = null
-    private var scheduleReg: ListenerRegistration? = null
-    private var watchedPairingId: String? = null
+
+    /** Tap hop cap ghep noi dang duoc ap dung — de phat hien luc them/bi bot. */
+    private var watchedPairingIds: Set<String> = emptySet()
 
     /** UID ma listener `users/{uid}` dang theo doi — de phat hien doi tai khoan. */
     private var watchedUid: String? = null
@@ -129,30 +145,35 @@ class AppBlockerService : AccessibilityService() {
         if (ev.eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) return
 
         val pkg = ev.packageName?.toString() ?: return
+        val nowCal = Calendar.getInstance()
         // Truoc day `val s = schedule ?: return` — may chua co noi quy thi bo
         // chan nghi het moi thu, ke ca khi ba me vua bam "hoc tap trung". Phien
-        // hoc nam o document khac nen phai duoc xet ca khi schedule = null.
-        val s = schedule
-        val studyNow = study
-        if (s == null && studyNow == null) return
-        if (studyNow != null && !studyNow.isActive()) {
-            // Het gio tren may ba me thi may con cung phai dung chan, khong
-            // cho no treo o trang thai "dang hoc" vi listener khong kip ve.
-            study = null
+        // hoc nam o document khac nen phai duoc xet ca khi khong co lich nao.
+        // Het gio tren may ba me thi may con cung phai dung chan, khong cho no
+        // treo o trang thai "dang hoc" vi listener khong kip ve.
+        studySessions.keys.toList().forEach { id ->
+            studySessions[id]
+                ?.takeIf { !it.isActive(nowCal.timeInMillis) }
+                ?.let { studySessions.remove(id) }
         }
+        if (schedules.isEmpty() && studySessions.isEmpty()) return
 
         // So phut hom nay lay tu bo nho dem (xem usedMinutesToday) — day KHONG
         // phai lan doc dien.
-        val nowCal = Calendar.getInstance()
         val used = usedMinutesToday(nowCal)
-        val reason = BlockPolicy.blockReason(
-            pkg = pkg,
-            schedule = s,
-            ownPackage = packageName,
-            usedMinutesToday = used,
-            now = nowCal,
-            study = study
-        ) ?: return
+        // NGHIEM NHAT THANG THANG: hoi lan luot tung cap ghep noi, cap nao bao
+        // chan thi chan. Sap theo id vi thu tu cua ConcurrentHashMap la ngau
+        // nhien — khong sap thi doan ly do luc nay la cua me, luc kia cua bo.
+        val reason = (schedules.keys + studySessions.keys).sorted().firstNotNullOfOrNull { id ->
+            BlockPolicy.blockReason(
+                pkg = pkg,
+                schedule = schedules[id],
+                ownPackage = packageName,
+                usedMinutesToday = used,
+                now = nowCal,
+                study = studySessions[id]
+            )
+        } ?: return
 
         val now = System.currentTimeMillis()
         if (pkg == lastBlockedPackage && now - lastBlockedAt < cooldownMs) return
@@ -194,7 +215,7 @@ class AppBlockerService : AccessibilityService() {
                     Log.w(TAG, "Doc users/$uid loi: ${err.message}")
                     return@addSnapshotListener
                 }
-                val pairingId = userSnap?.getString("activePairingId").orEmpty()
+                val ids = pairingIdsOf(userSnap)
                 // MAY PHU HUYNH KHONG BI CHAN BOI CHINH BO CHAN CUA NO.
                 //
                 // Bug that phat hien khi kiem thu ban 64.0 tren may gia lap: me
@@ -212,13 +233,7 @@ class AppBlockerService : AccessibilityService() {
                 // co truong = chua bao gio xac nhan vai = van chan nhu cu.
                 val role = userSnap?.getString("role").orEmpty()
                 if (role == UserRole.PARENT.name) {
-                    scheduleReg?.remove()
-                    scheduleReg = null
-                    studyReg?.remove()
-                    studyReg = null
-                    watchedPairingId = null
-                    schedule = null
-                    study = null
+                    detachAllPairings()
                     Log.i(
                         TAG,
                         "May nay la PHU HUYNH (role=PARENT) — bo chan khong chay: " +
@@ -226,28 +241,64 @@ class AppBlockerService : AccessibilityService() {
                     )
                     return@addSnapshotListener
                 }
-                if (pairingId.isEmpty()) {
-                    scheduleReg?.remove()
-                    scheduleReg = null
-                    studyReg?.remove()
-                    studyReg = null
-                    watchedPairingId = null
-                    schedule = null
-                    study = null
+                if (ids.isEmpty()) {
+                    detachAllPairings()
                     Log.i(TAG, "Chua ghep noi — chua ap dung chan nao")
                     return@addSnapshotListener
                 }
-                if (pairingId != watchedPairingId) {
-                    watchedPairingId = pairingId
-                    attachScheduleListener(pairingId)
+                if (ids != watchedPairingIds) {
+                    watchedPairingIds = ids
+                    (scheduleRegs.keys - ids.toSet()).forEach { gone ->
+                        scheduleRegs.remove(gone)?.remove()
+                        schedules.remove(gone)
+                    }
+                    (studyRegs.keys - ids.toSet()).forEach { gone ->
+                        studyRegs.remove(gone)?.remove()
+                        studySessions.remove(gone)
+                    }
+                    ids.filter { it !in scheduleRegs }.forEach { attachPairing(it) }
+                    Log.i(TAG, "Dang ap dung noi quy cua ${ids.size} cap ghep noi: $ids")
                 }
             }
     }
 
-    private fun attachScheduleListener(pairingId: String) {
+    /**
+     * Danh sach cap ghep noi ma bo chan phai theo.
+     *
+     * `activePairingIds` la mang ban 68.0 them vao (nhieu ba me cung ghep mot
+     * con); `activePairingId` la truong cu cua cac ho so 67.0 tro ve truoc. Doc
+     * ca hai roi hop lai: ho so cu van duoc chan nhu cu, ho so moi khong bi bo
+     * sot luat cua nguoi ghep sau — dung cai bug "ai ghep sau cung lan truot".
+     */
+    private fun pairingIdsOf(
+        snap: com.google.firebase.firestore.DocumentSnapshot?
+    ): List<String> {
+        val fromArray = (snap?.get("activePairingIds") as? List<*>)
+            ?.mapNotNull { it as? String }
+            .orEmpty()
+        val legacy = snap?.getString("activePairingId").orEmpty()
+        return (fromArray + legacy).filter { it.isNotBlank() }.distinct().sorted()
+    }
+
+    /** Ngat moi listener noi quy/phiên hoc va xoa sach gia tri dang ap dung. */
+    private fun detachAllPairings() {
+        scheduleRegs.values.forEach { runCatching { it.remove() } }
+        scheduleRegs.clear()
+        studyRegs.values.forEach { runCatching { it.remove() } }
+        studyRegs.clear()
+        schedules.clear()
+        studySessions.clear()
+        watchedPairingIds = emptySet()
+    }
+
+    private fun attachPairing(pairingId: String) {
+        attachScheduleListener(pairingId)
         attachStudyListener(pairingId)
-        scheduleReg?.remove()
-        scheduleReg = FirestoreDb.instance()
+    }
+
+    private fun attachScheduleListener(pairingId: String) {
+        scheduleRegs.remove(pairingId)?.remove()
+        scheduleRegs[pairingId] = FirestoreDb.instance()
             .collection("pairings").document(pairingId)
             .collection("schedules").document(SCHEDULE_DOC)
             .addSnapshotListener { snap, err ->
@@ -255,15 +306,16 @@ class AppBlockerService : AccessibilityService() {
                     Log.w(TAG, "Tai lich that bai: ${err.message}")
                     return@addSnapshotListener
                 }
-                schedule = snap?.let { d ->
+                val loaded = snap?.let { d ->
                     d.toObject(UsageSchedule::class.java)
                         ?.let { ConsentPolicy.healLegacyKeys(it, d.data) }
                         ?.let(ConsentPolicy::normalizePending)
                 }
+                if (loaded == null) schedules.remove(pairingId) else schedules[pairingId] = loaded
                 Log.i(
                     TAG,
-                    "Lich: isReminderOnly=${schedule?.isReminderOnly} " +
-                        "blocked=${schedule?.blockedPackages?.size ?: 0}"
+                    "Lich $pairingId: isReminderOnly=${loaded?.isReminderOnly} " +
+                        "blocked=${loaded?.blockedPackages?.size ?: 0}"
                 )
             }
     }
@@ -275,8 +327,8 @@ class AppBlockerService : AccessibilityService() {
      * doc ca object thi mot truong la kieu cung lam mat ca phien hoc.
      */
     private fun attachStudyListener(pairingId: String) {
-        studyReg?.remove()
-        studyReg = FirestoreDb.instance()
+        studyRegs.remove(pairingId)?.remove()
+        studyRegs[pairingId] = FirestoreDb.instance()
             .collection("pairings").document(pairingId)
             .addSnapshotListener { snap, err ->
                 if (err != null) {
@@ -288,23 +340,20 @@ class AppBlockerService : AccessibilityService() {
                     else -> 0L
                 }
                 val by = snap?.getString("studyByName").orEmpty()
-                study = if (until > System.currentTimeMillis()) {
-                    StudySession(until = until, byName = by)
-                } else null
-                Log.i(TAG, if (study != null)
-                    "Phien hoc dang chay den $until (boi '$by')"
-                else "Khong co phien hoc dang chay")
+                if (until > System.currentTimeMillis()) {
+                    studySessions[pairingId] = StudySession(until = until, byName = by)
+                    Log.i(TAG, "Phien hoc $pairingId dang chay den $until (boi '$by')")
+                } else {
+                    studySessions.remove(pairingId)
+                    Log.i(TAG, "Khong co phien hoc dang chay o $pairingId")
+                }
             }
     }
 
     private fun stopListening() {
         userReg?.remove(); userReg = null
-        scheduleReg?.remove(); scheduleReg = null
-        studyReg?.remove(); studyReg = null
-        watchedPairingId = null
+        detachAllPairings()
         watchedUid = null
-        schedule = null
-        study = null
     }
 
     private fun startAuthWatcher() {

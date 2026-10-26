@@ -106,6 +106,23 @@ object AddressHelper {
         "unnamed road", "unnamed street", "no name", "noname", "đường không tên"
     )
 
+    /**
+     * Địa chỉ THAT, toan bo ten POI.
+     *
+     * Ban cu lay `addr.featureName` (ten dia diem/POI theo Google) khi duong khong co
+     * ten, va do chinh la lo sinh ra nhung chu nhu "Thanh Dep Trai", "nha yumong" trong
+     * card vi xanh cua phu huynh. `featureName` khong phai mot dia chi — no la ten
+     * mot noi duoc dat theo chu, nen tu ban nay bi loai han.
+     *
+     * Thu tu thanh phan (chi gan khi thuc su co chu):
+     *  1. Duong (`thoroughfare`) + so nha (`subThoroughfare`)
+     *  2. Thon/xa/phuong (`subLocality`) — la don vi hanh chinh that, khong phai ten POI
+     *  3. Huyen/thi xa (`subAdminArea`)
+     *  4. Tinh/thanh (`adminArea`)
+     *
+     * Khong co ca duong lan don vi hanh chinh → tra `null` de `getReadableAddress`
+     * in toa do co nhan, dung de mot chu khong lien quan thay vao cho do.
+     */
     private fun reverseGeocode(context: Context, latitude: Double, longitude: Double): String? {
         return try {
             val geocoder = Geocoder(context, Locale("vi", "VN"))
@@ -114,19 +131,26 @@ object AddressHelper {
             val addresses: List<Address>? = geocoder.getFromLocation(latitude, longitude, 1)
             val addr = addresses?.firstOrNull() ?: return null
 
-            val feature = addr.featureName
-            val thoroughfare = addr.thoroughfare
-            val subAdmin = addr.subAdminArea // Huyện/Thị xã
-            val admin = addr.adminArea // Tỉnh/Thành phố
+            val road = addr.thoroughfare?.trim().orEmpty()
+            val houseNumber = addr.subThoroughfare?.trim().orEmpty()
+            val ward = addr.subLocality?.trim().orEmpty()
+            val district = addr.subAdminArea?.trim().orEmpty() // Huyện/Thị xã
+            val province = addr.adminArea?.trim().orEmpty() // Tỉnh/Thành phố
+
+            val roadLabel = when {
+                road.isNotEmpty() && houseNumber.isNotEmpty() -> "$road $houseNumber"
+                else -> road
+            }
 
             val parts = mutableListOf<String>()
-            if (!thoroughfare.isNullOrBlank()) {
-                parts.add(thoroughfare)
-            } else if (!feature.isNullOrBlank() && feature != thoroughfare) {
-                parts.add(feature)
-            }
-            if (!subAdmin.isNullOrBlank()) parts.add(subAdmin)
-            if (!admin.isNullOrBlank()) parts.add(admin)
+            if (roadLabel.isNotEmpty()) parts.add(roadLabel)
+            if (ward.isNotEmpty()) parts.add(ward)
+            if (district.isNotEmpty() && district != ward) parts.add(district)
+            if (province.isNotEmpty() && parts.none { it == province }) parts.add(province)
+
+            // Chi mot cai ten (duong hoac don vi hanh chinh) moi du dieu kien goi la
+            // dia chi. Khong co gi trong bon → null, khong bao gio vay ten POI vao.
+            if (roadLabel.isEmpty() && ward.isEmpty()) return null
 
             parts.joinToString(", ").ifBlank { null }
         } catch (e: IOException) {

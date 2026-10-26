@@ -51,7 +51,7 @@ class StudySessionRegressionTest {
         assertTrue("Bo chan khong doc cot studyByName", blocker.contains("\"studyByName\""))
         assertTrue(
             "Phien hoc phai duoc truyen vao BlockPolicy",
-            blocker.contains("study = study")
+            blocker.contains("study = studySessions[id]")
         )
     }
 

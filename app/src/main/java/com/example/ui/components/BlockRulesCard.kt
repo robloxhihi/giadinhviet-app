@@ -110,6 +110,11 @@ fun BlockRulesCard(
     audit: List<RuleAuditEntry> = emptyList(),
     /** Loi gan nhat tu ViewModel — dung de banner "chưa lưu được" noi DUNG ly do. */
     errorText: String? = null,
+    /**
+     * Ten con do phu huynh nhin thay. 69.0: ca the nay la man DAT LUAT cho may
+     * KHAC, nen phai ghi ro luat ap len may nao thay vi de nguoi dung doan.
+     */
+    targetChildName: String = "",
     onUpdate: (
         blockedPackages: List<String>,
         reminderOnly: Boolean,
@@ -346,6 +351,21 @@ fun BlockRulesCard(
                 Spacer(Modifier.height(12.dp))
             }
 
+            // 69.0 — "cái này phụ huynh chọn thì áp dụng lên máy nào?" Ghi ngay
+            // dau the, vi day la man DAT LUAT cho mot cai khac: nguoi dung dung
+            // may cua minh ma so luat day ap len may con. Dong thu hai chan
+            // nan mot noi lo that: ban 64.0 tung dem may cua ME ve Home bang
+            // chinh han muc phut cua con (xem AppBlockerService.listenSchedule).
+            StatusBanner(
+                text = (
+                    if (targetChildName.isNotBlank()) "Mọi lựa chọn dưới đây áp dụng lên MÁY CỦA CON — «$targetChildName». "
+                    else "Mọi lựa chọn dưới đây áp dụng lên MÁY CỦA CON đang ghép nối với bạn. "
+                    ) +
+                    "Máy bạn đang cầm chỉ để đặt luật, không bị chính luật này chặn.",
+                tone = Tone.Info
+            )
+            Spacer(Modifier.height(12.dp))
+
             // Chon che do. The nay tung ghi nhan la "Chi nhac nho" trong khi
             // Switch duoc dat `checked = !reminderOnly` — tuc GAT la "chan
             // that". Nhan nguoc chieu nhu vay khien nguoi dung tick app xong
@@ -358,7 +378,7 @@ fun BlockRulesCard(
                 Column(Modifier.weight(1f)) {
                     Text("Chặn thật", style = MaterialTheme.typography.bodyMedium)
                     Text(
-                        text = if (reminderOnly) "Đang tắt — máy chỉ đếm thời gian rồi báo, chưa chặn app"
+                        text = if (reminderOnly) "Đang tắt — máy con chỉ đếm thời gian, không chặn app nào"
                         else "Đang bật — đẩy về màn hình Home khi mở app bị chặn",
                         style = MaterialTheme.typography.bodySmall,
                         color = if (reminderOnly) Premium.amber
@@ -520,6 +540,20 @@ fun BlockRulesCard(
                 }
             }
 
+            // May con danh gia danh sach BI CHAN truoc (BlockPolicy.blockReason),
+            // nen mot app nam o ca hai cho thi van bi chan. Truoc day UI khong
+            // noi gi, nguoi dung tuong "mien chan" la thang — do la mot trong
+            // nhung ly do "chuc nang khong hoat dong dung nhu ghi".
+            val bothBlockedAndExempt = selected.intersect(allowedSelected)
+            if (bothBlockedAndExempt.isNotEmpty()) {
+                Spacer(Modifier.height(6.dp))
+                StatusBanner(
+                    text = "${bothBlockedAndExempt.size} app đang nằm ở cả hai danh sách — " +
+                        "máy con sẽ CHẶN, vì danh sách bị chặn được xét trước danh sách miễn chặn.",
+                    tone = Tone.Warn
+                )
+            }
+
             if (showAllowPicker) {
                 AppPicker(
                     apps = pickerApps,
@@ -551,6 +585,18 @@ fun BlockRulesCard(
                 style = MaterialTheme.typography.bodyMedium,
                 fontWeight = FontWeight.Bold
             )
+            // Han muc phut song duoc nua nho quyen "Truy cập thông tin sử dụng"
+            // o may CON: khong co quyen thi dem ra 0 phut va bo chan that bai
+            // im lang. Noi dieu kien truoc khi nguoi dung bam gui.
+            if (targetMinutes > 0) {
+                Text(
+                    text = "Cần máy con đã bật quyền \"Truy cập thông tin sử dụng\" — chưa có quyền thì " +
+                        "không đếm được phút, hạn mức không chặn được.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Premium.amber
+                )
+                Spacer(Modifier.height(6.dp))
+            }
             // Slider cua Material3 NEM loi neu `value` nam ngoai `valueRange`,
             // ma han muc gio day co the bang 0 (chua dat) → an nut moi bat len
             // 30 phut la min cua thanh keo. khong co con so nao xuat hien khi
@@ -750,7 +796,7 @@ private fun SaveRow(
                         else -> "chặn thật $countSelected app"
                     }
                     buildString {
-                        append("Lưu nội quy")
+                        append("Gửi xuống máy của con")
                         append(" • ").append(mode)
                         append(" • ").append(windowSummary)
                     }

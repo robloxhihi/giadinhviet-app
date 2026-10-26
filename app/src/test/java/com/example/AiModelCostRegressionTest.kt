@@ -37,6 +37,26 @@ class AiModelCostRegressionTest {
         }
     }
 
+    /**
+     * 2026-10-26: "bỏ chữ free đằng sau mấy cái ai hiển thị trong app". Nhãn là
+     * thứ người dùng đọc trên màn hình, nên không được mang chữ giá. Hai thứ
+     * PHẢI giữ nguyên: `id` (đúng từng ký tự — đó là tên model trên
+     * `GET /v1/models`, đổi là 404) và `note`/cờ `free` (xóa luôn bằng chứng
+     * rằng model không tốn tiền thì thành nói dối người dùng).
+     */
+    @Test
+    fun nhanHienThiKhongMangChuGia() {
+        AiModels.all.forEach {
+            val nhan = it.label.lowercase()
+            assertFalse("Nhãn `${it.label}` vẫn còn chữ free/miễn phí/0 đồng",
+                nhan.contains("free") || nhan.contains("miễn phí") || nhan.contains("0 đồng"))
+        }
+        assertTrue("Id phải giữ nguyên hợp đồng với máy chủ",
+            openRouter.first().id == "deepseek/deepseek-v4-flash-free")
+        assertTrue("Model mặc định vẫn được đánh dấu miễn phí nội bộ",
+            AiModels.default.free)
+    }
+
     @Test
     fun traPhiPhaiGhiChuTraPhiVaKhongDuocNoiLaKhongDong() {
         openRouter.filter { !it.free }.forEach {
@@ -71,12 +91,19 @@ class AiModelCostRegressionTest {
         // Hai id tra phi da bi xoai khoi bang chon. Chung khong duoc con song
         // duong nao trong app: doc `isFree` cua chung phai ra true vi `find`
         // roi ve model mien phi mac dinh, khong phai vi chung duoc thang tay.
-        assertTrue("Id tra phi cu phai roi ve model mien phi, khong phai Gemini khong khoa",
+        assertTrue("Id tra phi cu phai roi ve model mien phi, khong phai mot loi nao",
             AiModels.isFree(AiModels.find("deepseek/deepseek-v4-flash")))
-        assertTrue("Gemini phai duoc tinh la mien phi", AiModels.isFree(AiModels.find("gemini")))
+        // 69.0: Gemini bi xoa khoi bo chon. May cu tung chon no thi `selectedId`
+        // van tra ve chuoi "gemini", `find` khong thay nen phai roi ve model
+        // Orcarouter mien phi — khong vo, cung khong goi lai provider da cat.
+        assertTrue("Id \"gemini\" cu phai roi ve model mien phi dang chay duoc",
+            AiModels.find("gemini").provider == AiModel.Provider.OPENROUTER &&
+                AiModels.isFree(AiModels.find("gemini")))
+        assertTrue("Bang chon khong duoc con model Gemini nao",
+            AiModels.all.none { it.id == "gemini" || it.label.contains("Gemini", ignoreCase = true) })
         assertTrue("Id la phai roi ve model mien phi", AiModels.isFree(AiModels.find("khong-ton-tai")))
-        assertTrue("Mac dinh khong duoc la Gemini (ban cai khong co khoa Gemini)",
-            AiModels.default.provider == AiModel.Provider.OPENROUTER)
+        assertTrue("Mac dinh phai la model Orcarouter mien phi (ban cai khong con khoa nao khac)",
+            AiModels.default.provider == AiModel.Provider.OPENROUTER && AiModels.default.free)
     }
 
     @Test

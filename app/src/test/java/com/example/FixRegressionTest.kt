@@ -3,6 +3,7 @@ package com.example
 import com.example.data.model.hasRealFix
 import com.example.service.map.OfflineMapDownloader
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
@@ -21,6 +22,30 @@ class FixRegressionTest {
         return candidates.firstOrNull { it.exists() }
             ?: error("Không tìm thấy tệp: $relative")
     }
+
+    /**
+     * Chỉ phần CODE của một tệp nguồn. Bản 69.0 xoá Gemini nhưng GIỮ LẠI lời giải
+     * thích vì sao xoá trong KDoc, nên kiểm tra "Gemini không còn" trên toàn văn
+     * bản sẽ đỏ vì lý do sai. Comments phải bị cắt trước khi so sánh.
+     */
+    private fun codeOf(relative: String): String = projectFile(relative).readText()
+        .lines()
+        .filterNot { it.trimStart().startsWith("//") }
+        .joinToString("\n")
+        .replace(Regex("/\\*[\\s\\S]*?\\*/"), "")
+
+    /** True khi tên tệp là một nguồn Gemini (bất kể hoa thường). */
+    private fun looksLikeGeminiFile(name: String): Boolean =
+        name.contains("gemini", ignoreCase = true)
+
+    /**
+     * `.env.example` va workflow YAML deu ghi chu bang `#`, va 69.0 GIU LAI mot
+     * ghi chu noi ro vi sao khoa Gemini bi bo — nen phep "khong con GEMINI"
+     * phai chay tren phan khong phai ghi chu, neu khong thi chinh bang chung
+     * gan day lam do test.
+     */
+    private fun withoutHashComments(text: String): String =
+        text.lines().filterNot { it.trimStart().startsWith("#") }.joinToString("\n")
 
     @Test
     fun manifest_declaresCriticalPermissions() {
@@ -293,10 +318,16 @@ class FixRegressionTest {
         val enumBlock = src.substringAfter("private enum class MapLayer").substringBefore("private fun layerAt")
         assertTrue("Lop Duong pho khong duoc con la MAPNIK (host chet)", !enumBlock.contains("MAPNIK"))
         assertTrue("Phai co lop Google hybrid lam mac dinh", enumBlock.contains("MapTileSources.HYBRID"))
-        assertTrue("Lop OSM chi tiet phai dung nen Esri World_Street_Map", enumBlock.contains("MapTileSources.ESRI_STREET,"))
+        // 69.0: lop chi tiet la duong pho Google (`lyrs=m`, toi z21), KHONG phai
+        // Esri World_Street_Map nua. Do hom 2026-10-26 tai Ha Noi: Esri bi chan
+        // z17 trong tile file (ESRI_STREET_MAX_ZOOM) nen khong phong to duoc, con
+        // Google m co anh that khac md5 den z21. Ten lop cung khong con ghi "OSM"
+        // vi nguoi dung bao "osm lỏ quá" — phai goi dung cai no hien.
+        assertTrue("Lop chi tiet phai dung nen duong pho Google", enumBlock.contains("MapTileSources.STREET,"))
+        assertTrue("Lop chi tiet khong duoc con la Esri Street max z17",
+            !enumBlock.contains("MapTileSources.ESRI_STREET,"))
         assertTrue("Moi tran zoom phai den tu hang so DA DO trong MapTileSources, khong nhap so cam",
-            enumBlock.contains("MapTileSources.GOOGLE_MAX_ZOOM") &&
-                enumBlock.contains("MapTileSources.ESRI_STREET_MAX_ZOOM"))
+            enumBlock.contains("MapTileSources.GOOGLE_MAX_ZOOM"))
         assertTrue("The map khong duoc tu khai báo source rieng", !src.contains("XYTileSource("))
     }
 
@@ -319,19 +350,22 @@ class FixRegressionTest {
     // ── Trợ lý AI + dữ liệu dùng máy hằng ngày (bản 22.0) ─────────────────
 
     /**
-     * Key that cua Gemini do nguoi dung cung cap. APK tai tu GitHub Release la
-     * cong khai, nen mot chuoi trong file nguon cung la mot no loi dung thanh
-     * than. Test quyet theo HINH DANG chuoi, khong theo mot chuoi cu the: chen
-     * thang key vao day thi chinh file test da vi pham va lan do xanh khong
-     * bao gio xay ra (dinh luu cua ban 22.0 chet vi chinh ly do nay).
+     * Key that cua nha cung cap AI do nguoi dung cung cap. APK tai tu GitHub
+     * Release la cong khai, nen mot chuoi trong file nguon cung la mot no loi
+     * dung thanh than. Test quyet theo HINH DANG chuoi, khong theo mot chuoi cu
+     * the: chen thang key vao day thi chinh file test da vi pham va lan do xanh
+     * khong bao gio xay ra (dinh luu cua ban 22.0 chet vi chinh ly do nay).
      */
     @Test
-    fun noGeminiKeyIsEverCommitted() {
+    fun noAiKeyIsEverCommitted() {
         val repoRoot = findRepoRoot()
         val scanned = textFilesIn(repoRoot)
         val offenders = scanned.filter { looksLikeRealKey(readUtf8(it)) }
         assertTrue("File co duong nhu chua key that: ${offenders.map { it.name } }", offenders.isEmpty())
-        assertTrue("Phan quet phai thay duoc nguon cua app", scanned.any { it.name == "GeminiClient.kt" })
+        // Ban 69.0 xoa GeminiClient.kt, nen phep thu nhat phai lay mot ton tai
+        // that: neu phep quet khong thay nguon nao thi "khong co key" chi la mot
+        // ket luan rong.
+        assertTrue("Phan quet phai thay duoc nguon cua app", scanned.any { it.name == "OpenRouterClient.kt" })
 
         val example = File(repoRoot, ".env.example")
         assertTrue("Phai co .env.example de BuildConfig luoan sinh ra truong key", example.exists())
@@ -339,40 +373,86 @@ class FixRegressionTest {
         assertTrue(".env phai bi .gitignore", File(repoRoot, ".gitignore").readLines().map { it.trim() }.contains(".env"))
     }
 
-    /** Build luon phai co truong BuildConfig, ke ca khi CI khong co repo secret. */
+    /**
+     * Khoa cua Gemini chua tung nam trong repo (khong co `GEMINI_API_KEY` trong
+     * .env.example cung nhu trong CI), nen moi lan chon Gemini la mot cu chat
+     * im lang. Ban 69.0 xoa het duong do theo yeu cua cua nguoi dung. Test khoa
+     * LAI chiec xoa — de mot lan "them lai cho nhanh" khong tai sinh mot nut
+     * chon chet. Chi so phan CODE, vi KDoc van phai noi vi sao xoa.
+     */
     @Test
-    fun geminiKeyFallsBackToOnDeviceEntry() {
+    fun geminiProviderIsGoneFromCodeConfigAndCi() {
         val repoRoot = findRepoRoot()
-        val key = projectFile("src/main/java/com/example/service/ai/AiKey.kt").readText()
-        assertTrue("Phai lay key tu BuildConfig khi nguoi dung chua nhap", key.contains("BuildConfig.GEMINI_API_KEY"))
-        assertTrue("Key nhap tay phai duoc uu tien", key.contains("entered(context).ifBlank"))
-        assertTrue("Phai tu choi chuoi chiem cho cua .env.example", key.contains("REPLACE_ME"))
-        assertTrue("Key luu trong SharedPreferences cua app, khong phai file cong khai",
-            key.contains("getSharedPreferences(PREFS, Context.MODE_PRIVATE)"))
+
+        assertFalse("GeminiClient.kt phai bi xoa khoi repo",
+            projectFile("src/main/java/com/example/service/ai").listFiles()
+                .orEmpty().any { looksLikeGeminiFile(it.name) })
+
+        val models = codeOf("src/main/java/com/example/service/ai/AiModels.kt")
+        assertFalse("Bo chon model khong duoc con GEMINI", models.contains("GEMINI"))
+        assertFalse("Khong duoc con id dieu huong \"gemini\"", models.contains("\"gemini\""))
+        assertTrue("Enum provider chi con OPENROUTER",
+            Regex("enum class Provider \\{\\s*OPENROUTER\\s*}").containsMatchIn(models))
+
+        val key = codeOf("src/main/java/com/example/service/ai/AiKey.kt")
+        assertFalse("AiKey khong duoc con doc BuildConfig.GEMINI_API_KEY", key.contains("GEMINI"))
+        assertFalse("Ham luu key Gemini phai bi xoa het", key.contains("fun save("))
+
+        val screen = codeOf("src/main/java/com/example/ui/screens/AiChatScreen.kt")
+        assertFalse("Man hinh chat khong duoc con nhanh Gemini", screen.contains("GEMINI"))
+
+        assertFalse(".env.example khong duoc con cho cho khoa Gemini",
+            withoutHashComments(File(repoRoot, ".env.example").readText()).contains("GEMINI"))
 
         val workflow = File(repoRoot, ".github/workflows/build-apk.yml").readText()
-        assertTrue("CI phai lay key tu repo secret", workflow.contains("secrets.GEMINI_API_KEY"))
+        assertFalse("CI khong duoc con lay secret Gemini",
+            withoutHashComments(workflow).contains("GEMINI_API_KEY"))
         assertTrue("CI phai ghi vao .env da bi ignore", workflow.contains("> .env"))
-        // `$` phai thoat: trong chuoi Kotlin "$GEMINI_API_KEY" la bieu thuc
+        // `$` phai thoat: trong chuoi Kotlin "$OPENROUTER_API_KEY" la bieu thuc
         // dai, se khong bien dich chu khong phai loi cua workflow.
-        assertTrue("CI khong duoc in gia tri key ra log", !workflow.contains("echo \"\$GEMINI_API_KEY\""))
+        assertTrue("CI khong duoc in gia tri key ra log",
+            !workflow.contains("echo \"\$OPENROUTER_API_KEY\""))
     }
 
     /**
-     * Khoa OpenRouter la cua nguoi dung, khong phai cua repo: cung luat voi
-     * Gemini. BuildConfig chi la nguon du phong, key nhap tren may duoc uu
-     * tien, va khong co dong echo nao in gia tri ra log CI.
+     * ChatTurn va AiException tung nam trong GeminiClient.kt. Xoá file mà không
+     * chuyển hai lớp đó thì toàn bộ module AI chết biên dịch — và lỗi báo về
+     * sẽ là "unresolved reference" chứ không phải "Gemini đã bị gỡ".
      */
     @Test
-    fun openRouterKeyUsesSameNoCommitRuleAsGemini() {
+    fun sharedAiTypesSurvivedTheGeminiDeletion() {
+        val types = projectFile("src/main/java/com/example/service/ai/AiTypes.kt").readText()
+        assertTrue("ChatTurn phai song o AiTypes.kt",
+            types.contains("data class ChatTurn(val role: String, val text: String)"))
+        assertTrue("AiException phai song o AiTypes.kt",
+            types.contains("class AiException(message: String) : Exception(message)"))
+
+        val client = codeOf("src/main/java/com/example/service/ai/OpenRouterClient.kt")
+        assertFalse("Client duy nhat khong duoc con trich GeminiClient",
+            client.contains("GeminiClient."))
+        assertTrue("AiException phai duoc dung thoi, khong qua ten lop cua provider cu",
+            Regex("Result\\.failure\\(AiException\\(").containsMatchIn(client))
+        assertTrue("Phai chay tren IO thread", client.contains("withContext(Dispatchers.IO)"))
+    }
+
+    /**
+     * Khoa OpenRouter (thuc te la Orcarouter) la cua nguoi dung, khong phai cua
+     * repo: cung luat chung — BuildConfig chi la nguon du phong, key nhap tren
+     * may duoc uu tien, va khong co dong echo nao in gia tri ra log CI.
+     */
+    @Test
+    fun openRouterKeyUsesTheSameNoCommitRule() {
         val key = projectFile("src/main/java/com/example/service/ai/AiKey.kt").readText()
         assertTrue("Phai lay key OpenRouter tu BuildConfig", key.contains("BuildConfig.OPENROUTER_API_KEY"))
         assertTrue("Key OpenRouter nhap tay phai duoc uu tien",
             key.contains("enteredOpenRouter(context).ifBlank"))
         assertTrue("Key OpenRouter luu cung SharedPreferences voi key AI khac nhan",
             key.contains("openrouter_key_manual"))
-        assertTrue("Khong duoc dung chung ham luu cua Gemini (deo key sai loai)",
+        assertTrue("Chi mot ham luu duy nhat, khong con hanh lang song song cua provider da bi xoa",
             key.contains("saveOpenRouter(context: Context, key: String)"))
+        assertTrue("Key luu trong SharedPreferences cua app, khong phai file cong khai",
+            key.contains("getSharedPreferences(PREFS, Context.MODE_PRIVATE)"))
+        assertTrue("Phai tu choi chuoi chiem cho cua .env.example", key.contains("REPLACE_ME"))
 
         val repoRoot = findRepoRoot()
         val example = File(repoRoot, ".env.example").readText()
@@ -391,10 +471,8 @@ class FixRegressionTest {
     }
 
     /**
-     * Nguoi dung chon model thi phai nhan duoc dung model do: khong duoc
-     * lat nguoc sang Gemini khi OpenRouter 503 (ban 35.0 chi co mot model nen
-     * chuyen nay chua dat len), va payload phai dung cung `AiPrompt` de moi
-     * model tra loi theo dung mot khuon trinh bay.
+     * Nguoi dung chon model thi phai nhan duoc dung model do, va payload phai
+     * dung cung `AiPrompt` de moi model tra loi theo dung mot khuon trinh bay.
      */
     @Test
     fun modelPickerSendsToTheModelUserChose() {
@@ -411,7 +489,8 @@ class FixRegressionTest {
         // bịa — va chinh phat biểu đó là lý do danh muc model trong app chi toan
         // model dem tien. Do lai tren `GET /v1/models` cua orcarouter.ai.
         assertTrue("Phai co model duoi `-free` cua Orcarouter", models.contains("-free\""))
-        assertTrue("Gemini van phai o trong bo chon", models.contains("AiModel.Provider.GEMINI"))
+        assertTrue("Bo chon chi con model Orcarouter mien phi",
+            !codeOf("src/main/java/com/example/service/ai/AiModels.kt").contains("GEMINI"))
         assertTrue("Chon model phai luu lai tren may", models.contains("FIELD_SELECTED"))
         assertTrue("Goi dung model duoc chon, khong thu lan luot",
             models.contains("OpenRouterClient.chat(apiKey, model.id"))
@@ -432,25 +511,16 @@ class FixRegressionTest {
             chat.contains("trả về nội dung trống") || chat.contains("bị cắt vì quá dài"))
         assertTrue("Phai chay tren IO thread", chat.contains("withContext(Dispatchers.IO)"))
         assertTrue("Cung mot khuon trinh bay cho moi model", chat.contains("AiPrompt.system(stats, report)"))
-        assertTrue("Lich su Gemini phai doi sang ngon ngu OpenRouter",
+        assertTrue("Lich su phai doi thanh ngon ngu cua chat OpenRouter",
             chat.contains("\"assistant\" else \"user\"") || chat.contains("to \"assistant\""))
 
         val screen = projectFile("src/main/java/com/example/ui/screens/AiChatScreen.kt").readText()
         assertTrue("Man hinh phai ve hang chon model", screen.contains("AiModels.all.forEach"))
         assertTrue("Man hinh phai goi dung model da chon", screen.contains("AiModels.chat("))
-        assertTrue("Khuon nhap key phai doi theo provider cua model",
-            screen.contains("AiModel.Provider.OPENROUTER"))
-    }
-
-    /** Key trong URL de bi luu vao log mang; API cua Google nhan header. */
-    @Test
-    fun geminiClientSendsKeyInHeaderAndSurvivesOverload() {
-        val src = projectFile("src/main/java/com/example/service/ai/GeminiClient.kt").readText()
-        assertTrue("Phai dung header x-goog-api-key", src.contains("x-goog-api-key"))
-        assertTrue("Cam dua key vao query string", !src.contains("&key="))
-        assertTrue("Phai co model phong khi model chinh 503", src.contains("gemini-3.1-flash-lite"))
-        assertTrue("Model the he 3 an token nghi ngam, phai chan ngan sach", src.contains("\"thinkingBudget\" to 0"))
-        assertTrue("Phai chay tren IO thread", src.contains("withContext(Dispatchers.IO)"))
+        assertTrue("Khuon nhap key phai goi thang ham luu cua Orcarouter",
+            screen.contains("AiKey.saveOpenRouter(context, keyDraft)"))
+        assertTrue("O nhap key phai noi ro khoa cua orcarouter.ai",
+            screen.contains("khoá orcarouter.ai"))
     }
 
     /**
@@ -614,7 +684,7 @@ class FixRegressionTest {
             listen.contains("role == UserRole.PARENT.name")
         )
         val gateAt = listen.indexOf("role == UserRole.PARENT.name")
-        val pairingAt = listen.indexOf("pairingId.isEmpty()")
+        val pairingAt = listen.indexOf("ids.isEmpty()")
         assertTrue("Cổng role phải đứng trước nhánh chưa ghép nối", gateAt in 0 until pairingAt)
         assertTrue(
             "So bang ten enum, khong so string tay (đổi tên enum là đổi cả dữ liệu cũ)",
@@ -623,15 +693,53 @@ class FixRegressionTest {
 
         val parentBranch = listen.substringAfter("role == UserRole.PARENT.name")
             .substringBefore("return@addSnapshotListener")
+        assertTrue("Nhanh PHU HUYNH phai goi detachAllPairings()", parentBranch.contains("detachAllPairings()"))
+        // Tat phai la tat that: ngat moi listener va xoa het gia tri dang ap
+        // dung. Neu con sot id cu trong `watchedPairingIds` thi lan ghep noi
+        // sau bi `ids != watchedPairingIds` chan, may khong bao gio doc lai
+        // duoc noi quy moi.
+        val detach = src.substringAfter("private fun detachAllPairings()")
         listOf(
-            "scheduleReg?.remove()", "studyReg?.remove()",
-            "schedule = null", "study = null",
-            // Phai xa `watchedPairingId = null`, khong phai chi ngat listener: neu
-            // gia tri cu con giu thi lan ghep noi sau se bi `pairingId != watchedPairingId`
-            // chan, may khong bao gio doc lai duoc noi quy moi.
-            "watchedPairingId = null"
+            "scheduleRegs.clear()", "studyRegs.clear()",
+            "schedules.clear()", "studySessions.clear()",
+            "watchedPairingIds = emptySet()"
         ).forEach {
-            assertTrue("Nhanh PHU HUYNH phai co '$it'", parentBranch.contains(it))
+            assertTrue("detachAllPairings thiếu '$it'", detach.contains(it))
         }
+    }
+
+    /**
+     * 69.0 — mot ho so con co the co NHIEU ba me cung ghep (ban 68.0 mo duong
+     * trong ViewModel), nhung bo chan van chi doc `users/{uid}.activePairingId`
+     * — mot truong duy nhat. Ai ghep sau cung lan truot no, nen luat cua
+     * nguoi ghep truoc do may con chay im lang, va nguoc lai: phu huynh mo
+     * bang noi quy len thi thay "da luu" ma may con khong dung chan.
+     *
+     * Tu 69.0 bo chan doc ca mang `activePairingIds` (kem truong cu cho ho so
+     * 67.0) va hoi tung cap: cap nao bao chan thi chan.
+     */
+    @Test
+    fun blockerEnforcesEveryPairedParentNotJustTheLastOne() {
+        val src = projectFile("src/main/java/com/example/service/blocker/AppBlockerService.kt").readText()
+        val code = codeOf("src/main/java/com/example/service/blocker/AppBlockerService.kt")
+        assertTrue("Bo chan phai doc mang ghep noi", code.contains("\"activePairingIds\""))
+        assertTrue("Phai hop ca truong cu va mang moi", code.contains("pairingIdsOf(userSnap)"))
+        assertTrue("Moi cap ghep noi phai co listener noi quy rieng",
+            code.contains("schedules[pairingId] = loaded"))
+        assertTrue("Khong duoc con mot bien `schedule` doc nhat",
+            !Regex("""private var schedule: UsageSchedule\?""").containsMatchIn(code))
+        // Nghiem nhat thang thang: duyet het cac cap, khong dung o cap dau tien
+        // tra ve null.
+        assertTrue("Phai hoi BlockPolicy cua TUNG cap ghep noi",
+            code.contains("firstNotNullOfOrNull"))
+        assertTrue("Ly do hien ra phai on dinh (sap id)", code.contains(".sorted()"))
+        // Wording that the parent sees must match the behaviour.
+        val card = projectFile("src/main/java/com/example/ui/components/BlockRulesCard.kt").readText()
+        assertTrue("The noi quy phai ghi ro luat ap len may nao",
+            card.contains("áp dụng lên MÁY CỦA CON"))
+        assertTrue("Nut gui phai noi diem den thay vi 'Lưu nội quy' chung chung",
+            card.contains("Gửi xuống máy của con"))
+        assertFalse("Khong duoc con hen 'rồi báo' khi che do nhac nho khong bao nao",
+            card.contains("chỉ đếm thời gian rồi báo"))
     }
 }

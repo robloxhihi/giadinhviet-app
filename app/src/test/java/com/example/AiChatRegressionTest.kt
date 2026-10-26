@@ -24,6 +24,17 @@ class AiChatRegressionTest {
         return String(file.readBytes(), Charsets.UTF_8)
     }
 
+    /**
+     * Chỉ phần CODE của một nguồn. 69.0 giữ nguyên lời giải thích "bản cũ ép
+     * zoom thế nào" trong comment, mà comment đó chứa đúng chuỗi mà một assert
+     * "không còn X" cấm — so trên toàn văn bản sẽ đỏ vì lý do sai.
+     */
+    private fun codeWithoutComments(text: String): String = text
+        .lines()
+        .filterNot { it.trimStart().startsWith("//") }
+        .joinToString("\n")
+        .replace(Regex("/\\*[\\s\\S]*?\\*/"), "")
+
     @Test
     fun boldBecomesStyledSegment() {
         val parsed = AiMarkdown.segments("**Đánh giá:** con dùng ít")
@@ -254,13 +265,22 @@ class AiChatRegressionTest {
     @Test
     fun mapCardStopsQuotingRawSensorPrecision() {
         val card = source("src/main/java/com/example/ui/components/GoogleMapsStudentLocationCard.kt")
+        val code = codeWithoutComments(card)
         assertTrue("toa do phai qua FixPrecision", card.contains("FixPrecision.formatCoordinates("))
         assertTrue("sai so phai qua FixPrecision", card.contains("FixPrecision.accuracyShortLabel("))
         assertTrue("vong tron dung sai so trung thuc", card.contains("honestAcc.toDouble()"))
-        assertTrue("zoom mo man hinh phai theo sai so (FixPrecision)", card.contains("coerceAtMost(suggestedZoom)"))
+        // 69.0: map MO dung zoom nguoi dung chon, tran la tran tile that. Ban cu
+        // ep `coerceAtMost(suggestedZoom)` nen may bao sai so kem tu mo map o
+        // z15.5 — nguoi dung bao "map lỏ / không chính xác". Do chinh xac phai
+        // duoc noi bang vong ±m + canh bao khi phong to qua sai so.
+        assertFalse(
+            "zoom mo man hinh khong duoc bi sai so ep nua",
+            code.contains("coerceAtMost(suggestedZoom)")
+        )
+        assertTrue("phong to qua sai so phai bi noi thang", code.contains("zoomOverAccuracy"))
         assertFalse(
             "tran phong to KHONG duoc chan theo sai so nua (67.0: chi tiet map toi tran tile, do chinh xac noi bang vong tron ±m)",
-            card.contains("coerceAtMost(zoomCeiling)")
+            code.contains("coerceAtMost(zoomCeiling)")
         )
         assertFalse(
             "khong duoc con day `±<so tho>m` ra man hinh",
@@ -274,9 +294,10 @@ class AiChatRegressionTest {
 
     /**
      * cau lenh he phai noi ro khuon trinh bay, neu khong model lai tra 1 khoai.
-     * Nam rieng trong `AiPrompt` vi tu khi co bo chon model, lenh dat trong
-     * `GeminiClient` chi ap cho Gemini — DeepSeek/GLM se im lang tra ve mot
-     * dam van ban khong theo khuon nao ca.
+     * Nam rieng trong `AiPrompt` vi tu khi co bo chon model, lenh dat trong mot
+     * client cu chi ap cho mot model — cac model con lai se im lang tra ve mot
+     * dam van ban khong theo khuon nao ca. Ban 69.0 xoa Gemini, nen client duy
+     * nhat con lai phai dung dung khuon ay.
      */
     @Test
     fun aiIsToldToAnswerInShortLabelledLines() {
@@ -287,10 +308,17 @@ class AiChatRegressionTest {
         assertTrue("thieu so lieu thi phai noi chua co, khong duoc bịa",
             prompt.contains("không bịa"))
 
-        val gemini = source("src/main/java/com/example/service/ai/GeminiClient.kt")
         val router = source("src/main/java/com/example/service/ai/OpenRouterClient.kt")
-        assertTrue("Gemini phai dung khuon chung", gemini.contains("AiPrompt.system(stats, report)"))
         assertTrue("OpenRouter phai dung khuon chung", router.contains("AiPrompt.system(stats, report)"))
+        // Working dir cua unit test co the la goc repo hoac module app, nen
+        // phai thu ca hai duong nhu `source` o tren.
+        val aiDir = listOf(
+            File("src/main/java/com/example/service/ai"),
+            File("app/src/main/java/com/example/service/ai")
+        ).firstOrNull { it.isDirectory } ?: error("Không tìm thấy thư mục ai/")
+        val clients = aiDir.listFiles().orEmpty()
+            .filter { it.name.endsWith("Client.kt") }.map { it.name }
+        assertTrue("Chi mot client AI con lai, thuc te: $clients", clients.size == 1)
     }
 
     /**

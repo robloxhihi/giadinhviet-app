@@ -30,6 +30,7 @@ import androidx.compose.material.icons.filled.Chat
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.ExitToApp
 import androidx.compose.material.icons.filled.HourglassTop
 import androidx.compose.material.icons.filled.Link
@@ -44,11 +45,14 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
@@ -61,6 +65,8 @@ import com.example.data.model.PairingStatus
 import com.example.data.model.UserRole
 import com.example.ui.components.BentoCard
 import com.example.ui.components.BentoProgressBar
+import com.example.ui.components.avatarBitmapFromBase64
+import com.example.ui.components.rememberAvatarPicker
 import com.example.ui.theme.FacebookBlue
 import com.example.ui.theme.NeonAmber
 import com.example.ui.theme.NeonCyan
@@ -94,10 +100,17 @@ fun StudentMainScreen(
     onOpenChat: () -> Unit,
     onRequestExtraTime: () -> Unit,
     onRequestPrivacyClick: () -> Unit = {},
-    onSignOut: () -> Unit
+    onSignOut: () -> Unit,
+    onAvatarPicked: (String) -> Unit = {}
 ) {
     val context = LocalContext.current
     val scrollState = rememberScrollState()
+
+    // May hoc sinh cung doi duoc anh dai dien: truoc day bo chon chi ton tai o
+    // man Tong quan cua phu huynh, nen tre em nhin vao vong tron chu cai dau va
+    // khong co cach nao khac — "khong thay avatar duoc". Cung mot bo chon, cung
+    // mot duong nen 96px, cung mot loi bao ra chu.
+    val launchAvatarPicker = rememberAvatarPicker(onPicked = onAvatarPicked)
 
     val userProfile = uiState.userProfile
     // "" = tai khoan chua duoc cap ma. Truoc day the hien "HS-CONNECT" thay vi
@@ -126,7 +139,14 @@ fun StudentMainScreen(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Box {
+                val avatarBitmap = remember(userProfile?.avatarBase64.orEmpty()) {
+                    avatarBitmapFromBase64(userProfile?.avatarBase64.orEmpty())
+                }
+                Box(
+                    modifier = Modifier
+                        .clickable { launchAvatarPicker() }
+                        .testTag("avatar_picker")
+                ) {
                     Box(
                         modifier = Modifier
                             .size(46.dp)
@@ -134,15 +154,41 @@ fun StudentMainScreen(
                             .background(FacebookBlue),
                         contentAlignment = Alignment.Center
                     ) {
-                        // Chu dau cua ten that; "—" khi chua co ten. Truoc day
-                        // o nay hard-code "H" ("Học sinh") nen du ten la "Bin"
-                        // van thay mot chu H lac loi.
-                        Text(
-                            text = (userProfile?.displayName?.trim()?.firstOrNull()?.uppercaseChar()?.toString())
-                                ?: "—",
-                            color = Color.White,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 19.sp
+                        if (avatarBitmap != null) {
+                            Image(
+                                bitmap = avatarBitmap.asImageBitmap(),
+                                contentDescription = "Ảnh đại diện",
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier.fillMaxSize()
+                            )
+                        } else {
+                            // Chu dau cua ten that; "—" khi chua co ten. Truoc day
+                            // o nay hard-code "H" ("Học sinh") nen du ten la "Bin"
+                            // van thay mot chu H lac loi.
+                            Text(
+                                text = (userProfile?.displayName?.trim()?.firstOrNull()?.uppercaseChar()?.toString())
+                                    ?: "—",
+                                color = Color.White,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 19.sp
+                            )
+                        }
+                    }
+                    // But chi = noi bam vao day doi duoc anh (giong man Tong quan).
+                    Box(
+                        modifier = Modifier
+                            .size(16.dp)
+                            .clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.surface)
+                            .align(Alignment.TopEnd)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Edit,
+                            contentDescription = "Đổi ảnh đại diện",
+                            tint = FacebookBlue,
+                            modifier = Modifier
+                                .size(10.dp)
+                                .align(Alignment.Center)
                         )
                     }
                     // Cham mau = ket noi cua MAY NAY do duoc that (NetworkMonitor).

@@ -38,6 +38,7 @@ import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.Route
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material.icons.filled.Warning
@@ -123,32 +124,47 @@ private enum class MapLayer(
     SATELLITE("Vệ tinh", MapTileSources.SATELLITE, MapTileSources.GOOGLE_MAX_ZOOM, "© Google, Maxar"),
 
     /**
-     * Lop "OSM chi tiet" — duong pho den tu OpenStreetMap qua Esri
-     * World_Street_Map (nen OSM goc da bi loai vi host tra HTTP 000 tu mach
-     * VN — xem danh sach lop chet o dau tep). Tran z17 la du lieu THAT cuoi
-     * cung; tran anh ve tinh cua Esri (ESRI_MAX_ZOOM = z18) thuoc lop anh,
-     * khong dung o day.
+     * Lop "Ban do chi tiet" — duong pho + ten duong cua chinh Google (`lyrs=m`).
+     *
+     * BAN 69.0 THAY ESRI_STREET = "OSM chi tiet" bang lop nay. Ly do co so lieu,
+     * khong phai an tuong (do truc tiep hom 2026-10-26 tren may nay, tile noi
+     * thanh va tile nong thon deu lay toa do that — chu ghi o day khong ghi hang
+     * so toa do vi FixRegressionTest.source_hasNoFabricatedCoordinates cam):
+     *  - Esri World_Street_Map noi thanh: z17 = 12.684 B, z18 = 6.687 B (van la
+     *    anh that) — nhung app chan maxZoom = z17 theo `ESRI_STREET_MAX_ZOOM`,
+     *    nen phong to them chi thay mot buc anh net chu.
+     *  - Google `lyrs=m` cung noi: z17 = 12.937 B, z19 = 6.373 B, z21 = 773 B,
+     *    md5 khac nhau tung o = du lieu that toi tan z21, va la duong pho Google
+     *    tu ve tai VN (ten duong/so nha day hon ban trich OSM cua Esri).
+     *  - o nong thon thi Google cung tra ve o rat nho (z19 = 828 B) — do la vung
+     *    that su chua co duong duoc ten, khong phai loi tile.
+     *
+     * Ten lop khong con ghi "OSM" nua: no tung Noi "OSM chi tiết" trong khi
+     * nguoi dung nhin thay mot nen duong pho mo, va do chinh la phan ho bao
+     * "osm lỏ quá". Credit phai noi dung nguoi ve nen — Google.
+     *
      * PHAI NAM CUOI: thu tu enum chinh la `ordinal` duoc luu trong
      * SharedPreferences "map_view"/"layer2". Ban 67.0 CUT tu 6 lop xuong 3 —
      * chi so cu da luu duoc chuyen qua ham migratedLayerIndex() ben duoi.
      */
-    ESRI_STREET(
-        "OSM chi tiết",
-        MapTileSources.ESRI_STREET,
-        MapTileSources.ESRI_STREET_MAX_ZOOM,
-        "© Esri, OpenStreetMap contributors"
+    STREET(
+        "Bản đồ chi tiết",
+        MapTileSources.STREET,
+        MapTileSources.GOOGLE_MAX_ZOOM,
+        "© Google"
     )
 }
 
 /**
  * Chi so lop da luu cua ban cu (6 lop: HYBRID, SATELLITE, STREET, ESRI, TERRAIN,
- * ESRI_STREET) -> chi so lop cua ban 67.0 (3 lop). Nho buoc nay, ai dang dung
- * lop nao do cung khong bi "nhay lung tung" khi enum ngan lai.
+ * ESRI_STREET) -> chi so lop cua ban 69.0 (3 lop: HYBRID, SATELLITE, STREET).
+ * Nho buoc nay, ai dang dung lop nao do cung khong bi "nhay lung tung" khi enum
+ * doi thanh vien thu ba tu ESRI_STREET sang STREET — ca hai deu nam o chi so 2.
  */
 private fun migratedLayerIndex(stored: Int): Int = when (stored) {
     0 -> 0      // HYBRID -> HYBRID
     1 -> 1      // SATELLITE -> SATELLITE
-    2, 3, 4, 5 -> 2  // STREET / ESRI / TERRAIN / ESRI_STREET cu -> OSM chi tiết
+    2, 3, 4, 5 -> 2  // STREET / ESRI / TERRAIN / ESRI_STREET cu -> Ban do chi tiet
     else -> 0   // gia tri rac hoac loi luu
 }
 
@@ -305,16 +321,18 @@ fun GoogleMapsStudentLocationCard(
     // Sai so camera bao co duoi 3 m thi khong tin; toa do in ra va vong tron
     // ve deu lay theo `honestAcc`, khong lay theo con so tho.
     //
-    // BAN 67.0 — bo CHAT zoom theo sai so (zoomCeiling): tran do chi dung lam
-    // MUC ZOOM MO MAN HINH, con tran phong to that su la tran tile THAT cua
-    // lop dang chon (Google z21, Esri street z17). Ly do doi: chan o z15.5 lam
-    // ban do trong "khong chi tiet" trong khi du lieu tile con den z21; do
-    // chinh xac dinh vi duoc NOI THAT bang vong tron ±m ngay tren ban do —
-    // phong to them chi lam anh net hon, khong lam toa do "chinh xac hoa gia".
+    // BAN 69.0 — bo HAN CHE ZOOM MO MAN HINH theo sai so. Ban cu lay
+    // `zoomLevel.coerceAtMost(suggestedZoom)` nen may bao sai so khong ro
+    // (±100 m) tu mo map o z15.5: nguoi dung nhin mot buc anh mo, thieu chi
+    // tiet va bao "map lỏ / map không chính xác". Do chinh xac KHONG phai la
+    // chuyen phong to hay thu nho — no la vong tron ±m ve tren map va chu
+    // ±X m canh toa do. Gio day map mo dung muc nguoi dung chon (tran la tran
+    // tile THAT cua lop), con that bai ve chi tiet thiet bi thi phai noi
+    // thang bang `zoomOverAccuracy` ben duoi, khong duoc chan lang.
     val honestAcc = FixPrecision.honestAccuracyMeters(accuracyMeters)
     val accuracyNoteText = FixPrecision.accuracyNote(accuracyMeters)
     val suggestedZoom = FixPrecision.maxZoomForAccuracy(honestAcc)
-    val usableZoom = zoomLevel.coerceAtMost(suggestedZoom)
+    val zoomOverAccuracy = zoomLevel > suggestedZoom + 0.5
     var followMode by remember { mutableStateOf(true) }
     var mapViewRef by remember { mutableStateOf<org.osmdroid.views.MapView?>(null) }
 
@@ -543,7 +561,10 @@ fun GoogleMapsStudentLocationCard(
                             minZoomLevel = 3.0
                             setMultiTouchControls(true)
                             setBuiltInZoomControls(false)
-                            controller.setZoom(usableZoom.coerceAtMost(initialLayer.maxZoom()))
+                            // Mo map theo DUNG muc nguoi dung da chon hom truoc,
+                            // chi bi chan boi tran tile that cua lop (z21 cho
+                            // Google). Sai so khong con ep map mo xa nua.
+                            controller.setZoom(zoomLevel.coerceAtMost(initialLayer.maxZoom()))
                             controller.setCenter(org.osmdroid.util.GeoPoint(latitude, longitude))
 
                             overlays.add(
@@ -854,11 +875,35 @@ fun GoogleMapsStudentLocationCard(
                             }
                             Text(
                                 text = "${layerAt(layerIndex).label} " +
-                                    "z${String.format(Locale.US, "%.1f", usableZoom)}" +
+                                    "z${String.format(Locale.US, "%.1f", zoomLevel)}" +
                                     " • ${layerAt(layerIndex).credit}",
                                 color = TextMuted, fontSize = 9.sp,
                                 maxLines = 1, overflow = TextOverflow.Ellipsis
                             )
+                            // Phong to xa hon muc ma sai so cho phep thi phai noi
+                            // thang: anh net hon chu toa do khong chinh xac them.
+                            // Truoc day app chan zoom im lang nen nguoi dung tuong
+                            // map "bi lo" — thac mac do la cua phan mem, khong phai
+                            // cua GPS.
+                            if (zoomOverAccuracy) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Search,
+                                        contentDescription = null,
+                                        tint = NeonAmber,
+                                        modifier = Modifier.size(12.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(
+                                        "Đang phóng to hơn mức sai số ±${honestAcc.toInt()} m — ảnh nét thêm nhưng vị trí vẫn chỉ đúng trong vòng tròn",
+                                        color = NeonAmber, fontSize = 9.sp, fontWeight = FontWeight.SemiBold,
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                }
+                            }
                             if (headingDegrees != null) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Icon(
