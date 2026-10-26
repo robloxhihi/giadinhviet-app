@@ -69,23 +69,43 @@ class RulesQuerySafetyRegressionTest {
 
     private val rules: String by lazy { stripComments(repoFile("firestore.rules")) }
 
-    /** Than cua mot `match <duong dan> { ... }` — dem ngoac hoa, khong lan sang block ke tiep. */
-    private fun matchBlock(header: String): String {
-        val start = rules.indexOf(header)
-        assertTrue("Thiếu `$header` trong firestore.rules", start >= 0)
-        val open = rules.indexOf('{', start)
+    /**
+     * Than cua mot block `match <duong dan> ... { }` tim bang khuon mau, trong
+     * `haystack`.
+     *
+     * Hai bai hoc nap lai o dung chuc nang nay — ca hai deu lam CI ban 68.0 chet
+     * va khong bao gio bao "thieu block", chi bao "co 0 dong allow":
+     *  1. Khong duoc lay dau `{` DAU TIEN ke tu tieu de: tieu de chua bien
+     *     wildcard nen ngoac do dong ngay lap tuong, block tra ve la chuoi
+     *     "pairingId".
+     *  2. Khong duoc truyen tieu de DA ke san dau `{` mo roi tim `{` ke sau: dau
+     *     `{` nam TRONG chuoi tieu de nen indexOf bo no, thoat toi ngoac mo cua
+     *     block KE TIEP — block tra ve la `{scheduleId}`.
+     * Khuon mau khop den HET ten bien (`match /pairings/{...}`), do do dau `{`
+     * tim duoc sau no chac chan la ngoac mo than block. Khong cung cap ten bien
+     * (`{pairingId}`, `{messageId}`) nen viec doi ten bien trong rules khong lam
+     * test xanh hay chay sai.
+     */
+    private fun blockWithin(haystack: String, collection: String): String {
+        val pattern = Regex("match /$collection/\\{[^}]*\\}")
+        val match = pattern.find(haystack)
+            ?: error("Thieu `match /$collection/{...}` trong phan duoc duyet")
+        val open = haystack.indexOf('{', match.range.last + 1)
+        assertTrue("$collection khong co than block", open >= 0)
         var depth = 0
-        for (i in open until rules.length) {
-            when (rules[i]) {
+        for (i in open until haystack.length) {
+            when (haystack[i]) {
                 '{' -> depth++
                 '}' -> {
                     depth--
-                    if (depth == 0) return rules.substring(open, i + 1)
+                    if (depth == 0) return haystack.substring(open, i + 1)
                 }
             }
         }
-        error("$header không đóng ngoặc")
+        error("$collection không đóng ngoặc")
     }
+
+    private fun matchBlock(collection: String): String = blockWithin(rules, collection)
 
     /**
      * Lay nhung dong `allow <verb> ... ;` trong một block.
@@ -99,8 +119,12 @@ class RulesQuerySafetyRegressionTest {
 
     @Test
     fun `pairings phai co allow list khong cham document nao`() {
-        val block = matchBlock("match /pairings/{pairingId} {")
-        val lists = allowLines(block, "list")
+        val top = topLevelOf(matchBlock("pairings"))
+        // `topLevelOf` cat theo thughe, nen neu ai doi thut le trong rules thi no
+        // tra ve CA block (khi do `allow read` ben trong subcollection lam bai
+        // test bang ly do sai). Dong nay bao dung benh do.
+        assertFalse("topLevelOf khong cat duoc (thut le da doi?): " + top.length, top.contains("match /"))
+        val lists = allowLines(top, "list")
         assertEquals("/pairings phai co DUNG MOT allow list", 1, lists.size)
         val list = lists.first()
         assertFalse(
@@ -112,7 +136,6 @@ class RulesQuerySafetyRegressionTest {
         assertTrue("allow list doi chieu parentId tren document tra ve", list.contains("resource.data.parentId == request.auth.uid"))
         assertTrue("allow list doi chieu childId tren document tra ve", list.contains("resource.data.childId == request.auth.uid"))
         assertTrue("Quan tri van liet ke duoc de don tai khoan", list.contains("isAdmin()"))
-        val top = topLevelOf(block)
         assertFalse(
             "Top-level /pairings khong duoc dung `allow read` nua (no bam ca get lan list, " +
                 "ma list thi khong danh gia duoc get): " + top,
@@ -122,13 +145,13 @@ class RulesQuerySafetyRegressionTest {
 
     @Test
     fun `pairings van giu allow get theo hai uid that`() {
-        val block = matchBlock("match /pairings/{pairingId} {")
-        val gets = allowLines(block, "get")
+        val top = topLevelOf(matchBlock("pairings"))
+        val gets = allowLines(top, "get")
         assertEquals("/pairings phai co DUNG MOT allow get", 1, gets.size)
         assertTrue(
             "GET thi duoc mo document that: isPairMember() doi chieu parentId/childId tren " +
                 "pairings/<id>, khong tin duong dan. Khong duoc thay bang `resource.data` " +
-                "vi `allow get` la lenh doc duy nhat ma `resource` co nghip gi do.",
+                "vi `allow get` la lenh doc duy nhat ma `resource` co nghia do.",
             gets.first().contains("isPairMember(pairingId)") && gets.first().contains("isAdmin()")
         )
     }
@@ -138,14 +161,19 @@ class RulesQuerySafetyRegressionTest {
         // App listen `pairings/<id>/<sub>` — o day pairingId DA co gia tri nen
         // get() danh gia duoc (da do: 200 cho may phu huynh). Doi sang suy quyen
         // tu chuoi id la mo cua: duong dan la thu client tu dat.
+        // Tam khoa duyet TRONG block /pairings: `location_history` con mot block
+        // khac o top-level (duong dan tron, khong thuoc pairing nao), doc ca tep
+        // thi indexOf cham block top-level va test xanh boi ly do sai.
+        val pairings = matchBlock("pairings")
         val subs = listOf(
             "messages", "location_history", "schedules", "agreements",
             "extra_time", "privacy_requests", "rule_audit"
         )
         subs.forEach { sub ->
-            val block = matchBlock("match /$sub/{")
+            val block = blockWithin(pairings, sub)
             assertTrue(
-                "$sub phai van kiem thanh vien bang document ghep noi that",
+                "$sub phai van kiem thanh vien bang document ghep noi that: " +
+                    block.take(200),
                 block.contains("isPairMember(pairingId)")
             )
         }
@@ -153,7 +181,7 @@ class RulesQuerySafetyRegressionTest {
 
     @Test
     fun `admin doc duoc nhat ky noi quy nhung khong tao duoc`() {
-        val block = matchBlock("match /rule_audit/{entryId} {")
+        val block = blockWithin(matchBlock("pairings"), "rule_audit")
         val reads = allowLines(block, "read")
         val creates = allowLines(block, "create")
         assertTrue(
