@@ -101,13 +101,17 @@ class MapHonestyRegressionTest {
         // Hộp trắng "Con Ga / Lat:.. Lng:.." trong ảnh người dùng gửi.
         // Marker.setOnMarkerClickListener CHỈ nhận một tham số (khac MapView) —
         // them `map` vao la compileDebugKotlin chet, CI run 110/111 do ngay.
+        // Ban 67.0: theo yêu cầu "chỉ có mũi tên mình thôi ở map", pin điểm
+        // xuất phát + tên người khác đã bị BỎ — chỉ còn MỘT marker (mũi tên
+        // định vị), vẫn phải chặn bong bóng mặc định của osmdroid.
         val suppression = "setOnMarkerClickListener { _, _ -> true }"
         val suppressedMarkers = code.split(suppression).size - 1
         assertTrue(
-            "Cả hai marker (điểm xuất phát + vị trí hiện tại) đều phải chặn bong bóng " +
-                "mặc định, hiện find được $suppressedMarkers",
-            suppressedMarkers == 2
+            "Marker mũi tên duy nhất phải chặn bong bóng mặc định, hiện find được $suppressedMarkers",
+            suppressedMarkers == 1
         )
+        assertTrue("Không được vẽ lại pin/tên người khác trên map",
+            !code.contains("setTitle(") && !code.contains("setSnippet("))
 
         assertTrue("Card phải hỏi bộ phân loại nhãn đường",
             code.contains("AddressHelper.isUnmappedRoadLabel(displayAddress)"))
@@ -120,7 +124,10 @@ class MapHonestyRegressionTest {
     /**
      * `ordinal` của enum MapLayer chính là giá trị lưu trong SharedPreferences
      * "map_view"/"layer2". Cắm một lớp mới vào giữa sẽ âm thầm đổi lớp của người
-     * dùng đang dùng sang lớp khác khi mở lại app.
+     * dùng đang dùng sang lớp khác khi mở lại app. Ban 67.0 cắt 6 lop xuong 3
+     * (chi con HYBRID, SATELLITE, ESRI_STREET) nen bat buoc phai co ham
+     * migratedLayerIndex() chuyen chi so cu, va lop moi them sau nay van phai
+     * nam CUOI enum.
      */
     @Test
     fun detailStreetLayerIsAppendedLastSoStoredOrdinalsStayValid() {
@@ -129,7 +136,7 @@ class MapHonestyRegressionTest {
         )
         val enumBody = card.substringAfter("private enum class MapLayer(")
             .substringBefore("\n}")
-        val order = listOf("SATELLITE", "STREET", "HYBRID", "ESRI", "TERRAIN", "ESRI_STREET")
+        val order = listOf("HYBRID", "SATELLITE", "ESRI_STREET")
             .map { it to enumBody.indexOf("\n    $it(") }
 
         order.forEach { (name, index) ->
@@ -140,6 +147,10 @@ class MapHonestyRegressionTest {
             "Lớp mới phải nằm CUỐI để ordinal đã lưu không đổi nghĩa: " +
                 order.joinToString(", ") { "${it.first}@${it.second}" },
             lastPosition == order.maxOf { it.second }
+        )
+        assertTrue(
+            "Cắt enum phải kèm hàm chuyển chỉ số cũ (migratedLayerIndex), nếu không người dùng bị nhảy lớp",
+            card.contains("private fun migratedLayerIndex(stored: Int)")
         )
     }
 

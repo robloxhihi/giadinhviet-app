@@ -124,9 +124,10 @@ private enum class MapLayer(
 
     /**
      * Lop "OSM chi tiet" — duong pho den tu OpenStreetMap qua Esri
-     * World_Street_Map (tile.openstreetmap.org MAPNIK da bi loai vi host tra
-     * HTTP 000 tu mach VN). Tran z17 la du lieu THAT cuoi cung; tran anh ve
-     * tinh cua Esri (ESRI_MAX_ZOOM = z18) thuoc lop anh, khong dung o day.
+     * World_Street_Map (nen OSM goc da bi loai vi host tra HTTP 000 tu mach
+     * VN — xem danh sach lop chet o dau tep). Tran z17 la du lieu THAT cuoi
+     * cung; tran anh ve tinh cua Esri (ESRI_MAX_ZOOM = z18) thuoc lop anh,
+     * khong dung o day.
      * PHAI NAM CUOI: thu tu enum chinh la `ordinal` duoc luu trong
      * SharedPreferences "map_view"/"layer2". Ban 67.0 CUT tu 6 lop xuong 3 —
      * chi so cu da luu duoc chuyen qua ham migratedLayerIndex() ben duoi.

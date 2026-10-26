@@ -293,7 +293,10 @@ class FixRegressionTest {
         val enumBlock = src.substringAfter("private enum class MapLayer").substringBefore("private fun layerAt")
         assertTrue("Lop Duong pho khong duoc con la MAPNIK (host chet)", !enumBlock.contains("MAPNIK"))
         assertTrue("Phai co lop Google hybrid lam mac dinh", enumBlock.contains("MapTileSources.HYBRID"))
-        assertTrue("Esri phai chep o z18 la muc cuoi co that", enumBlock.contains("ESRI_MAX_ZOOM"))
+        assertTrue("Lop OSM chi tiet phai dung nen Esri World_Street_Map", enumBlock.contains("MapTileSources.ESRI_STREET,"))
+        assertTrue("Moi tran zoom phai den tu hang so DA DO trong MapTileSources, khong nhap so cam",
+            enumBlock.contains("MapTileSources.GOOGLE_MAX_ZOOM") &&
+                enumBlock.contains("MapTileSources.ESRI_STREET_MAX_ZOOM"))
         assertTrue("The map khong duoc tu khai báo source rieng", !src.contains("XYTileSource("))
     }
 
