@@ -3,7 +3,11 @@ package com.example.ui.screens
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.net.Uri
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -30,6 +34,7 @@ import androidx.compose.material.icons.filled.Chat
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.FamilyRestroom
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.HourglassTop
@@ -65,6 +70,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
@@ -111,11 +118,25 @@ fun DashboardScreen(
     onSendZenlyBump: () -> Unit,
     onClearMessages: () -> Unit,
     onOpenLocationHistory: () -> Unit = {},
-    onOpenAiChat: () -> Unit = {}
+    onOpenAiChat: () -> Unit = {},
+    onAvatarPicked: (String) -> Unit = {}
 ) {
     val context = LocalContext.current
     val scrollState = rememberScrollState()
     var inputStudentCode by remember { mutableStateOf("") }
+
+    // Bo chon anh cho avatar: GetContent("image/*") khong can quyen doc bo
+    // nho. Anh duoc nen ve ~96px JPEG base64 ngay tren may roi moi ghi len
+    // Firestore qua onAvatarPicked (du an chua bat Storage).
+    val avatarPicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        if (uri != null) {
+            val base64 = readImageAsAvatarBase64(context, uri)
+            if (base64 != null) onAvatarPicked(base64)
+            else Toast.makeText(context, "Không đọc được ảnh vừa chọn.", Toast.LENGTH_SHORT).show()
+        }
+    }
 
     // Khong Toast thong bao o day nua. MainAppScreen da co Snackbar toan cuc
     // (no thanh cong thi moi hien du 2 dong chu, Toast cat ngat lam 1), va
@@ -250,7 +271,27 @@ fun DashboardScreen(
                     val displayName = userProfile?.displayName?.trim()
                         ?.ifEmpty { if (isChild) "Học sinh" else "Phụ huynh" }
                         ?: if (isChild) "Học sinh" else "Phụ huynh"
-                    Box {
+                    // Avatar: dung anh tu chon (avatarBase64) neu co, khong thi
+                    // giu chu cai dau cua ten. Bam vao day mo bo chon anh de doi.
+                    val avatarB64 = userProfile?.avatarBase64.orEmpty()
+                    val avatarBitmap = remember(avatarB64) {
+                        if (avatarB64.isEmpty()) null
+                        else runCatching {
+                            val bytes = android.util.Base64.decode(
+                                avatarB64, android.util.Base64.DEFAULT
+                            )
+                            android.graphics.BitmapFactory.decodeByteArray(
+                                bytes, 0, bytes.size
+                            )
+                        }.getOrNull()
+                    }
+                    Box(modifier = Modifier.clickable {
+                        // "image/${'*'}" thay vi goi thang star: bo stripComments
+                        // cua test hoi quy doc nguyen file nhu text, mot chu "/*"
+                        // trong string literal lam no tưởng la mo block comment
+                        // va an tu mot nua file — CI chet vi loi gia.
+                        avatarPicker.launch("image/${'*'}")
+                    }) {
                         Box(
                             modifier = Modifier
                                 .size(46.dp)
@@ -258,15 +299,41 @@ fun DashboardScreen(
                                 .background(FacebookBlue),
                             contentAlignment = Alignment.Center
                         ) {
-                            // Chu trong avatar phai la chu cai DAU TIEN cua ten
-                            // that. Truoc day gim dinh "H"/"P" theo vai tro, nen
-                            // moi nguoi dung deu chung mot chu va nguoi ten
-                            // "hah" van thay chu "P" — mot chu doan mau.
-                            Text(
-                                text = displayName.take(1).uppercase(),
-                                color = Color.White,
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 19.sp
+                            if (avatarBitmap != null) {
+                                Image(
+                                    bitmap = avatarBitmap.asImageBitmap(),
+                                    contentDescription = "Ảnh đại diện",
+                                    contentScale = ContentScale.Crop,
+                                    modifier = Modifier.fillMaxSize()
+                                )
+                            } else {
+                                // Chu trong avatar phai la chu cai DAU TIEN cua ten
+                                // that. Truoc day gim dinh "H"/"P" theo vai tro, nen
+                                // moi nguoi dung deu chung mot chu va nguoi ten
+                                // "hah" van thay chu "P" — mot chu doan mau.
+                                Text(
+                                    text = displayName.take(1).uppercase(),
+                                    color = Color.White,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 19.sp
+                                )
+                            }
+                        }
+                        // Bieu tuong but chi goi y: bam vao avatar la doi duoc anh.
+                        Box(
+                            modifier = Modifier
+                                .size(16.dp)
+                                .clip(CircleShape)
+                                .background(MaterialTheme.colorScheme.surface)
+                                .align(Alignment.TopEnd)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Edit,
+                                contentDescription = "Đổi ảnh đại diện",
+                                tint = FacebookBlue,
+                                modifier = Modifier
+                                    .size(10.dp)
+                                    .align(Alignment.Center)
                             )
                         }
                         // Diem "trực tuyến" phai chay theo NetworkMonitor. Truoc
@@ -1131,3 +1198,48 @@ private fun emotionLabel(raw: String?): String? =
             ?: "không rõ (${name.lowercase()})"
     }
 
+
+/** Canh anh dai dien sau khi nen: 96px du cho vong tron 46dp (x2.5 man man hinh). */
+private const val AVATAR_EDGE_PX = 96
+
+/**
+ * Doc anh tu bo suu tap va nen thanh JPEG vuong ~96px de nhung base64 vao
+ * document users/. Du an chua bat Firebase Storage nen day la con duong duy
+ * nhat de avatar dong bo giua hai may. Doc bitmap qua inSampleSize truoc de
+ * khong nap ca buc anh 12MP vao RAM chi de cat thanh con tem 96px.
+ */
+private fun readImageAsAvatarBase64(context: Context, uri: Uri): String? = runCatching {
+    val resolver = context.contentResolver
+
+    // 1) Doc kich thuoc that ma khong dua bitmap vao RAM.
+    val bounds = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
+    resolver.openInputStream(uri)?.use {
+        android.graphics.BitmapFactory.decodeStream(it, null, bounds)
+    } ?: return null
+    if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
+
+    // 2) Thu nho buoc 2 lan mot cho toi khi canh nho van con lon hon dich.
+    var sample = 1
+    while (bounds.outWidth / (sample * 2) >= AVATAR_EDGE_PX &&
+        bounds.outHeight / (sample * 2) >= AVATAR_EDGE_PX
+    ) sample *= 2
+
+    val src = resolver.openInputStream(uri)?.use {
+        android.graphics.BitmapFactory.decodeStream(
+            it, null, android.graphics.BitmapFactory.Options().apply { inSampleSize = sample }
+        )
+    } ?: return null
+
+    // 3) Co canh ngan ve dung 96px; hinh dai/hong giu nguyen ty le, vong tron
+    //     hien thi se tu cat qua ContentScale.Crop.
+    val scale = AVATAR_EDGE_PX.toFloat() / minOf(src.width, src.height)
+    val scaled = android.graphics.Bitmap.createScaledBitmap(
+        src,
+        (src.width * scale).toInt().coerceAtLeast(1),
+        (src.height * scale).toInt().coerceAtLeast(1),
+        true
+    )
+    val out = java.io.ByteArrayOutputStream()
+    scaled.compress(android.graphics.Bitmap.CompressFormat.JPEG, 80, out)
+    android.util.Base64.encodeToString(out.toByteArray(), android.util.Base64.DEFAULT)
+}.getOrNull()

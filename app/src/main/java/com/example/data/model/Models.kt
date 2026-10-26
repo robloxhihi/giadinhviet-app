@@ -52,6 +52,21 @@ data class UserProfile(
     val verificationPin: String = "",
     val pairedWith: String = "",
     val activePairingId: String = "",
+    /**
+     * BAN 67.0 — ghép nối NHIỀU người: mọi ghép nối PAIRED mà CHÍNH máy này
+     * đã tự xác nhận (linkSelfToPairing). Phụ huynh thứ hai ghép nối cùng một
+     * hồ sơ con thì máy con thêm id mới vào đây; rules dùng mảng này để mở
+     * quyền xem vị trí cho TỪNG người đã được xác nhận. Bản cũ chỉ có
+     * `activePairingId` (một người) — giữ lại trường cũ để APK v66 chạy cùng
+     * rules mới vẫn đọc được.
+     */
+    val activePairingIds: List<String> = emptyList(),
+    /**
+     * BAN 67.0 — ảnh đại diện nén JPEG ~96px, mã hoá Base64 ngay trong hồ sơ
+     * (không dùng Firebase Storage vì dự án chưa bật). "" = chưa có, hiện
+     * chữ cái đầu như cũ.
+     */
+    val avatarBase64: String = "",
     val createdAt: Long = System.currentTimeMillis()
 )
 

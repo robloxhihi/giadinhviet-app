@@ -81,7 +81,6 @@ import com.example.ui.theme.TextMuted
 import com.example.ui.theme.TextPrimary
 import com.example.ui.theme.TextSecondary
 import kotlinx.coroutines.delay
-import org.osmdroid.tileprovider.tilesource.TileSourceFactory
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -116,23 +115,40 @@ private enum class MapLayer(
     val credit: String
 ) {
     HYBRID("Vệ tinh + tên đường", MapTileSources.HYBRID, MapTileSources.GOOGLE_MAX_ZOOM, "© Google, Maxar"),
-    SATELLITE("Vệ tinh", MapTileSources.SATELLITE, MapTileSources.GOOGLE_MAX_ZOOM, "© Google, Maxar"),
-    STREET("Đường phố", MapTileSources.STREET, MapTileSources.GOOGLE_MAX_ZOOM, "© Google"),
-    ESRI("Vệ tinh Esri", MapTileSources.ESRI, MapTileSources.ESRI_MAX_ZOOM, "© Esri, Maxar"),
-    TERRAIN("Địa hình", TileSourceFactory.OpenTopo, 0, "© OpenTopoMap"),
 
     /**
-     * Lop "duong pho chi tiet" theo dung yeu cau cua nguoi dung hom 2026-10-23.
+     * Vệ tinh thuần (không vẽ tên đường lên ảnh) — đúng nghĩa "chuyển đổi giữa
+     * vệ tinh và OSM": ảnh chạm đất z21 của Google, tên đường thì bật lớp HYBRID.
+     */
+    SATELLITE("Vệ tinh", MapTileSources.SATELLITE, MapTileSources.GOOGLE_MAX_ZOOM, "© Google, Maxar"),
+
+    /**
+     * Lop "OSM chi tiet" — duong pho den tu OpenStreetMap qua Esri
+     * World_Street_Map (tile.openstreetmap.org MAPNIK da bi loai vi host tra
+     * HTTP 000 tu mach VN). Tran z17 la du lieu THAT cuoi cung; tran anh ve
+     * tinh cua Esri (ESRI_MAX_ZOOM = z18) thuoc lop anh, khong dung o day.
      * PHAI NAM CUOI: thu tu enum chinh la `ordinal` duoc luu trong
-     * SharedPreferences "map_view"/"layer2". Xen ke vao giua thi khi mo lai app
-     * nguoi dung dung tu chuyen sang mot lop khac ma khong hieu vi sao.
+     * SharedPreferences "map_view"/"layer2". Ban 67.0 CUT tu 6 lop xuong 3 —
+     * chi so cu da luu duoc chuyen qua ham migratedLayerIndex() ben duoi.
      */
     ESRI_STREET(
-        "Đường phố chi tiết (OSM/Esri)",
+        "OSM chi tiết",
         MapTileSources.ESRI_STREET,
         MapTileSources.ESRI_STREET_MAX_ZOOM,
         "© Esri, OpenStreetMap contributors"
     )
+}
+
+/**
+ * Chi so lop da luu cua ban cu (6 lop: HYBRID, SATELLITE, STREET, ESRI, TERRAIN,
+ * ESRI_STREET) -> chi so lop cua ban 67.0 (3 lop). Nho buoc nay, ai dang dung
+ * lop nao do cung khong bi "nhay lung tung" khi enum ngan lai.
+ */
+private fun migratedLayerIndex(stored: Int): Int = when (stored) {
+    0 -> 0      // HYBRID -> HYBRID
+    1 -> 1      // SATELLITE -> SATELLITE
+    2, 3, 4, 5 -> 2  // STREET / ESRI / TERRAIN / ESRI_STREET cu -> OSM chi tiết
+    else -> 0   // gia tri rac hoac loi luu
 }
 
 /** An toàn khi danh sach lop ngan lai: mod theo size, KHONG bao gio index ngoai mang. */
@@ -148,6 +164,45 @@ private fun isPlausibleCoordinate(latitude: Double, longitude: Double): Boolean 
 private fun MapLayer.maxZoom(): Double {
     val cap = if (zoomCap > 0) zoomCap.toDouble() else source.maximumZoomLevel.toDouble()
     return cap.coerceIn(minZoomLevel(), 21.0)
+}
+
+/**
+ * Mũi tên định vị kiểu Google Maps (hình giáo nhọn chỉ lên = hướng Bắc khi
+ * heading = 0). Viền trắng dày để nổi trên cả nền vệ tinh lẫn nền đường phố;
+ * màu fill do caller truyền (xanh fix mới / cam fix cũ). 64px vẽ 1 lần, xoay
+ * bằng Matrix — không vẽ chữ, không tên: map 67.0 chỉ có mũi tên của mình.
+ */
+private fun buildLocationArrowBitmap(fillColor: Int): android.graphics.Bitmap {
+    val size = 64
+    val bmp = android.graphics.Bitmap.createBitmap(size, size, android.graphics.Bitmap.Config.ARGB_8888)
+    val canvas = android.graphics.Canvas(bmp)
+    val cx = size / 2f
+    val cy = size / 2f
+    val r = size * 0.40f
+
+    val path = android.graphics.Path().apply {
+        moveTo(cx, cy - r)          // mũi chỉ lên (Bắc)
+        lineTo(cx + r * 0.82f, cy + r * 0.72f)
+        lineTo(cx, cy + r * 0.28f)  // đáy lõm kiểu kim chỉ phương
+        lineTo(cx - r * 0.82f, cy + r * 0.72f)
+        close()
+    }
+
+    val outline = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+        style = android.graphics.Paint.Style.STROKE
+        strokeWidth = size * 0.11f
+        strokeJoin = android.graphics.Paint.Join.ROUND
+        strokeCap = android.graphics.Paint.Cap.ROUND
+        color = android.graphics.Color.WHITE
+    }
+    val fill = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+        style = android.graphics.Paint.Style.FILL
+        color = fillColor
+        setShadowLayer(size * 0.06f, 0f, size * 0.03f, android.graphics.Color.argb(120, 0, 0, 0))
+    }
+    canvas.drawPath(path, outline)
+    canvas.drawPath(path, fill)
+    return bmp
 }
 
 /** Min zoom chung cua MapView (khop minZoomLevel dat trong factory). */
@@ -231,7 +286,11 @@ fun GoogleMapsStudentLocationCard(
     val mapPrefs = remember {
         context.getSharedPreferences("map_view", android.content.Context.MODE_PRIVATE)
     }
-    var layerIndex by remember { mutableStateOf(mapPrefs.getInt("layer2", MapLayer.HYBRID.ordinal)) }
+    // Ban 67.0: chi so da luu co the la cua enum 6 lop cu -> chuyen qua enum 3 lop
+    // moi bang migratedLayerIndex(). Gia tri MAC DINH van la lop ve tinh co ten duong.
+    var layerIndex by remember {
+        mutableStateOf(migratedLayerIndex(mapPrefs.getInt("layer2", MapLayer.HYBRID.ordinal)))
+    }
     var zoomLevel by remember { mutableStateOf(mapPrefs.getFloat("zoom2", 19f).toDouble()) }
     var layerPickerOpen by remember { mutableStateOf(false) }
     LaunchedEffect(layerIndex, zoomLevel) {
@@ -243,15 +302,18 @@ fun GoogleMapsStudentLocationCard(
 
     // ============ DO CHINH XAC THAT DUOC PHEP NOI ============
     // Sai so camera bao co duoi 3 m thi khong tin; toa do in ra va vong tron
-    // ve deu lay theo `honestAcc`, khong lay theo con so tho. Zoom bi chan o
-    // muc ma mot pixel con mang noi dung — phong to hon nua chi phong to anh
-    // nen, khong them chi tiet that (luc 26.0 map nguyen z19 "±1m" tren may
-    // gia lap chua ghep noi voi ai).
+    // ve deu lay theo `honestAcc`, khong lay theo con so tho.
+    //
+    // BAN 67.0 — bo CHAT zoom theo sai so (zoomCeiling): tran do chi dung lam
+    // MUC ZOOM MO MAN HINH, con tran phong to that su la tran tile THAT cua
+    // lop dang chon (Google z21, Esri street z17). Ly do doi: chan o z15.5 lam
+    // ban do trong "khong chi tiet" trong khi du lieu tile con den z21; do
+    // chinh xac dinh vi duoc NOI THAT bang vong tron ±m ngay tren ban do —
+    // phong to them chi lam anh net hon, khong lam toa do "chinh xac hoa gia".
     val honestAcc = FixPrecision.honestAccuracyMeters(accuracyMeters)
     val accuracyNoteText = FixPrecision.accuracyNote(accuracyMeters)
-    val zoomCeiling = FixPrecision.maxZoomForAccuracy(honestAcc)
-    val usableZoom = zoomLevel.coerceAtMost(zoomCeiling)
-    val zoomWasCapped = zoomLevel > zoomCeiling + 0.01
+    val suggestedZoom = FixPrecision.maxZoomForAccuracy(honestAcc)
+    val usableZoom = zoomLevel.coerceAtMost(suggestedZoom)
     var followMode by remember { mutableStateOf(true) }
     var mapViewRef by remember { mutableStateOf<org.osmdroid.views.MapView?>(null) }
 
@@ -267,7 +329,7 @@ fun GoogleMapsStudentLocationCard(
         mapViewRef?.let { m ->
             val next = layerAt(layerIndex)
             m.setTileSource(next.source)
-            val mx = next.maxZoom().coerceAtMost(zoomCeiling)
+            val mx = next.maxZoom()
             m.maxZoomLevel = mx
             if (m.zoomLevelDouble > mx) m.controller.setZoom(mx)
             zoomLevel = m.zoomLevelDouble
@@ -374,6 +436,10 @@ fun GoogleMapsStudentLocationCard(
         android.graphics.Color.rgb(0, 132, 255)
     }
 
+    // Bitmap mũi tên định vị — dựng MỘT lần cho mỗi màu (xanh khi fix mới,
+    // cam khi fix >3 phút), xoay mỗi lần vẽ bằng Matrix chứ không dựng lại.
+    val arrowBitmap = remember(pinColorInt) { buildLocationArrowBitmap(pinColorInt) }
+
     Column(modifier = modifier.fillMaxWidth()) {
         // ============ THẺ BẢN ĐỒ: map chiếm toàn bộ chiều cao thẻ ============
         Box(
@@ -472,7 +538,7 @@ fun GoogleMapsStudentLocationCard(
                             // maxZoom lay theo DUNG tile source dang chon va theo
                             // MUC DA DO (nhom Google co that toi z21, Esri het o z19,
                             // OpenTopo theo source.maximumZoomLevel).
-                            maxZoomLevel = initialLayer.maxZoom().coerceAtMost(zoomCeiling)
+                            maxZoomLevel = initialLayer.maxZoom()
                             minZoomLevel = 3.0
                             setMultiTouchControls(true)
                             setBuiltInZoomControls(false)
@@ -530,7 +596,7 @@ fun GoogleMapsStudentLocationCard(
                         // sourceMax PHAI di qua chan tuong sai so, neu khong vong
                         // update nay se dat lai maxZoomLevel = 21 sau moi lan
                         // recomposition va pha net che do cua o tren.
-                        val sourceMax = layer.maxZoom().coerceAtMost(zoomCeiling)
+                        val sourceMax = layer.maxZoom()
                         if (map.maxZoomLevel != sourceMax) map.maxZoomLevel = sourceMax
                         var currentZoom = map.zoomLevelDouble
                         if (currentZoom > sourceMax) {
@@ -552,12 +618,13 @@ fun GoogleMapsStudentLocationCard(
                         val metersPerPixel = 156543.03392 *
                                 cos(Math.toRadians(latitude)) /
                                 2.0.pow(currentZoom.coerceIn(3.0, 21.0))
-                        val dotRadius = (10.0 * metersPerPixel).coerceIn(3.0, 60.0)
-                        val haloRadius = (22.0 * metersPerPixel).coerceIn(8.0, 150.0)
+                        // Ban kinh toi thieu cua vong sai so: duoc nhin thay ca khi
+                        // zoom nho, ma van khong to hon sai so that khi zoom lon.
+                        val minCircleRadius = (22.0 * metersPerPixel).coerceIn(8.0, 150.0)
 
                         // Vòng độ chính xác — ve theo sai so DA duoc do lai o
                         // FixPrecision, khong theo con so tho cua nha cung cap.
-                        val accRadius = honestAcc.toDouble().coerceAtLeast(haloRadius)
+                        val accRadius = honestAcc.toDouble().coerceAtLeast(minCircleRadius)
                         map.overlays.add(org.osmdroid.views.overlay.Polygon(map).apply {
                             points = org.osmdroid.views.overlay.Polygon.pointsAsCircle(point, accRadius)
                             fillPaint.color = android.graphics.Color.argb(38, 0, 132, 255)
@@ -583,51 +650,28 @@ fun GoogleMapsStudentLocationCard(
                                 outlinePaint.strokeCap = android.graphics.Paint.Cap.ROUND
                                 outlinePaint.strokeJoin = android.graphics.Paint.Join.ROUND
                             })
-                            // Điểm xuất phát
-                            map.overlays.add(org.osmdroid.views.overlay.Marker(map).apply {
-                                position = geoPoints.first()
-                                setAnchor(org.osmdroid.views.overlay.Marker.ANCHOR_CENTER, org.osmdroid.views.overlay.Marker.ANCHOR_BOTTOM)
-                                title = "Điểm xuất phát"
-                                snippet = "Bắt đầu hành trình"
-                                // Xem ly do o marker vi tri hien tai ben duoi.
-                                // Marker.setOnMarkerClickListener chi NHAN MOT tham so
-                                // (khac voi MapView.setOnMarkerClickListener) — chay thu
-                                //tren CI run 110/111 moi ro.
-                                setOnMarkerClickListener { _, _ -> true }
-                            })
                         }
 
-                        // Mũ trắng lớn làm nền cho pin (tương phản cả nền sáng lẫn tối)
-                        map.overlays.add(org.osmdroid.views.overlay.Polygon(map).apply {
-                            points = org.osmdroid.views.overlay.Polygon.pointsAsCircle(point, haloRadius)
-                            fillPaint.color = android.graphics.Color.argb(235, 255, 255, 255)
-                            outlinePaint.color = android.graphics.Color.argb(220, 20, 30, 60)
-                            outlinePaint.strokeWidth = 2f
-                        })
-                        // Chấm vị trí hiện tại (cam đỏ khi vị trí đã cũ >3 phút)
-                        map.overlays.add(org.osmdroid.views.overlay.Polygon(map).apply {
-                            points = org.osmdroid.views.overlay.Polygon.pointsAsCircle(point, dotRadius)
-                            fillPaint.color = pinColorInt
-                            outlinePaint.color = android.graphics.Color.rgb(255, 255, 255)
-                            outlinePaint.strokeWidth = 2f
-                        })
-
-                        // Pin mặc định để chạm xem thông tin
+                        // BAN 67.0 — "chỉ có mũi tên mình thôi": thay pin + bong
+                        // bóng + đĩa trắng + tên người khác bằng MỘT mũi tên định
+                        // vị duy nhất của máy đang xem, xoay theo hướng đi thực
+                        // (headingDegrees; không có heading thì trỏ thẳng lên).
+                        // Không title/snippet => không bao giờ in tên bừa lên map.
+                        val rotatedArrow = headingDegrees?.let { h ->
+                            val mtx = android.graphics.Matrix().apply { postRotate(h) }
+                            android.graphics.Bitmap.createBitmap(
+                                arrowBitmap, 0, 0, arrowBitmap.width, arrowBitmap.height, mtx, true
+                            )
+                        } ?: arrowBitmap
                         map.overlays.add(org.osmdroid.views.overlay.Marker(map).apply {
                             position = point
                             setAnchor(
                                 org.osmdroid.views.overlay.Marker.ANCHOR_CENTER,
-                                org.osmdroid.views.overlay.Marker.ANCHOR_BOTTOM
+                                org.osmdroid.views.overlay.Marker.ANCHOR_CENTER
                             )
-                            title = studentName.ifEmpty { "Vị trí học sinh" } +
-                                    if (isStaleFix) " (vị trí có thể đã cũ)" else ""
-                            snippet = "$displayAddress\nLat: $latitude, Lng: $longitude"
-                            // Chan bong bong mac dinh cua osmdroid. No ve mot hop
-                            // trang khong theo mau nao cua app, rong hon the thong
-                            // tin o goc tren trai va lap lai dung nhung gi chip da
-                            // hien — chinh la cai o trang cho "Con Ga / Lat.. Lng.."
-                            // trong anh nguoi dung gui. An click thi van giu nguyen
-                            // dau pin de nhan mat vi tri.
+                            icon = android.graphics.drawable.BitmapDrawable(map.context.resources, rotatedArrow)
+                            // Chặn bong bóng mặc định của osmdroid — nơi từng in
+                            // "Con Ga / Lat.. Lng.." mà người dùng chê là tên bừa.
                             setOnMarkerClickListener { _, _ -> true }
                         })
 
@@ -814,27 +858,6 @@ fun GoogleMapsStudentLocationCard(
                                 color = TextMuted, fontSize = 9.sp,
                                 maxLines = 1, overflow = TextOverflow.Ellipsis
                             )
-                            if (zoomWasCapped) {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Warning,
-                                        contentDescription = null,
-                                        tint = NeonAmber,
-                                        modifier = Modifier.size(12.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Text(
-                                        "Đã hạ zoom từ z${String.format(Locale.US, "%.0f", zoomLevel)}" +
-                                            " xuống z${String.format(Locale.US, "%.1f", zoomCeiling)}" +
-                                            " vì sai số ±${honestAcc.toInt()} m: phóng to hơn chỉ nở ảnh, không thêm chi tiết thật.",
-                                        color = NeonAmber, fontSize = 9.sp, fontWeight = FontWeight.SemiBold,
-                                        modifier = Modifier.weight(1f)
-                                    )
-                                }
-                            }
                             if (headingDegrees != null) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Icon(
@@ -939,7 +962,7 @@ fun GoogleMapsStudentLocationCard(
                         tint = if (followMode) NeonEmerald else FacebookBlue,
                         size = 40.dp,
                         onClick = {
-                            val target = 18.0.coerceAtMost(zoomCeiling).coerceAtMost(layerAt(layerIndex).maxZoom())
+                            val target = 19.0.coerceAtMost(layerAt(layerIndex).maxZoom())
                             mapViewRef?.let { m ->
                                 m.controller.setZoom(target)
                                 m.controller.animateTo(org.osmdroid.util.GeoPoint(latitude, longitude))
@@ -1023,7 +1046,7 @@ fun GoogleMapsStudentLocationCard(
                                     Text(
                                         "z" + String.format(
                                             Locale.US, "%.0f",
-                                            entry.maxZoom().coerceAtMost(zoomCeiling)
+                                            entry.maxZoom()
                                         ),
                                         fontSize = 9.sp, fontWeight = FontWeight.Bold,
                                         color = if (selected) FacebookBlue else TextSecondary

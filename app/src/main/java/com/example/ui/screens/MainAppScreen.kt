@@ -183,7 +183,8 @@ fun MainAppScreen(
                             onSendZenlyBump = { viewModel.sendZenlyBump(context) },
                             onClearMessages = { viewModel.clearMessages() },
                             onOpenLocationHistory = { overlayScreen = "history" },
-                            onOpenAiChat = { overlayScreen = "ai" }
+                            onOpenAiChat = { overlayScreen = "ai" },
+                            onAvatarPicked = { base64 -> viewModel.updateAvatar(base64) }
                         )
                     }
                     1 -> OnlyWhenPaired(isPaired, isChild) {

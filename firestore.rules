@@ -198,8 +198,15 @@ service cloud.firestore {
     function attestedPair(pairingId, otherUid) {
       return pairOfTwo(pairingId, request.auth.uid, otherUid) &&
         exists(/databases/$(database)/documents/users/$(otherUid)) &&
-        'activePairingId' in get(/databases/$(database)/documents/users/$(otherUid)).data &&
-        get(/databases/$(database)/documents/users/$(otherUid)).data.activePairingId == pairingId;
+        // BAN 67.0 — ghép nối NHIỀU người: máy con giữ MẢNG
+        // `activePairingIds` (mẹ, bố, ông bà… mỗi người một id). Chấp nhận cả
+        // trường CŨ `activePairingId` (một) để APK v66 đã ghép nối trước đó
+        // không bị đứt quyền khi rules đổi. Xác nhận vẫn phải do CHÍNH máy
+        // bên kia tự ghi lên hồ sơ của nó — kẻ xấu không tự ghi được.
+        (('activePairingIds' in get(/databases/$(database)/documents/users/$(otherUid)).data &&
+          pairingId in get(/databases/$(database)/documents/users/$(otherUid)).data.activePairingIds) ||
+         ('activePairingId' in get(/databases/$(database)/documents/users/$(otherUid)).data &&
+          get(/databases/$(database)/documents/users/$(otherUid)).data.activePairingId == pairingId));
     }
 
     function isPairedWith(otherUid) {
@@ -470,7 +477,14 @@ service cloud.firestore {
       // da bi xoa (nut "Xóa tài khoản"), quan tri don bat ky luc nao. Query
       // `whereEqualTo("userId", uid)` cua app khop dieu kien nay nen khong bi
       // Firestore tu choi lien dai.
-      allow delete: if accountIsBeingDeleted(resource.data.userId) || isAdmin();
+      // 67.0: them QUYEN TU XOA CUA CHU (resource.data.userId == auth.uid)
+      // cho chinh sach "xoa dinh ky 30 ngay" — app tu don vet DI CHUYEN CU
+      // hon mot thang ngay khi mo app. Khac voi /locations (toan bo the do
+      // telemetry ghi de len, khoa xoa de tre khong giau duoc het vet), day
+      // la nhat ky lich su: giu vinh vien thi chi lam doc phinh, con GPS
+      // hien tai van luon do duoc du khi da xoa lich su cu.
+      allow delete: if accountIsBeingDeleted(resource.data.userId) || isAdmin() ||
+        (isAuthenticated() && notBanned() && resource.data.userId == request.auth.uid);
     }
 
     // SOS Alerts

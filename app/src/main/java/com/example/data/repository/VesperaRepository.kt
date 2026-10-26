@@ -95,7 +95,21 @@ class VesperaRepository(private val db: FirebaseFirestore, private val auth: Fir
         if (uid.isEmpty()) {
             throw IllegalStateException("Máy chưa đăng nhập nên chưa lưu được hồ sơ lên máy chủ.")
         }
-        db.collection("users").document(uid).set(profile.copy(id = uid)).await()
+        var toSave = profile.copy(id = uid)
+        if (toSave.activePairingIds.isEmpty()) {
+            // BAN 67.0: hồ sơ trên máy có thể chưa nạp được mảng ghép nối (doc
+            // cũ, hoặc luồng đăng ký mới). set() đầy đủ sẽ XOÁ MẢNG trên máy
+            // chủ — mất xác nhận của những phụ huynh đã ghép. Nên giữ nguyên
+            // mảng hiện có trên máy chủ khi máy gửi lên một mảng rỗng.
+            val existing = runCatching {
+                db.collection("users").document(uid).get().await()
+            }.getOrNull()
+            val ids = existing?.get("activePairingIds") as? List<*>
+            if (!ids.isNullOrEmpty()) {
+                toSave = toSave.copy(activePairingIds = ids.filterIsInstance<String>())
+            }
+        }
+        db.collection("users").document(uid).set(toSave).await()
     }
 
     /**
@@ -382,6 +396,12 @@ class VesperaRepository(private val db: FirebaseFirestore, private val auth: Fir
     /**
      * May nay tu ghi ho so cua chinh no: "toi dang ghep voi ai, theo document
      * nao". Day la buoc ma truoc day app tuong la ben kia lam ho duoc.
+     *
+     * BAN 67.0 — NHIỀU người ghép chung một hồ sơ: id mới được THÊM vào
+     * `activePairingIds` (không thay thế), để mẹ, bố, ông bà… mỗi người có
+     * document ghép nối riêng cùng thấy máy con. `activePairingId` (một) vẫn
+     * ghi = ghép nối mới nhất, cho APK cũ và cho các màn hình đang dùng một
+     * ghép nối "hiện tại".
      */
     suspend fun linkSelfToPairing(
         userId: String,
@@ -389,10 +409,15 @@ class VesperaRepository(private val db: FirebaseFirestore, private val auth: Fir
         partnerId: String
     ) {
         if (userId.isEmpty()) return
-        db.collection("users").document(userId).update(
+        val docRef = db.collection("users").document(userId)
+        val current = runCatching { docRef.get().await() }.getOrNull()
+        val existing = current?.get("activePairingIds") as? List<*>
+        val merged = (existing?.filterIsInstance<String>().orEmpty() + pairingId).distinct()
+        docRef.update(
             mapOf(
                 "pairedWith" to partnerId,
-                "activePairingId" to pairingId
+                "activePairingId" to pairingId,
+                "activePairingIds" to merged
             )
         ).await()
     }
@@ -400,10 +425,20 @@ class VesperaRepository(private val db: FirebaseFirestore, private val auth: Fir
     /** Xoa lien ket cua may nay khi document ghep noi khong con PAIRED nua. */
     suspend fun unlinkSelf(userId: String) {
         if (userId.isEmpty()) return
-        db.collection("users").document(userId).update(
+        val docRef = db.collection("users").document(userId)
+        // Gỡ khỏi mảng GHÉP NỐI HIỆN TẬT; các ghép nối khác của máy (đa ghép)
+        // vẫn giữ xác nhận trong activePairingIds — chúng tự mất hiệu lực khi
+        // document ghép nối tương ứng rời trạng thái PAIRED (attestedPair kiểm
+        // tra status trên máy chủ).
+        val current = runCatching { docRef.get().await() }.getOrNull()
+        val activeId = current?.getString("activePairingId").orEmpty()
+        val ids = (current?.get("activePairingIds") as? List<*>)?.filterIsInstance<String>().orEmpty()
+        val remaining = ids - activeId
+        docRef.update(
             mapOf(
                 "pairedWith" to "",
-                "activePairingId" to ""
+                "activePairingId" to "",
+                "activePairingIds" to remaining
             )
         ).await()
     }
@@ -528,29 +563,87 @@ class VesperaRepository(private val db: FirebaseFirestore, private val auth: Fir
         }
     }
 
+    /**
+     * BAN 67.0 — hàng đợi LỊCH SỬ di chuyển khi offline. Bản cũ bỏ lặng entry
+     * lịch sử khi chưa có mạng (`saveLocationHistory` return sớm) nên đường đi
+     * trong lúc mất mạng mất hẳn, máy mẹ không bao giờ thấy. Nay xếp hàng ở
+     * "vespera_offline_gps"/"history_queue" và [flushOfflineLocations] sẽ ghi
+     * lại cả hai nơi (location_history + pairings/{id}/location_history) khi
+     * mạng trở lại — lộ trình không còn bị khuyết.
+     *
+     * Trần 250 điểm: queue là biện pháp tạm, không phải kho dữ liệu; quá giới
+     * hạn thì bỏ điểm CŨ NHẤT (vẫn giữ nghĩa "mất ít nhất").
+     */
+    private fun saveOfflineHistoryLocally(entry: LocationHistoryEntry) {
+        val ctx = context ?: return
+        try {
+            val prefs = ctx.getSharedPreferences("vespera_offline_gps", Context.MODE_PRIVATE)
+            val jsonList = prefs.getString("history_queue", "[]") ?: "[]"
+            val moshi = com.squareup.moshi.Moshi.Builder().add(com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory()).build()
+            val type = com.squareup.moshi.Types.newParameterizedType(List::class.java, LocationHistoryEntry::class.java)
+            val adapter = moshi.adapter<List<LocationHistoryEntry>>(type)
+            val list = try { adapter.fromJson(jsonList) ?: emptyList() } catch (e: Exception) { emptyList() }
+
+            val capped = if (list.size >= 250) list.takeLast(249) else list
+            prefs.edit().putString("history_queue", adapter.toJson(capped + entry)).apply()
+        } catch (e: Exception) {
+            Log.w(TAG, "saveOfflineHistoryLocally error", e)
+        }
+    }
+
     suspend fun flushOfflineLocations() {
         val ctx = context ?: return
         try {
             if (!isWifiOrInternetConnected()) return
             val prefs = ctx.getSharedPreferences("vespera_offline_gps", Context.MODE_PRIVATE)
-            val jsonList = prefs.getString("queue", "[]") ?: "[]"
-            if (jsonList == "[]" || jsonList.isBlank()) return
-
             val moshi = com.squareup.moshi.Moshi.Builder().add(com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory()).build()
-            val type = com.squareup.moshi.Types.newParameterizedType(List::class.java, LocationData::class.java)
-            val adapter = moshi.adapter<List<LocationData>>(type)
-            val list = try { adapter.fromJson(jsonList) ?: emptyList() } catch (e: Exception) { emptyList() }
 
-            if (list.isNotEmpty()) {
-                for (loc in list) {
-                    try {
-                        db.collection("locations").document(loc.userId).set(loc).await()
-                    } catch (e: Exception) {
-                        Log.w(TAG, "Failed to flush offline location", e)
+            // ── 1. Hàng đợi vị trí hiện tại/SOS ──
+            val jsonList = prefs.getString("queue", "[]") ?: "[]"
+            if (jsonList != "[]" && jsonList.isNotBlank()) {
+                val type = com.squareup.moshi.Types.newParameterizedType(List::class.java, LocationData::class.java)
+                val adapter = moshi.adapter<List<LocationData>>(type)
+                val list = try { adapter.fromJson(jsonList) ?: emptyList() } catch (e: Exception) { emptyList() }
+
+                if (list.isNotEmpty()) {
+                    for (loc in list) {
+                        try {
+                            db.collection("locations").document(loc.userId).set(loc).await()
+                        } catch (e: Exception) {
+                            Log.w(TAG, "Failed to flush offline location", e)
+                        }
                     }
+                    prefs.edit().remove("queue").apply()
+                    Log.d(TAG, "Đã có WiFi: Trả lại ${list.size} vị trí GPS đã lưu offline lên máy chủ thành công.")
                 }
-                prefs.edit().remove("queue").apply()
-                Log.d(TAG, "Đã có WiFi: Trả lại ${list.size} vị trí GPS đã lưu offline lên máy chủ thành công.")
+            }
+
+            // ── 2. BAN 67.0: hàng đợi LỊCH SỬ di chuyển ──
+            // Ghi lại qua đúng đường saveLocationHistory (merge bán kính 5 m +
+            // ghi cả root lẫn subcollection của ghep noi), XÓA KHỎI QUEUE TỪNG
+            // ĐIỂM THÀNH CÔNG — điểm còn lỗi thì chờ lần flush sau, không mất.
+            val jsonHist = prefs.getString("history_queue", "[]") ?: "[]"
+            if (jsonHist != "[]" && jsonHist.isNotBlank()) {
+                val type = com.squareup.moshi.Types.newParameterizedType(List::class.java, LocationHistoryEntry::class.java)
+                val adapter = moshi.adapter<List<LocationHistoryEntry>>(type)
+                val list = try { adapter.fromJson(jsonHist) ?: emptyList() } catch (e: Exception) { emptyList() }
+
+                if (list.isNotEmpty()) {
+                    val remaining = mutableListOf<LocationHistoryEntry>()
+                    for (entry in list) {
+                        val ok = runCatching { writeLocationHistoryNow(entry) }
+                            .onFailure { Log.w(TAG, "Failed to flush offline history ${entry.id}", it) }
+                            .isSuccess
+                        if (!ok) remaining.add(entry)
+                    }
+                    if (remaining.isEmpty()) {
+                        prefs.edit().remove("history_queue").apply()
+                    } else {
+                        val type2 = com.squareup.moshi.Types.newParameterizedType(List::class.java, LocationHistoryEntry::class.java)
+                        prefs.edit().putString("history_queue", moshi.adapter<List<LocationHistoryEntry>>(type2).toJson(remaining)).apply()
+                    }
+                    Log.d(TAG, "Đã đồng bộ lịch sử offline: ${list.size - remaining.size}/${list.size} điểm lên máy chủ.")
+                }
             }
         } catch (e: Exception) {
             Log.w(TAG, "flushOfflineLocations error", e)
@@ -588,78 +681,222 @@ class VesperaRepository(private val db: FirebaseFirestore, private val auth: Fir
         awaitClose { listener.remove() }
     }
 
+    /**
+     * Ghi một điểm lịch sử di chuyển. BAN 67.0: offline / chưa đăng nhập thì
+     * XẾP HÀNG (saveOfflineHistoryLocally) thay vì bỏ lặng — khi có mạng,
+     * [flushOfflineLocations] sẽ đẩy cả queue lên để máy mẹ thấy đủ lộ trình.
+     */
     suspend fun saveLocationHistory(entry: LocationHistoryEntry) {
         try {
-            if (auth.currentUser == null || !isWifiOrInternetConnected()) return
-            
-            // Try to find the last entry for this user
-            val lastEntrySnapshot = db.collection("location_history")
-                .whereEqualTo("userId", entry.userId)
-                .orderBy("timestamp", Query.Direction.DESCENDING)
-                .limit(1)
-                .get().await()
-            
-            val lastEntry = lastEntrySnapshot.documents.firstOrNull()?.toObject(LocationHistoryEntry::class.java)
-            
-            // Check distance
-            val isWithinRadius = if (lastEntry != null) {
-                val distance = calculateDistance(entry.latitude, entry.longitude, lastEntry.latitude, lastEntry.longitude)
-                distance < 5.0
-            } else {
-                false
+            if (auth.currentUser == null || !isWifiOrInternetConnected()) {
+                saveOfflineHistoryLocally(entry)
+                Log.d(TAG, "Offline: xếp hàng lịch sử di chuyển ${entry.id} (${if (entry.pairingId.isNotEmpty()) "có" else "không có"} ghép nối).")
+                return
             }
-            
-            if (isWithinRadius && lastEntry != null) {
-                // Update existing
-                val newDuration = (entry.timestamp - lastEntry.timestamp) + lastEntry.duration
-                
-                val updateMap = mapOf(
-                    "timestamp" to entry.timestamp,
-                    "duration" to newDuration,
-                    "batteryLevel" to entry.batteryLevel,
-                    "isCharging" to entry.isCharging
-                )
-                db.collection("location_history").document(lastEntry.id).update(updateMap).await()
-                
-                if (entry.pairingId.isNotEmpty()) {
-                    db.collection("pairings").document(entry.pairingId)
-                        .collection("location_history").document(lastEntry.id).update(updateMap).await()
-                }
-            } else {
-                // Create new
-                val docId = entry.id.ifEmpty { "${entry.userId}_${entry.timestamp}" }
-                val dataMap = mapOf(
-                    "id" to docId,
-                    "pairingId" to entry.pairingId,
-                    "userId" to entry.userId,
-                    "userName" to entry.userName,
-                    "latitude" to entry.latitude,
-                    "longitude" to entry.longitude,
-                    "placeName" to entry.placeName,
-                    "speed" to entry.speed,
-                    "batteryLevel" to entry.batteryLevel,
-                    "isCharging" to entry.isCharging,
-                    "duration" to 0L,
-                    "timestamp" to entry.timestamp,
-                    "serverTimestamp" to com.google.firebase.firestore.FieldValue.serverTimestamp(),
-                    "dateStr" to entry.dateStr,
-                    "timeStr" to entry.timeStr,
-                    "year" to entry.year,
-                    "month" to entry.month,
-                    "day" to entry.day,
-                    "hour" to entry.hour,
-                    "minute" to entry.minute,
-                    "second" to entry.second
-                )
-                db.collection("location_history").document(docId).set(dataMap).await()
-                if (entry.pairingId.isNotEmpty()) {
-                    db.collection("pairings").document(entry.pairingId)
-                        .collection("location_history").document(docId).set(dataMap).await()
-                }
-            }
+            writeLocationHistoryNow(entry)
         } catch (e: Exception) {
-            Log.d(TAG, "saveLocationHistory offline/permission bypass: ${e.message}")
+            Log.d(TAG, "saveLocationHistory lỗi (${e.message}) — xếp hàng offline để thử lại khi có mạng.")
+            saveOfflineHistoryLocally(entry)
         }
+    }
+
+    /**
+     * Ghi THẬT một điểm lịch sử lên cả hai nơi (root + subcollection của ghép
+     * nối), gộp điểm trùng bán kính 5 m như cũ. KHÔNG bắt lỗi ở đây để
+     * [flushOfflineLocations] biết điểm nào flush thất bại và giữ lại queue.
+     */
+    private suspend fun writeLocationHistoryNow(entry: LocationHistoryEntry) {
+        // Try to find the last entry for this user
+        val lastEntrySnapshot = db.collection("location_history")
+            .whereEqualTo("userId", entry.userId)
+            .orderBy("timestamp", Query.Direction.DESCENDING)
+            .limit(1)
+            .get().await()
+
+        val lastEntry = lastEntrySnapshot.documents.firstOrNull()?.toObject(LocationHistoryEntry::class.java)
+
+        // Check distance
+        val isWithinRadius = if (lastEntry != null) {
+            val distance = calculateDistance(entry.latitude, entry.longitude, lastEntry.latitude, lastEntry.longitude)
+            distance < 5.0
+        } else {
+            false
+        }
+
+        if (isWithinRadius && lastEntry != null) {
+            // Update existing
+            val newDuration = (entry.timestamp - lastEntry.timestamp) + lastEntry.duration
+
+            val updateMap = mapOf(
+                "timestamp" to entry.timestamp,
+                "duration" to newDuration,
+                "batteryLevel" to entry.batteryLevel,
+                "isCharging" to entry.isCharging
+            )
+            db.collection("location_history").document(lastEntry.id).update(updateMap).await()
+
+            for (pairingId in pairingIdsToMirror(entry)) {
+                db.collection("pairings").document(pairingId)
+                    .collection("location_history").document(lastEntry.id).update(updateMap).await()
+            }
+        } else {
+            // Create new
+            val docId = entry.id.ifEmpty { "${entry.userId}_${entry.timestamp}" }
+            val dataMap = mapOf(
+                "id" to docId,
+                "pairingId" to entry.pairingId,
+                "userId" to entry.userId,
+                "userName" to entry.userName,
+                "latitude" to entry.latitude,
+                "longitude" to entry.longitude,
+                "placeName" to entry.placeName,
+                "speed" to entry.speed,
+                "batteryLevel" to entry.batteryLevel,
+                "isCharging" to entry.isCharging,
+                "duration" to 0L,
+                "timestamp" to entry.timestamp,
+                "serverTimestamp" to com.google.firebase.firestore.FieldValue.serverTimestamp(),
+                "dateStr" to entry.dateStr,
+                "timeStr" to entry.timeStr,
+                "year" to entry.year,
+                "month" to entry.month,
+                "day" to entry.day,
+                "hour" to entry.hour,
+                "minute" to entry.minute,
+                "second" to entry.second
+            )
+            db.collection("location_history").document(docId).set(dataMap).await()
+            for (pairingId in pairingIdsToMirror(entry)) {
+                db.collection("pairings").document(pairingId)
+                    .collection("location_history").document(docId).set(dataMap).await()
+            }
+        }
+    }
+
+    /**
+     * BAN 67.0 — máy con MIRROR lộ trình vào GHÉP NỐI CỦA TẤT CẢ những người
+     * đã ghép (mẹ, bố, ông bà…), không chỉ ghép nối "mới nhất". Danh sách lấy
+     * từ hồ sơ của chính máy ghi (activePairingIds + activePairingId + id gắn
+     * trên entry). Rules cho phép vì máy con là childId của TỪNG document đó
+     * (isPairMember). Một document lỗi mirror thì các nơi khác vẫn được ghi —
+     * lỗi từng nơi đã được bắt ở caller khi offline; ở đây dùng runCatching
+     * để một ghép nối hỏng không làm treo vòng mirror.
+     */
+    private suspend fun pairingIdsToMirror(entry: LocationHistoryEntry): List<String> {
+        val ids = mutableSetOf(entry.pairingId)
+        if (entry.userId.isNotEmpty()) {
+            runCatching {
+                val doc = db.collection("users").document(entry.userId).get().await()
+                (doc.get("activePairingIds") as? List<*>)?.filterIsInstance<String>()?.let(ids::addAll)
+                doc.getString("activePairingId")?.takeIf { it.isNotEmpty() }?.let(ids::add)
+            }
+        }
+        return ids.filter { it.isNotEmpty() }
+    }
+
+    /** Bien nhan don dep dinh ky: X document thuc xoa + nhom khong xoa duoc. */
+    data class RetentionOutcome(val deleted: Int, val failed: List<String>)
+
+    /**
+     * BAN 67.0 — DỌN ĐỊNH KÝ 30 NGÀY: xóa LỊCH SỬ DI CHUYỂN và TIN NHẮN cũ
+     * hơn [cutoffMillis], giữ lại TIN ĐƯỢC GHIM (`isStarred`). Chạy mỗi lần
+     * app mở (ViewModel gọi đúng một lần mỗi phiên) — dự án không chạy server
+     * cron nên "định kỳ" ở đây là "dọn khi thiết bị nào đó của gia đình bật
+     * app": thiết bị nào mở trước sẽ dọn trước, thiết bị sau chạy lại thấy
+     * trống và bỏ qua.
+     *
+     * Dọn ĐỦ BA NƠI: lịch sử gốc `/location_history` (chỉ của chính máy này —
+     * rules 67.0 mở quyền xóa cho chủ), và theo TỪNG ghép nối mà máy này là
+     * thành viên: tin nhắn `pairings/*/messages` (subcollection cho phép thành
+     * viên viết = xóa được) và lịch sử mirror `pairings/*/location_history`.
+     * Tin ghim được giữ ở cả hai thiết bị vì ai ghim thì cũng nằm trong cặp
+     * này. Lỗi một ghép nối không làm hỏng ghép nối khác — mỗi chỗ đều bắt
+     * lỗi riêng và ghi vào `failed` để app nói thật đã xóa được bao nhiêu.
+     */
+    suspend fun runRetentionCleanup(
+        cutoffMillis: Long = System.currentTimeMillis() - RETENTION_WINDOW_MS
+    ): RetentionOutcome {
+        val uid = auth.currentUser?.uid
+        if (uid.isNullOrEmpty()) return RetentionOutcome(0, listOf("chưa đăng nhập"))
+        var deleted = 0
+        val failed = mutableListOf<String>()
+
+        // 1) Lịch sử gốc của chính máy. Query theo userId rồi lọc timestamp
+        //    phía client — tránh composite index (userId + timestamp) mà dự án
+        //    chưa tạo. Document KHÔNG CÓ timestamp (0/null) là tuổi không rõ:
+        //    GIỮ, không xóa mò.
+        try {
+            val snap = db.collection("location_history")
+                .whereEqualTo("userId", uid).get().await()
+            val old = snap.documents.filter { (it.getLong("timestamp") ?: 0L) in 1..cutoffMillis }
+            deleted += deleteInChunks(old.map { it.reference })
+        } catch (e: Exception) {
+            Log.w(TAG, "runRetentionCleanup: location_history", e)
+            failed.add("lịch sử vị trí (${e.message})")
+        }
+
+        // 2) Theo từng ghép nối mà máy này là parentId hoặc childId.
+        val pairRefs = mutableListOf<DocumentReference>()
+        for (field in listOf("parentId", "childId")) {
+            runCatching {
+                db.collection("pairings").whereEqualTo(field, uid).get().await()
+                    .documents.map { it.reference }.forEach { if (it !in pairRefs) pairRefs.add(it) }
+            }.onFailure { failed.add("ghép nối (${it.message})") }
+        }
+
+        for (pair in pairRefs) {
+            // 2a) Tin nhắn cũ hơn hạn, TRỪ tin ghim. `isStarred` là tên khóa
+            //     thật trong Firestore (xem FamilyMessage @get:PropertyName).
+            try {
+                val msgs = pair.collection("messages")
+                    .whereLessThan("createdAt", cutoffMillis).get().await()
+                val toDelete = msgs.documents
+                    .filter { it.getBoolean("isStarred") != true }
+                    .map { it.reference }
+                deleted += deleteInChunks(toDelete)
+            } catch (e: Exception) {
+                Log.w(TAG, "runRetentionCleanup: ${pair.id}/messages", e)
+                failed.add("tin nhắn của ${pair.id} (${e.message})")
+            }
+            // 2b) Lịch sử di chuyển mirror trong ghép nối.
+            try {
+                val mirrored = pair.collection("location_history")
+                    .whereLessThan("timestamp", cutoffMillis).get().await()
+                deleted += deleteInChunks(mirrored.documents.map { it.reference })
+            } catch (e: Exception) {
+                Log.w(TAG, "runRetentionCleanup: ${pair.id}/location_history", e)
+                failed.add("lịch sử của ${pair.id} (${e.message})")
+            }
+        }
+
+        Log.d(TAG, "runRetentionCleanup: đã xóa $deleted document, còn tồn: $failed")
+        return RetentionOutcome(deleted, failed)
+    }
+
+    /** Cửa sổ giữ dữ liệu mặc định: 30 ngày. */
+    companion object {
+        const val RETENTION_WINDOW_MS: Long = 30L * 24L * 60L * 60L * 1000L
+    }
+
+    /**
+     * Xóa danh sách document theo lô (Firestore giới hạn 500 lệnh/batch; lấy
+     * 400 cho an toàn). Trả về số lệnh THẬT SỰ thành công — lệnh xóa document
+     * không tồn tại vẫn được tính thành công bởi Firestore, nhưng với dữ liệu
+     * vừa query ra thì chúng luôn tồn tại tại thời điểm query.
+     */
+    private suspend fun deleteInChunks(refs: List<DocumentReference>): Int {
+        var done = 0
+        for (chunk in refs.chunked(400)) {
+            try {
+                val batch = db.batch()
+                chunk.forEach { batch.delete(it) }
+                batch.commit().await()
+                done += chunk.size
+            } catch (e: Exception) {
+                Log.w(TAG, "deleteInChunks: ${e.message} (${chunk.size} mục)", e)
+            }
+        }
+        return done
     }
 
     fun observeLocationHistory(pairingId: String): Flow<List<LocationHistoryEntry>> = callbackFlow {

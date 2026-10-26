@@ -257,7 +257,11 @@ class AiChatRegressionTest {
         assertTrue("toa do phai qua FixPrecision", card.contains("FixPrecision.formatCoordinates("))
         assertTrue("sai so phai qua FixPrecision", card.contains("FixPrecision.accuracyShortLabel("))
         assertTrue("vong tron dung sai so trung thuc", card.contains("honestAcc.toDouble()"))
-        assertTrue("maxZoom phai bi chan theo sai so", card.contains("coerceAtMost(zoomCeiling)"))
+        assertTrue("zoom mo man hinh phai theo sai so (FixPrecision)", card.contains("coerceAtMost(suggestedZoom)"))
+        assertFalse(
+            "tran phong to KHONG duoc chan theo sai so nua (67.0: chi tiet map toi tran tile, do chinh xac noi bang vong tron ±m)",
+            card.contains("coerceAtMost(zoomCeiling)")
+        )
         assertFalse(
             "khong duoc con day `±<so tho>m` ra man hinh",
             card.contains("±${'$'}{accuracyMeters.toInt()}m")

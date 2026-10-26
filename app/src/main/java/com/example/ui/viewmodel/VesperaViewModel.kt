@@ -534,8 +534,36 @@ class VesperaViewModel(
         }
     }
 
+    /**
+     * ĐỌN ĐỊNH KÝ 30 NGÀY — chạy ĐÚNG MỘT LẦN mỗi phiên cho mỗi tài khoản,
+     * ngay khi mở app (startObservingUserData là nơi mọi đường đăng nhập đều
+     * đi qua). Không có server cron nên đây là "dọn khi ai đó của gia đình mở
+     * app": ai mở trước dọn trước, lần sau chạy lại thấy trống thì bỏ qua
+     * (`retentionRanForUser` chặn chạy lặp trong cùng phiên).
+     *
+     * Chạy nền im lặng; chỉ báo snackbar khi THỰC SỰ xóa được gì, và luôn nói
+     * đúng số lượng thay vì "đã dọn hết" — nhóm bị rules chặn nằm trong biên
+     * nhận `failed` của RetentionOutcome (chỉ ghi log, không quấy người dùng).
+     */
+    private var retentionRanForUser: String? = null
+
+    private fun runRetentionOnce(uid: String) {
+        if (retentionRanForUser == uid) return
+        retentionRanForUser = uid
+        viewModelScope.launch {
+            val outcome = runCatching { repository.runRetentionCleanup() }.getOrNull()
+                ?: return@launch
+            if (outcome.deleted > 0) {
+                _uiState.value = _uiState.value.copy(
+                    successMessage = "Đã dọn ${outcome.deleted} dữ liệu cũ hơn 30 ngày (tin nhắn được ghim vẫn giữ)."
+                )
+            }
+        }
+    }
+
     private fun startObservingUserData(userId: String) {
         stopAllObservers()
+        runRetentionOnce(userId)
 
         if (_uiState.value.userProfile == null) {
             val user = auth.currentUser
@@ -2401,6 +2429,33 @@ class VesperaViewModel(
             } catch (e: Exception) {
                 Log.w(TAG, "updateUserProfile error", e)
                 _uiState.value = _uiState.value.copy(errorMessage = "Không thể cập nhật thông tin.")
+            }
+        }
+    }
+
+    /**
+     * Đổi ảnh đại diện: nhận chuỗi base64 JPEG ~96px đã nén sẵn ở
+     * DashboardScreen (dự án chưa bật Storage nên không upload được file).
+     * Chặn chuỗi quá to để document users/ không phình — Firestore giới hạn
+     * 1MB một document, một ảnh gốc chèn nguyên vào là vỡ ngay.
+     */
+    fun updateAvatar(base64: String) {
+        val currentProfile = _uiState.value.userProfile ?: return
+        if (base64.isBlank() || base64.length > 300_000) {
+            _uiState.value = _uiState.value.copy(
+                errorMessage = "Ảnh đại diện quá lớn hoặc không đọc được."
+            )
+            return
+        }
+        val updatedProfile = currentProfile.copy(avatarBase64 = base64)
+        _uiState.value = _uiState.value.copy(userProfile = updatedProfile)
+        viewModelScope.launch {
+            try {
+                repository.saveUserProfile(updatedProfile)
+                _uiState.value = _uiState.value.copy(successMessage = "Đã đổi ảnh đại diện!")
+            } catch (e: Exception) {
+                Log.w(TAG, "updateAvatar error", e)
+                _uiState.value = _uiState.value.copy(errorMessage = "Không thể lưu ảnh đại diện.")
             }
         }
     }

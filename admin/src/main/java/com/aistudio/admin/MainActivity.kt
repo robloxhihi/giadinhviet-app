@@ -374,6 +374,99 @@ private suspend fun wipeAccountFromAdmin(uid: String): AdminWipeOutcome {
 }
 
 /**
+ * DỌN DỮ LIỆU CŨ TOÀN HỆ THỐNG từ phía quan trị (67.0): xóa lịch sử di chuyển
+ * và tin nhắn cũ hơn [days] ngày trên MỌI tài khoản, GIỮ TIN GHIM. Đây là nút
+ * "xóa bất cứ lúc nào để cho nhẹ" — chạy ngay lập tức thay vì chờ app người
+ * dùng mở (app người dùng cũng tự dọn mỗi lần mở, nhưng chỉ khi có ai đó bật
+ * app; quan trị dọn chủ động được không phụ thuộc điều đó).
+ *
+ * Ba nguồn xóa, TRÙNG với app người dùng (VesperaRepository.runRetentionCleanup):
+ *  1. /location_history với `timestamp` quá hạn (admin đọc được toàn bộ nhờ
+ *     `isAdmin()` đầu tiên trong rules).
+ *  2. Tin nhắn trong MỌI document ghép nối với `createdAt` quá hạn, TRỪ
+ *     `isStarred == true` — chính sách "chỉ giữ lại tin được ghim".
+ *  3. Lịch sử mirror `pairings/*/location_history` quá hạn.
+ *
+ * Mốc `timestamp`/`createdAt` là con số epoch millis do client ghi; document
+ * thiếu trường (0/null) là tuổi KHÔNG RÕ — bỏ qua, không xóa mò. Document
+ * bi rules từ chối thì đếm vào failed và báo thật thay vì nuốt.
+ */
+private suspend fun retentionCleanupFromAdmin(days: Long): Pair<Int, List<String>> {
+  val cutoff = System.currentTimeMillis() - days * DAY_MS
+  var deleted = 0
+  val failed = mutableListOf<String>()
+
+  // 1) Lịch sử di chuyển gốc.
+  var histErrors = 0
+  try {
+    val snap = db().collection(HISTORY).whereLessThan("timestamp", cutoff).get().await()
+    for (chunk in snap.documents.map { it.reference }.chunked(400)) {
+      try {
+        val batch = db().batch()
+        chunk.forEach { batch.delete(it) }
+        batch.commit().await()
+        deleted += chunk.size
+      } catch (e: Exception) {
+        histErrors += chunk.size
+      }
+    }
+  } catch (e: Exception) {
+    failed.add("/location_history (không đọc được: ${e.message})")
+  }
+  if (histErrors > 0) failed.add("/location_history ($histErrors mục không xóa được)")
+
+  // 2+3) Theo từng ghép nối: tin nhắn (trừ ghim) và lịch sử mirror.
+  val pairs = try {
+    db().collection(PAIRINGS).get().await().documents.map { it.reference }
+  } catch (e: Exception) {
+    failed.add("/pairings (không đọc được: ${e.message})")
+    emptyList()
+  }
+  for (pair in pairs) {
+    var msgErrors = 0
+    try {
+      val msgs = pair.collection("messages").whereLessThan("createdAt", cutoff).get().await()
+      val targets = msgs.documents
+        .filter { it.getBoolean("isStarred") != true }
+        .map { it.reference }
+      for (chunk in targets.chunked(400)) {
+        try {
+          val batch = db().batch()
+          chunk.forEach { batch.delete(it) }
+          batch.commit().await()
+          deleted += chunk.size
+        } catch (e: Exception) {
+          msgErrors += chunk.size
+        }
+      }
+    } catch (e: Exception) {
+      failed.add("tin nhắn của ghép nối ${pair.id} (không đọc được)")
+    }
+    if (msgErrors > 0) failed.add("tin nhắn của ${pair.id} ($msgErrors mục không xóa được)")
+
+    var histMirrorErrors = 0
+    try {
+      val hist = pair.collection("location_history").whereLessThan("timestamp", cutoff).get().await()
+      for (chunk in hist.documents.map { it.reference }.chunked(400)) {
+        try {
+          val batch = db().batch()
+          chunk.forEach { batch.delete(it) }
+          batch.commit().await()
+          deleted += chunk.size
+        } catch (e: Exception) {
+          histMirrorErrors += chunk.size
+        }
+      }
+    } catch (e: Exception) {
+      failed.add("lịch sử của ghép nối ${pair.id} (không đọc được)")
+    }
+    if (histMirrorErrors > 0) failed.add("lịch sử của ${pair.id} ($histMirrorErrors mục không xóa được)")
+  }
+
+  return deleted to failed
+}
+
+/**
  * Muc "7 ngay / 30 ngay / vinh vien" gan duoc chon san khi mo hop thoai doi lenh
  * cam, de thao "Doi lenh cam" khong vo tinh doi luon thoi han dang chay. Lenh cu
  * het han roi thi chon lai tu dau (vinh vien) la hop ly nhat: document van nam
@@ -467,6 +560,13 @@ private fun AdminApp() {
   var deleteTarget by remember { mutableStateOf<AdminRow?>(null) }
   var wipeRunning by remember { mutableStateOf(false) }
   var wipeOutcome by remember { mutableStateOf<AdminWipeOutcome?>(null) }
+
+  // DỌN ĐỊNH KÝ 30 NGÀY (67.0): confirm -> chạy -> biên nhận, cùng nhịp với
+  // hộp thoại "Xóa tài khoản" ở dưới — không ai phải nhìn dòng "đang làm…"
+  // rồi mất hút không biết xóa được bao nhiêu.
+  var cleanupConfirm by remember { mutableStateOf(false) }
+  var cleanupRunning by remember { mutableStateOf(false) }
+  var cleanupResult by remember { mutableStateOf<Pair<Int, List<String>>?>(null) }
 
   val isAdmin = user?.uid?.let { it in ADMIN_UIDS } == true
 
@@ -704,6 +804,40 @@ private fun AdminApp() {
         )
       }
 
+      // DỌN DỮ LIỆU CŨ (67.0) — nút chạy ngay chính sách 30 ngày trên toàn bộ
+      // người dùng. App người dùng cũng tự dọn khi mở, nhưng nút này để quan
+      // trị chủ động "cho nhẹ" bất cứ lúc nào, không chờ ai bật app.
+      Card(colors = CardDefaults.cardColors(containerColor = CardBg2)) {
+        Column(Modifier.padding(12.dp), Arrangement.spacedBy(6.dp)) {
+          Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(
+              "DỌN DỮ LIỆU CŨ",
+              color = Violet, fontWeight = FontWeight.Bold, fontSize = 12.sp, letterSpacing = 1.sp
+            )
+            Spacer(Modifier.weight(1f))
+            Button(
+              onClick = { cleanupConfirm = true },
+              enabled = !cleanupRunning,
+              colors = ButtonDefaults.buttonColors(containerColor = Violet)
+            ) { Text(if (cleanupRunning) "Đang dọn…" else "Xóa dữ liệu > 30 ngày") }
+          }
+          Text(
+            "Quét TOÀN BỘ người dùng: lịch sử di chuyển và tin nhắn cũ hơn 30 ngày " +
+              "bị xóa; TIN ĐƯỢC GHIM luôn giữ lại. App người dùng cũng tự dọn mỗi lần " +
+              "mở — nút này chạy ngay khi bạn muốn.",
+            color = TxtDim, fontSize = 11.sp
+          )
+          cleanupResult?.let { (count, failedGroups) ->
+            Text(
+              if (failedGroups.isEmpty()) "Lần dọn gần nhất: đã xóa $count mục, không nhóm nào bị chặn."
+              else "Lần dọn gần nhất: đã xóa $count mục · KHÔNG xóa được: ${failedGroups.joinToString(" · ")}",
+              color = if (failedGroups.isEmpty()) Mint else Amber,
+              fontSize = 11.sp, fontWeight = FontWeight.Bold
+            )
+          }
+        }
+      }
+
       if (status.isNotEmpty()) Text(status, color = Amber, fontSize = 12.sp)
 
       // So sanh viet bang Comparator thu cong. Chuoi `compareBy<AdminRow, String>
@@ -872,6 +1006,58 @@ private fun AdminApp() {
         }
       }
     }
+  }
+
+  // Dọn định kỳ 30 ngày (67.0): xac nhan truoc khi quet/xoa toan he thong.
+  if (cleanupConfirm) {
+    AlertDialog(
+      onDismissRequest = { if (!cleanupRunning) cleanupConfirm = false },
+      containerColor = CardBg,
+      title = { Text("Xóa dữ liệu cũ hơn 30 ngày?", color = Txt) },
+      text = {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+          Text(
+            "Sẽ quét và xóa:\n" +
+              "· /location_history có `timestamp` quá 30 ngày (toàn bộ người dùng).\n" +
+              "· Tin nhắn trong MỌI ghép nối có `createdAt` quá 30 ngày — TRỪ tin ghim.\n" +
+              "· Lịch sử di chuyển mirror trong từng ghép nối quá 30 ngày.",
+            color = TxtDim, fontSize = 12.sp
+          )
+          Text(
+            "Xóa là KHÔNG hoàn tác. Document thiếu mốc thời gian (tuổi không rõ) " +
+              "được bỏ qua, không xóa mò.",
+            color = Rose, fontSize = 12.sp, fontWeight = FontWeight.Bold
+          )
+        }
+      },
+      confirmButton = {
+        TextButton(
+          onClick = {
+            cleanupConfirm = false
+            cleanupRunning = true
+            scope.launch {
+              try {
+                cleanupResult = retentionCleanupFromAdmin(30L)
+                status = "Dọn dữ liệu cũ: đã xóa ${cleanupResult?.first} mục — " +
+                  "xem chi tiết trong thẻ DỌN DỮ LIỆU CŨ."
+              } catch (e: Exception) {
+                cleanupResult = 0 to listOf("không chạy được: ${e.message}")
+                status = "Dọn dữ liệu cũ thất bại: ${e.message}"
+              } finally {
+                cleanupRunning = false
+              }
+            }
+          },
+          enabled = !cleanupRunning
+        ) { Text(if (cleanupRunning) "Đang dọn…" else "Xóa", color = Rose, fontWeight = FontWeight.Bold) }
+      },
+      dismissButton = {
+        TextButton(
+          onClick = { cleanupConfirm = false },
+          enabled = !cleanupRunning
+        ) { Text("Quay lại", color = TxtDim) }
+      }
+    )
   }
 
   banTarget?.let { target ->
