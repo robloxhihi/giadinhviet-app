@@ -90,6 +90,49 @@ service cloud.firestore {
       );
     }
 
+    // BAN 68.0 — MOT "AI DUOC DOC", HAI CACH TINH KHAC NHAU.
+    //
+    // Voi GET/UPDATE/DELETE tren MOT duong dan da ro, Firestore mo document va
+    // danh gia dieu kien binh thuong: `get(/pairings/$(pairingId))` o day dung,
+    // va do la chep an toan nhat (hai uid lay tu document that, khong tin duong
+    // dan).
+    //
+    // Voi LIST/QUERY thi khong the dung thu: wildcard cua menh de match
+    // (`{pairingId}`) CHUA CO GIA TRI, nen moi `get()`/`exists()` duong dan dua
+    // ra no la khong quyet duoc — Firestore tu choi TOAN BO cau lenh (403), khong
+    // loc rieng tung ket qua. Mot canh `|| isAdmin()` van cuu duoc request vi no
+    // dung sai co dinh khi doc request.auth; dieu kien dang `resource.data.X ==
+    // request.auth.uid` thi duoc danh gia theo TUNG document tra ve, nen query
+    // phai loc dung tren X (day la kieu "query filter khop rule" kinh dien cua
+    // /location_history o duoi).
+    //
+    // Do tren production 26/10, bang `scripts-local/qa-probe-bounds.cjs` (POST
+    // :runQuery — hinh duy nhat KHONG the bi router REST lam lan voi GetDocument):
+    //   QUERY pairings where parentId/childId   may phu huynh  -> 403  <-- MET
+    //   GET  pairings/<cap cua minh>            may phu huynh  -> 200
+    //   LIST 7 collection ngon                  quan tri       -> 200  (van ok)
+    //   QUERY pairings/<id>/messages (duong dan ro)  phu huynh -> 200  (van ok)
+    //   QUERY collection-group */messages            phu huynh -> 403  (khong app nao goi)
+    //   QUERY pairings/<id>/rule_audit               quan tri  -> 403  <-- MET
+    //
+    // BAY (7) subcollection giu NGUYEN isPairMember: app luon listen theo
+    // duong dan `pairings/<id>/<sub>` da ro, o day get() danh gia duoc va man
+    // hinh Chuyen tro / NhatKy van chay. Chuyen sang suy quyen tu duong dan
+    // (regex tren id) se YEU HON cu — duong dan la thu ma client tu dat.
+    //
+    // BENh thu hai (ban 67 luoi ghi chu o day): `GET .../documents/pairings/<id>/messages`
+    // co 3 doan duong dan nen REST doc nhu GetDocument cua mot document khong
+    // match rule nao -> 403 KE CA KHI LIST that tra ve 200. Bang do cu
+    // (qa-rules-matrix.cjs, "12/28 SAI") co 8 dong artifact loai nay, khong phai
+    // rules giết chuc nang. Do lai moi probe LIST bang runQuery.
+    //
+    // That bai ban nhat cua khe 403 o /pairings: may CON dung `findPairingFor`
+    // (query theo childId) de TU NHAN mot cap ghep noi ma phu huynh da tao — bi
+    // 403 la no mai mai chua ghep noi, `activePairingId` cua no trong, nen
+    // `attestedPair()` chan het duong doc vi tri / nhat ky / noi quy cua cap do.
+    // Do la chuoi "ghép nối không được, map không chính xác, nhiều người ghép
+    // nối chung không được" ma nguoi dung bao, khong phai loi ban do Kotlin.
+
     // QUAN TRI VIEN. Danh sach uid duoc lam quan tri, ghi thang vao day —
     // khong the lay tu client vi client nao cung sua duoc code cua no.
     // App `:admin` (package thanh.dev.app) cung kiem tra lai bang allowlist
@@ -322,7 +365,19 @@ service cloud.firestore {
       // Document nay chua ten hai ben, ma ghep noi, va co quan "ghi duoc
       // duong di chuyen khong". Doc duoc boi chinh hai nguoi trong cap, cong
       // them quan tri (app `:admin` can nhin danh sach ghep noi khi xu ly don).
-      allow read: if isPairMember(pairingId) || isAdmin();
+      allow get: if isPairMember(pairingId) || isAdmin();
+      // LIST (ban 68.0) — TAM BIET isPairMember: `pairingId` o day chua co gia
+      // tri nen `get(/pairings/$(pairingId))` khong quyet duoc va Firestore che
+      // TOAN BO cau lenh (403 da do tren production). Thanh vien lay tu chinh
+      // document duoc tra ve, va dieu kien nay duoc thu voi TUNG ket qua nen
+      // query bat buoc loc dung mot trong hai truong — app deu loc
+      // (findPairingFor theo childId, inventoryForDeletion theo tung ben).
+      // Ke xau go LIST khong bo loc van bi 403 vi document cua gia dinh khac
+      // khong thoa man. Quyen doc cua quan tri giu nguyen nhu 66.0.
+      allow list: if isAdmin() || (isAuthenticated() && notBanned() && (
+        ('parentId' in resource.data && resource.data.parentId == request.auth.uid) ||
+        ('childId' in resource.data && resource.data.childId == request.auth.uid)
+      ));
       // Tao ghep noi thi phai LA nguoi dung o vai phu huynh trong document —
       // khong the "ghep noi ho gium" hai nguoi khac, cung khong the tao mot
       // document co `childId` la nan nhan de may nan nhan (dang chua ghep noi)
@@ -369,7 +424,14 @@ service cloud.firestore {
       // mat roi thi lenh xoa bi tu choi (dung y: khong de lai vet ma khong ai
       // don duoc nua).
       match /rule_audit/{entryId} {
-        allow read, create: if isPairMember(pairingId);
+        // 68.0: tach DOC khoi TAO. Quan tri can LIET KE duoc nhat ky noi quy khi
+        // don tai khoan (nut "Xóa tài khoản"), ma block nay la block DU YET
+        // trong bay block subcollection thieu `|| isAdmin()` -> do production
+        // 26/10: `QUERY pairings/<id>/rule_audit` quan tri = 403, sau nam block
+        // kia = 200. VIET thi van khong mo cho quan tri: nhat ky ma sua/tao duoc
+        // boi chu tai khoan gia dinh thi no khong con la nhat ky.
+        allow read: if isPairMember(pairingId) || isAdmin();
+        allow create: if isPairMember(pairingId);
         allow update: if false;
         allow delete: if isAdmin() ||
           (isPairMember(pairingId) && accountIsBeingDeleted(request.auth.uid));

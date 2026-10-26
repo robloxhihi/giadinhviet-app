@@ -659,8 +659,8 @@ fun DashboardScreen(
                         Text(
                             text = "Nhập mã là ghép nối tức thì — máy con không phải bấm " +
                                 "Đồng ý, và cũng không có mã xác thực nào cả. Nếu hai máy " +
-                                "đang mở app cùng lúc thì liên kết về máy con trong khoảng " +
-                                "20 giây.",
+                                "đang mở app cùng lúc thì liên kết về máy con trong vài " +
+                                "giây.",
                             style = MaterialTheme.typography.bodySmall,
                             color = TextSecondary
                         )

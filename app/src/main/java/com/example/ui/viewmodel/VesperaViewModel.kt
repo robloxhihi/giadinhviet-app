@@ -217,6 +217,13 @@ class VesperaViewModel(
     /** vong lap "tu gan minh vao document ghep noi" — chi mot vong dung mot luc. */
     private var pairingAdoptJob: Job? = null
 
+    /**
+     * pairingId dang co lenh ghi `users/<minh>` chay — cap nhat den tu Firestore
+     * ve cham hon lenh ghi, nen khong co cai nay thi moi lan ket qua query duoc
+     * day la may ghi lap lai cung mot lien ket (va doi ma lap lai).
+     */
+    private val pairingLinkWrites = mutableSetOf<String>()
+
     /** pairingId da tu xoa lien ket o may nay — de khong ghi lap lai. */
     private var unlinkedPairingId: String? = null
     private var locationJob: Job? = null
@@ -583,11 +590,15 @@ class VesperaViewModel(
             repository.observeUserProfile(userId).collect { profile ->
                 if (profile != null) {
                     _uiState.value = _uiState.value.copy(userProfile = profile)
+                    // 68.0: vong doi thu-nhan chay o CA HAI trang thai. Ban cu
+                    // no chi chay khi `activePairingId` con trong, nen may con da
+                    // ghep voi ME khong bao gio nhin ra BO vua ghep them —
+                    // "nhieu nguoi ghep noi chung mot ho so" chet o day.
+                    watchPairingArrival(profile)
                     if (profile.activePairingId.isNotEmpty()) {
                         observeActivePairing(profile.activePairingId, profile)
                     } else {
                         observeLocationHistoryForUser(userId)
-                        watchPairingArrival(profile)
                     }
                 }
             }
@@ -598,38 +609,59 @@ class VesperaViewModel(
     }
 
     /**
-     * May nay chua co `activePairingId` trong ho so — nhung khong co nghia la
-     * chua duoc ghep. Phia ben kia ghi ho so cua minh bang cach nao:
-     * `firestore.rules` chi cho `isOwner` sua `users/{uid}`, nen loi "phu huynh
-     * gan con vao ho so cua no" tung lam toan bo phep ghep chi chay mot chieu
-     * (may me bao "Đã kết nối", may con van "chưa ghép nối"). Day la buoc con
-     * thieu: tu tim document ghep noi mang ten minh va tu ghi lay.
+     * May nay chua cop duoc toan bo nhung document ghep noi mang ten minh.
+     * Phia ben kia ghi ho so cua minh bang cach nao: `firestore.rules` chi cho
+     * `isOwner` sua `users/{uid}`, nen loi "phu huynh gan con vao ho so cua no"
+     * tung lam toan bo phep ghep chi chay mot chieu (may me bao "Đã kết nối",
+     * may con van "chưa ghép nối"). Day la buoc con thieu: tu tim document mang
+     * ten minh va tu ghi lay.
      *
-     * vong lap 20 giay: bam "Ghep noi" phia phu huynh thi may con dang mo app
-     * phai nhan ra ngay, khong buoc mo lai. That bai (chua ai ghep) la trang
-     * thai binh thuong nen chi kiem tra toi da ~30 phut roi dung, de khong
-     * dot luot doc Firestore vo han.
+     * BAN 68.0 — khong con la vong lap 20 giay ma la MOT LISTENER THEO QUERY
+     * (`observePairingsFor`), va no chay du may da ghep noi hay chua:
+     *   - phu huynh bam "Ghép nối" thi document ve ngay may con, trong vai giay;
+     *   - nguoi THAI (bo, ba noi) ghep sau thi may con cung nhan ra, id moi duoc
+     *     THEM vao `activePairingIds` chu khong xoa id cu — do la toan bo y
+     *     nghia cua "nhieu nguoi ghep noi chung mot ho so con";
+     *   - khong dot luot doc vo han: Firestore chi day khi co ket qua thay doi,
+     *     thay vi 90 lan `.get()` moi 20 giay nhu ban cu.
+     *
+     * Moi lan nhan duoc mot ghep moi, ma hoc sinh doi (`rotateStudentCode`): ma
+     * cu da bi nguoi do dung, de khong ai nhap lai no duoc nua. Chi may CON moi
+     * doi duoc ma cua no — rules khoa `users/{uid}` theo isOwner.
      */
     private fun watchPairingArrival(profile: UserProfile) {
         if (pairingAdoptJob?.isActive == true) return
         pairingAdoptJob = viewModelScope.launch {
-            var attempts = 0
-            while (attempts < 90) {
-                val found = repository.findPairingFor(profile)
-                if (found != null) {
-                    val partnerId =
-                        if (profile.role == UserRole.PARENT) found.childId else found.parentId
+            repository.observePairingsFor(profile).collect { found ->
+                // Lay ho so MOI NHAT lam thuoc do, khong dung `profile` luc mo
+                // listener: do la snapshot da cu, dung no thi moi lan Firestore
+                // day ket qua la may ghi lap di lap lai cung mot lien ket.
+                val current = _uiState.value.userProfile ?: profile
+                val known = (current.activePairingIds + current.activePairingId)
+                    .filter { it.isNotEmpty() }
+                    .toSet()
+                val fresh = found.filter { it.id !in known && it.id !in pairingLinkWrites }
+                val newest = found.maxByOrNull { it.createdAt } ?: return@collect
+
+                fresh.forEach { pairing ->
+                    val partnerId = if (current.role == UserRole.PARENT) pairing.childId else pairing.parentId
+                    pairingLinkWrites += pairing.id
                     runCatching {
-                        repository.linkSelfToPairing(profile.id, found.id, partnerId)
-                        // Ma hoc sinh dung de ghep da bi su dung: doi ma de phu
-                        // huynh khac khong nhap lai duoc no. Chi may con moi
-                        // doi duoc ma cua no.
-                        if (profile.role == UserRole.CHILD) repository.rotateStudentCode(profile.id)
+                        repository.linkSelfToPairing(current.id, pairing.id, partnerId)
+                        if (current.role == UserRole.CHILD) repository.rotateStudentCode(current.id)
                     }.onFailure { Log.w(TAG, "Không tự ghi được liên kết ghép nối", it) }
-                    return@launch
+                    pairingLinkWrites -= pairing.id
                 }
-                attempts++
-                delay(20_000)
+
+                // "Ghep noi hien tai" cua man hinh = ghep moi nhat, ke ca khi id
+                // do da nam trong mang tu truoc (APK <=66 chi ghi truong mot).
+                if (fresh.isEmpty() && current.activePairingId != newest.id &&
+                    newest.id !in pairingLinkWrites
+                ) {
+                    val partnerId = if (current.role == UserRole.PARENT) newest.childId else newest.parentId
+                    runCatching { repository.linkSelfToPairing(current.id, newest.id, partnerId) }
+                        .onFailure { Log.w(TAG, "Không chỉ được ghép nối hiện tại", it) }
+                }
             }
         }
     }
@@ -1162,7 +1194,8 @@ class VesperaViewModel(
      * Buoc duy nhat cua phep ghep noi: phu huynh nhap ma may con dang hien.
      *
      * May con khong nhap gi va cung khong xac nhan gi — no tu nhan document
-     * mang ten minh trong vong ~20 giay (`watchPairingArrival`). Vi vay hai
+     * mang ten minh ngay khi phu huynh bam (`watchPairingArrival` la listener
+     * theo query, khong còn vòng 20 giây). Vi vay hai
      * lan kiem tra duoi day chi de nguoi dung khoi doi oan: ma sai dinh dang
      * thi phep thu tay da ro, con may dang vai tro HOC SINH thi ghep voi ai?
      */
@@ -1197,7 +1230,7 @@ class VesperaViewModel(
                     isLoading = false,
                     activePairing = pairing,
                     successMessage = "Đã ghép nối với ${pairing.childName}. Nếu máy của con " +
-                        "đang mở app thì nó tự nhận liên kết trong khoảng 20 giây; nếu đang " +
+                        "đang mở app thì nó tự nhận liên kết trong vài giây; nếu đang " +
                         "tắt thì lần mở kế tiếp sẽ tự nhận — app không ghi được hồ sơ của máy " +
                         "khác, nên bố mẹ không cần làm gì thêm ở máy con."
                 )

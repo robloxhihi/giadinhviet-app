@@ -15,7 +15,8 @@ import java.io.File
  *
  * 1. **Chỉ có một đường ghép thật.** Phụ huynh gõ mã ở thẻ "Ghép nối thiết bị
  *    học sinh" -> `pairDirectly` ghi `pairings/pair_<parentId>_<childId>` ->
- *    máy con tự nhận qua `watchPairingArrival`, mỗi 20 giây một lần.
+ *    máy con tự nhận qua `watchPairingArrival`, từ bản 68.0 là một listener
+ *    theo query (`observePairingsFor`) nên về máy trong vài giây.
  * 2. **Nhánh "bên kia phải duyệt" là code chết, không phải tính năng.**
  *    `createPairingRequest` không có chỗ nào gọi, nên không một dòng nào được
  *    ghi vào `pairing_requests`; khối "YÊU CẦU GHÉP NỐI" với nút Đồng ý/Từ chối
@@ -145,8 +146,8 @@ class PairingFlowRegressionTest {
         assertFalse("Máy con không còn nút Từ chối", student.contains("Text(\"Từ chối\")"))
         assertFalse("Máy con không còn hàng đợi yêu cầu ghép nối", student.contains("YÊU CẦU GHÉP NỐI"))
         assertTrue(
-            "Phải nói rõ máy con tự nhận liên kết trong ~20 giây, không bắt mở lại app",
-            student.contains("20 giây")
+            "Phải nói rõ máy con tự nhận liên kết mà không bắt mở lại app",
+            student.contains("vài giây")
         )
         assertTrue(
             "Vẫn phải lấy mã từ hồ sơ, không có mã giả",

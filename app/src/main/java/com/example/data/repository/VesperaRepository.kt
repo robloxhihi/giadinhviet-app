@@ -200,7 +200,7 @@ class VesperaRepository(private val db: FirebaseFirestore, private val auth: Fir
      *
      * Chi document ghep noi va ho so CUA MINH bi dong: ben kia se tu thay
      * `status = UNPAIRED` qua listener cua no va tu xoa lien ket cua no
-     * ([findPairingFor] chi tra ve cap dang PAIRED).
+     * ([observePairingsFor] chi tra ve cap dang PAIRED).
      */
     suspend fun unpair(pairingId: String, myUserId: String) {
         db.collection("pairings").document(pairingId).update(
@@ -367,30 +367,48 @@ class VesperaRepository(private val db: FirebaseFirestore, private val auth: Fir
     }
 
     /**
-     * Tim document ghep noi ma tai khoan nay la mot ben, dung cho lan hien
-     * dau tien: may con ghi `activePairingId` rong vi phu huynh khong co quyen
-     * ghi ho so cua no. Tra ve null khi may nay that su chua duoc ghep voi ai.
+     * MOI document ghep noi dang PAIRED ma tai khoan nay la mot ben — theo doi
+     * truc tiep, khong hoai phat.
+     *
+     * BAN 68.0 — hai ly do doi hinh, ca hai deu do truc tiep tren production:
+     *  1. Ban cu la `findPairingFor` (one-shot, `maxByOrNull`) duoc goi trong
+     *     vong lap 20 giay, va ViewModel chi chay vong lap do khi
+     *     `activePairingId` CON TRONG. May con da ghep voi ME vi vay khong bao
+     *     gio nhin ra BO vua ghep them: "nhieu nguoi ghep noi chung mot ho so"
+     *     chet o buoc do, khong phai o rules.
+     *  2. Mot listener theo query cung la MOT QUERY nhu `.get()`, nen no phai
+     *     di qua dung canh `allow list` cua /pairings (68.0). Doi lai thi Firestore
+     *     tu day ket qua ngay khi co document moi khop dieu kien — phep ghep thu
+     *     hai ve may con trong vai giay thay vi toi 20 giay, va khot 90 lan doc.
+     *
+     * Khong `orderBy`: loc `parentId` roi sap theo `createdAt` la query composite,
+     * can chi muc phu do Firestore tao; hai canh `whereEqualTo` (toan bo la
+     * equality) thi khong can. Sap xep lam o day, du bang ket qua nho.
      */
-    suspend fun findPairingFor(profile: UserProfile): Pairing? {
-        if (profile.id.isEmpty()) return null
-        val roleField = if (profile.role == UserRole.PARENT) "parentId" else "childId"
-        return try {
-            // Khong `orderBy`: loc bang `parentId` + sap theo `createdAt` la mot
-            // cau truy van composite, can thiet biFirestore tao chi muc phu —
-            // khong co no thi query loi va may con im lang "chua ghep noi".
-            // Hai bang can don muc do du, nen lay ve roi chuc lan cuoi cung.
-            db.collection("pairings")
-                .whereEqualTo(roleField, profile.id)
-                .whereEqualTo("status", PairingStatus.PAIRED.name)
-                .get()
-                .await()
-                .documents
-                .mapNotNull { it.toObject(Pairing::class.java) }
-                .maxByOrNull { it.createdAt }
-        } catch (e: Exception) {
-            Log.w(TAG, "findPairingFor error", e)
-            null
+    fun observePairingsFor(profile: UserProfile): Flow<List<Pairing>> = callbackFlow {
+        if (profile.id.isEmpty()) {
+            trySend(emptyList())
+            awaitClose { }
+            return@callbackFlow
         }
+        val roleField = if (profile.role == UserRole.PARENT) "parentId" else "childId"
+        val listener = db.collection("pairings")
+            .whereEqualTo(roleField, profile.id)
+            .whereEqualTo("status", PairingStatus.PAIRED.name)
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) {
+                    // That bai (403, mat mang) thi giu danh sach lan cu: ho so
+                    // cua may nay van con nguyen, app khong tu "gỡ" minh khoi
+                    // gia dinh chi vi mot lan doc loi.
+                    Log.w(TAG, "observePairingsFor error", error)
+                    return@addSnapshotListener
+                }
+                val docs = snapshot?.documents.orEmpty()
+                    .mapNotNull { it.toObject(Pairing::class.java) }
+                    .sortedBy { it.createdAt }
+                trySend(docs)
+            }
+        awaitClose { listener.remove() }
     }
 
     /**
@@ -1309,7 +1327,7 @@ class VesperaRepository(private val db: FirebaseFirestore, private val auth: Fir
      * noi (moi tai khoan da dang nhap duoc tao) va ho so CUA MINH. Ho so cua
      * con van nguyen ven vi `firestore.rules` chi cho chinh no ghi — may con
      * se tu thay document mang `childId` cua no va tu gan lay
-     * ([findPairingFor]), nen "Ghép nối thành công" khong con la mot loi bao
+     * ([observePairingsFor]), nen "Ghép nối thành công" khong con la mot loi bao
      * mot chieu.
      */
     suspend fun pairDirectly(studentCode: String, parentProfile: UserProfile): Pairing {
@@ -1333,10 +1351,19 @@ class VesperaRepository(private val db: FirebaseFirestore, private val auth: Fir
         )
 
         db.collection("pairings").document(pairingId).set(pairing).await()
-        db.collection("users").document(parentProfile.id).update(
+        val ownRef = db.collection("users").document(parentProfile.id)
+        val own = runCatching { ownRef.get().await() }.getOrNull()
+        // 68.0: THEM vao MANG, khong chi ghi truong "mot". Mot may phu huynh co
+        // the tham gia nhieu ho so (hai con, ho so chung cua vo chong); rules
+        // `attestedPair` doc `activePairingIds` cua ca hai ben, nen ben nay cung
+        // can thay id nay nam trong danh sach cua minh.
+        val existingOwn = (own?.get("activePairingIds") as? List<*>)
+            ?.filterIsInstance<String>().orEmpty()
+        ownRef.update(
             mapOf(
                 "pairedWith" to student.id,
-                "activePairingId" to pairingId
+                "activePairingId" to pairingId,
+                "activePairingIds" to (existingOwn + pairingId).distinct()
             )
         ).await()
 

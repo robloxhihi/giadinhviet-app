@@ -261,7 +261,7 @@ fun StudentMainScreen(
                     text = if (studentCode.isNotEmpty())
                         "Đưa mã này cho phụ huynh nhập ở máy của họ. Máy này không cần nhập " +
                             "gì và không cần bấm Đồng ý: nếu app đang mở thì liên kết sẽ tự " +
-                            "về máy trong khoảng 20 giây, còn app đang tắt thì tự về ở lần mở " +
+                            "về máy trong vài giây, còn app đang tắt thì tự về ở lần mở " +
                             "kế tiếp."
                     else
                         "Mã do máy chủ cấp khi tạo tài khoản học sinh. Chưa có mã nghĩa là " +
