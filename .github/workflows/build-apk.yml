@@ -16,7 +16,7 @@ on:
 # MOI: tai cùng 1 luc chi 1 build song. Lan push sau tu dong huy lan dang chay
 # -> het kiem 93 luot build chay tron ven khi AI fix tung commit mot.
 concurrency:
-  group: apk-${{ github.ref == 'refs/heads/main' && 'main' || github.ref }}
+  group: apk
   cancel-in-progress: true
 
 permissions:
