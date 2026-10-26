@@ -21,7 +21,7 @@ android {
     // "Thong tin ung dung" cua Android hien chinh chuoi nay). Giu thang bang
     // so tag phat hanh; versionCode tang thi cai de chim ban cu, khong phai go.
     versionCode = 69
-    versionName = "69.0"
+    versionName = "69.1"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }

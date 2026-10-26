@@ -79,10 +79,15 @@ fun readImageAsAvatarBase64(context: Context, uri: Uri): String? = runCatching {
  * doc bo nho va khong mo khuon "chon tap tin" tren may Android 13+. May cu hon
  * thi chinh androidx roi no ve ACTION_GET_CONTENT — do la dieu can kiem chung
  * tren may that: BlueStacks 5 la Android 9 (API 28, do ngay 2026-10-26), va
- * `pm resolve-activity -a android.intent.action.GET_CONTENT -t image/*` tren may
- * do tra ve `com.android.documentsui/.picker.PickActivity`, tuc la duong van
+ * `pm resolve-activity -a android.intent.action.GET_CONTENT` voi MIME wildcard
+ * tren may do tra ve `com.android.documentsui/.picker.PickActivity`, tuc la duong van
  * song. May nao khong co host nao thi nguoi dung phai thay mot dong chu chu
  * khong phai mot cai bam khong toi dau.
+ *
+ * THU QUY UOC cua ngon ngu dinh tuyen (khong phai loi chinh ta): KHONG duoc viet
+ * tai day chuoi "xuyen qua + dau sao" (slash roi star liet nhau). Kotlin dem
+ * comment block LONG NHAU, nen hai ky tu do mo them mot lop comment va lop ngoai
+ * khong bao gio dong — CI ban v69.0 chet ngay o "Syntax error: Unclosed comment".
  *
  * @param onPicked chi goi khi co anh va doc ra base64 that.
  * @return ham goi de mo bo chon (bam vao avatar).

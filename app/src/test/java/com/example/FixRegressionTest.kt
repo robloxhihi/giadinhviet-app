@@ -720,7 +720,6 @@ class FixRegressionTest {
      */
     @Test
     fun blockerEnforcesEveryPairedParentNotJustTheLastOne() {
-        val src = projectFile("src/main/java/com/example/service/blocker/AppBlockerService.kt").readText()
         val code = codeOf("src/main/java/com/example/service/blocker/AppBlockerService.kt")
         assertTrue("Bo chan phai doc mang ghep noi", code.contains("\"activePairingIds\""))
         assertTrue("Phai hop ca truong cu va mang moi", code.contains("pairingIdsOf(userSnap)"))

@@ -215,7 +215,7 @@ class AppBlockerService : AccessibilityService() {
                     Log.w(TAG, "Doc users/$uid loi: ${err.message}")
                     return@addSnapshotListener
                 }
-                val ids = pairingIdsOf(userSnap)
+                val ids = pairingIdsOf(userSnap).toSet()
                 // MAY PHU HUYNH KHONG BI CHAN BOI CHINH BO CHAN CUA NO.
                 //
                 // Bug that phat hien khi kiem thu ban 64.0 tren may gia lap: me
@@ -248,15 +248,15 @@ class AppBlockerService : AccessibilityService() {
                 }
                 if (ids != watchedPairingIds) {
                     watchedPairingIds = ids
-                    (scheduleRegs.keys - ids.toSet()).forEach { gone ->
+                    (scheduleRegs.keys - ids).forEach { gone ->
                         scheduleRegs.remove(gone)?.remove()
                         schedules.remove(gone)
                     }
-                    (studyRegs.keys - ids.toSet()).forEach { gone ->
+                    (studyRegs.keys - ids).forEach { gone ->
                         studyRegs.remove(gone)?.remove()
                         studySessions.remove(gone)
                     }
-                    ids.filter { it !in scheduleRegs }.forEach { attachPairing(it) }
+                    ids.filter { !scheduleRegs.containsKey(it) }.forEach { attachPairing(it) }
                     Log.i(TAG, "Dang ap dung noi quy cua ${ids.size} cap ghep noi: $ids")
                 }
             }
