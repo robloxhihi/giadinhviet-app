@@ -807,8 +807,8 @@ class VesperaRepository(private val db: FirebaseFirestore, private val auth: Fir
      *
      * Dọn ĐỦ BA NƠI: lịch sử gốc `/location_history` (chỉ của chính máy này —
      * rules 67.0 mở quyền xóa cho chủ), và theo TỪNG ghép nối mà máy này là
-     * thành viên: tin nhắn `pairings/*/messages` (subcollection cho phép thành
-     * viên viết = xóa được) và lịch sử mirror `pairings/*/location_history`.
+     * thành viên: tin nhắn trong từng ghép nối (pairings/<id>/messages —
+     * subcollection cho phép thành viên viết = xóa được) và lịch sử mirror
      * Tin ghim được giữ ở cả hai thiết bị vì ai ghim thì cũng nằm trong cặp
      * này. Lỗi một ghép nối không làm hỏng ghép nối khác — mỗi chỗ đều bắt
      * lỗi riêng và ghi vào `failed` để app nói thật đã xóa được bao nhiêu.

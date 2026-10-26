@@ -385,7 +385,7 @@ private suspend fun wipeAccountFromAdmin(uid: String): AdminWipeOutcome {
  *     `isAdmin()` đầu tiên trong rules).
  *  2. Tin nhắn trong MỌI document ghép nối với `createdAt` quá hạn, TRỪ
  *     `isStarred == true` — chính sách "chỉ giữ lại tin được ghim".
- *  3. Lịch sử mirror `pairings/*/location_history` quá hạn.
+ *  3. Lịch sử mirror trong từng ghép nối (pairings/<id>/location_history) quá hạn.
  *
  * Mốc `timestamp`/`createdAt` là con số epoch millis do client ghi; document
  * thiếu trường (0/null) là tuổi KHÔNG RÕ — bỏ qua, không xóa mò. Document
