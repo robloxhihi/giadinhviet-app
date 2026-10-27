@@ -19,6 +19,12 @@ import java.io.File
  * Test này quét NGUỒN (unit test không chạy được Compose), nên nó chặn đúng cái
  * đã hỏng chứ không mô phỏng. Kiểm chứng thật vẫn làm trên BlueStacks sau khi
  * cài APK.
+ *
+ * CI ban v69.1 chet o Chinh tep nay: ten ham tro thanh `updateAvatarVanChanChuoi
+ * QuaDai` — mot dau cach chen giua hai chu cai khien Kotlin hieu la mot ham
+ * khong tham so khong dao ham ("Function ... without a body must be abstract"
+ * + "Expecting '('"). Nguon app da dich xong, chi test fail, nen loi nay chi
+ * lo ra sau khi moi thu hoan chinh — do that moi lan dat ten ham test.
  */
 class AvatarRegressionTest {
 
@@ -104,7 +110,7 @@ class AvatarRegressionTest {
      * dung im lang tra ve mot vong tron khong doi mau.
      */
     @Test
-    fun updateAvatarVanChanChuoi QuaDai() {
+    fun updateAvatarVanChanChuoiQuaDai() {
         val vm = source("src/main/java/com/example/ui/viewmodel/VesperaViewModel.kt")
         val body = vm.substringAfter("fun updateAvatar(base64: String) {")
         assertTrue("Phai co tran do dai", body.contains("base64.length > 300_000"))
