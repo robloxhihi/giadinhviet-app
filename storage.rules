@@ -1,0 +1,110 @@
+rules_version = '2';
+
+// ── FIREBASE STORAGE — file cho chat (task #119) ────────────────────────────
+// App Gui nhan luc Bam "+" (anh / tep / tin nhan thoai) doc bytes tu may_gui va
+// tai len duong dan:
+//
+//     chat/<pairingId>/<senderId>/<timestamp>.<ext>
+//
+// (Ham `uploadLocalMediaToStorage` trong VesperaViewModel.kt). Sau do Firestore
+// `messages/<id>.mediaUrl` luu download URL `https://` THAT — khong con luu
+// `content://` local nua, do la ly do ban cu "gui anh sang ben kia doc ko dc".
+//
+// CHUA BAT duoc o day cho den khi chu tai khoan bam "Get started" ỏ mục
+// Storage cua Firebase Console (bucket asia-southeast1). App van chay neu
+// Storage chua bat — upload that bai, no NOI THAT va khong gui tin nhan rung —
+// nhung muon anh/tep THUC SU thi bucket phai ton tai va file nay phai duoc
+// Publish ỏ tab Rules.
+//
+// Model quyen: GIONG het firestore.rules — dung cung tam "chinh chung hai chu"
+// (attestedPair). Mot cap doc/ghi duoc THUNG RUONG cua NHAU, khong ai ngoai cu
+// vao. Khong cho list/doi ten/xoa hang loat: moi thao tac phai di kem duong dan
+// day du, va xoa chi chu file xoa duoc file cua minh.
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // Danh sach quan tri PHAI KHOP firestore.rules + allowlist trong
+    // :admin MainActivity.kt — ba noi mot ten, lech la quyen bi cat nut.
+    function isAdmin() {
+      return isAuthenticated() && request.auth.uid in
+        ["YU2BwDqvahSh1hUWx9NRAdOwvG33", "cSzzRXZzaVR83q2gQTnskhIxkzw2"];
+    }
+
+    // Cac ham doi chieu document ghep noi trong CUNG Firestore. Rules Storage
+    // duoc phep firestore.get()/exists() khi cung project — day la cach duy nhat
+    // de biet `pairingId` tren duong dan la that.
+    function pairingDoc(pairingId) {
+      return get(/databases/$(database)/documents/pairings/$(pairingId)).data;
+    }
+
+    // Ghep noi TON TAI, trang thai PAIRED, va {parentId, childId} dung la
+    // {folderUid, requester} — doi chieu tay, khong tin chu document.
+    function pairOfTwo(pairingId, a, b) {
+      return isAuthenticated() &&
+        pairingId is string && pairingId != '' &&
+        exists(/databases/$(database)/documents/pairings/$(pairingId)) &&
+        pairingDoc(pairingId).status == 'PAIRED' &&
+        pairingDoc(pairingId).parentId in [a, b] &&
+        pairingDoc(pairingId).childId in [a, b] &&
+        pairingDoc(pairingId).parentId != pairingDoc(pairingId).childId;
+    }
+
+    // Ben kia (chu ho so `otherUid`) PHAI TU XAC NHAN cap nay tren chinh ho so
+    // cua no — cua ngan ke xau tu khai `pair_<minh>_<nan_nhan>` PAIRED de
+    // moi mo duoc tep cua nan nhan.
+    function attestedPair(pairingId, otherUid) {
+      return pairOfTwo(pairingId, request.auth.uid, otherUid) &&
+        exists(/databases/$(database)/documents/users/$(otherUid)) &&
+        (('activePairingIds' in get(/databases/$(database)/documents/users/$(otherUid)).data &&
+          pairingId in get(/databases/$(database)/documents/users/$(otherUid)).data.activePairingIds) ||
+         ('activePairingId' in get(/databases/$(database)/documents/users/$(otherUid)).data &&
+          get(/databases/$(database)/documents/users/$(otherUid)).data.activePairingId == pairingId));
+    }
+
+    // `senderId` tren duong dan la chu ho so cua tep. Nguoi doc phai MOT trong
+    // hai nguoi cua cap va duoc ben kia xac nhan:
+    //   - bam vao folder cua chinh minh -> otherUid = chinh minh (self-attest
+    //     khong can; dung pairOfTwo + isOwner).
+    //   - bam vao folder cua ben kia -> otherUid = senderId, can attestedPair.
+    function mayRead(pairingId, senderId) {
+      return isAdmin() ||
+        senderId == request.auth.uid ||
+        attestedPair(pairingId, senderId);
+    }
+
+    // Ghi: CHI vao folder cua chinh minh (senderId == uid), va cap ghep noi
+    // trong duong dan phai la that: ton tai, PAIRED, va minh nam trong {parentId,
+    // childId}. Khong dung pairOfTwo o day vi khi upload vao folder cua minh thi
+    // hai uid can doi chieu trung nhau (a == b) — pairOfTwo bat parentId != childId
+    // nen no LUON fail; do la bẫy, tam phai dung ham thanh vien rieng.
+    function mayWrite(pairingId, senderId) {
+      return isAuthenticated() &&
+        senderId == request.auth.uid &&
+        pairingId is string && pairingId != '' &&
+        exists(/databases/$(database)/documents/pairings/$(pairingId)) &&
+        pairingDoc(pairingId).status == 'PAIRED' &&
+        request.auth.uid in [pairingDoc(pairingId).parentId, pairingDoc(pairingId).childId];
+    }
+
+    // ── Anh / tep / ghi am trong chat ────────────────────────────────────────
+    match /chat/{pairingId}/{senderId}/{fileName} {
+      allow read: if mayRead(pairingId, senderId);
+      allow write: if mayWrite(pairingId, senderId);
+    }
+
+    // ── Avatar (neu ve sau chuyen sang Storage thay vi data-URL) ─────────────
+    match /avatars/{uid}/{fileName} {
+      allow read: if isAuthenticated();
+      allow write: if request.auth != null && request.auth.uid == uid;
+    }
+
+    // Khong cho bat ky duong dan ngoai hai namespace tren.
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

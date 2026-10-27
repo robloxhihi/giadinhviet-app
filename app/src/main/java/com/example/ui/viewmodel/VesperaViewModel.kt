@@ -2,6 +2,7 @@ package com.example.ui.viewmodel
 
 import android.app.Activity
 import android.content.Context
+import android.net.Uri
 import android.util.Log
 import androidx.credentials.CredentialManager
 import androidx.credentials.CustomCredential
@@ -46,6 +47,8 @@ import com.google.android.libraries.identity.googleid.GetSignInWithGoogleOption
 import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.GoogleAuthProvider
+import com.google.firebase.storage.FirebaseStorage
+import com.google.firebase.storage.StorageMetadata
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -1942,9 +1945,33 @@ class VesperaViewModel(
 
         if (text.isBlank() && emotion == null && mediaUrl == null) return
 
-
         viewModelScope.launch {
             try {
+                // `mediaUrl` do ChatScreen truyen ra khi Bam "+" la duong dan
+                // LOCAL (`content://` hoac `file://`) — chi may nay doc duoc,
+                // may ben kia (va ca chinh may nay sau khi he dieu hanh thu hoi
+                // quyen tam thoi) bi "doc ko dc". Ta phai doc bytes len Firebase
+                // Storage va luu URL `https://` that. Neus tai khong duoc (Storage
+                // chua bat), NOI THAT va DUNG, khong gui tin nhan rung.
+                var finalMediaUrl = mediaUrl
+                if (mediaUrl != null && isLocalMediaUri(mediaUrl)) {
+                    val uploaded = uploadLocalMediaToStorage(
+                        localUri = mediaUrl,
+                        pairingId = pairing.id,
+                        senderId = profile.id,
+                        mediaType = mediaType
+                    )
+                    if (uploaded == null) {
+                        _uiState.value = _uiState.value.copy(
+                            errorMessage = "Không tải được ảnh/tệp lên máy chủ. " +
+                                "Phải bật Firebase Storage (bucket) thì mới gửi được tệp — " +
+                                "tin nhắn chữ vẫn gửi bình thường."
+                        )
+                        return@launch
+                    }
+                    finalMediaUrl = uploaded
+                }
+
                 val msg = FamilyMessage(
                     pairingId = pairing.id,
                     senderId = profile.id,
@@ -1952,7 +1979,7 @@ class VesperaViewModel(
                     senderRole = profile.role,
                     text = text.trim(),
                     emotion = emotion?.name,
-                    mediaUrl = mediaUrl,
+                    mediaUrl = finalMediaUrl,
                     mediaType = mediaType,
                     isStarred = false,
                     createdAt = System.currentTimeMillis()
@@ -1962,6 +1989,56 @@ class VesperaViewModel(
             } catch (e: Exception) {
                 _uiState.value = _uiState.value.copy(errorMessage = e.localizedMessage)
             }
+        }
+    }
+
+    /** `content://` = bo chon anh/tep he dieu hanh; `file://` = ghi am thanh cache. */
+    private fun isLocalMediaUri(url: String): Boolean =
+        url.startsWith("content://") || url.startsWith("file://")
+
+    /**
+     * Doc bytes tu `content://`/`file://`, tai len Storage theo duong dan
+     * `chat/<pairingId>/<senderId>/<timestamp>.<ext>`, tra ve download URL that
+     * (`https://`) hoac `null` neu doc/tai that bai. Khong bao gio giu nguyen
+     * duong dan local trong Firestore.
+     */
+    private suspend fun uploadLocalMediaToStorage(
+        localUri: String,
+        pairingId: String,
+        senderId: String,
+        mediaType: String?
+    ): String? {
+        val ctx = context ?: return null
+        return try {
+            val uri = Uri.parse(localUri)
+            val bytes = withContext(Dispatchers.IO) {
+                if (uri.scheme == "file") {
+                    uri.path?.let { File(it).readBytes() }
+                } else {
+                    ctx.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+                }
+            } ?: return null
+
+            val mime = try {
+                ctx.contentResolver.getType(uri)
+            } catch (_: Exception) {
+                null
+            } ?: when (mediaType) {
+                "image" -> "image/jpeg"
+                "audio" -> "audio/3gpp"
+                else -> "application/octet-stream"
+            }
+            val ext = mime.substringAfter('/', "bin").substringBefore(';')
+            val path = "chat/$pairingId/$senderId/${System.currentTimeMillis()}.$ext"
+            val ref = FirebaseStorage.getInstance().reference.child(path)
+            val meta = StorageMetadata.Builder().setContentType(mime).build()
+            withContext(Dispatchers.IO) {
+                ref.putBytes(bytes, meta).await()
+                ref.downloadUrl.await().toString()
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "uploadLocalMediaToStorage failed", e)
+            null
         }
     }
 

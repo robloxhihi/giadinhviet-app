@@ -131,6 +131,9 @@ dependencies {
   // Firestore:
   implementation(libs.firebase.firestore)
   implementation(libs.firebase.database)
+  // Storage: tai lenh anh/tep/tin nhan thoai len Firebase de mediaUrl la https://
+  //   that (content:// tu may nay sang may kia doc khong duoc) — task #119.
+  implementation(libs.firebase.storage)
   implementation(libs.webrtc)
   implementation(libs.osmdroid)
 
