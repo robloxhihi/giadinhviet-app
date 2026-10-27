@@ -226,18 +226,32 @@ class AppBlockerService : AccessibilityService() {
                 // dinh la thu AP LEN MAY CON, do phu huynh dat ra; ap len chinh may
                 // ra luat la mot cai bug khong phai mot chinh sach.
                 //
-                // Doc `role` bang cot phang chu khong bang `userSnap.toObject()`:
-                // `Models.kt` de mac dinh `role = PARENT`, nen ho so cu thieu truong
-                // `role` se deserialize thanh PARENT — va bo chan tat trên may cua
-                // mot em con chi vi ho so cua no thieu mot truong (fail-open). Khong
-                // co truong = chua bao gio xac nhan vai = van chan nhu cu.
-                val role = userSnap?.getString("role").orEmpty()
-                if (role == UserRole.PARENT.name) {
+                // Xac dinh vai tro — khong tin mot minh chuoi `role`.
+                //
+                // Ly do: ho so tao truoc ban 66.0 co the thieu truong `role` (doc
+                // bang chu thi tra ve chuoi rong). Neu coi "rong = van chan nhu cu"
+                // thi may cua MOT NGUOI ME o ho so cu bi chinh bo chan da ve Home —
+                // dung cai loi nguoi dung bao "quan ly thoi gian + cai dat ap len
+                // may me, khong phai may con".
+                //
+                // Tin hieu thu hai that dang tin: moi ho so CON deu co `studentCode`
+                // khong rong (VesperaRepository sinh ra cung luc voi vai CHILD, va
+                // query tim hoc sinh loc dung `studentCode` + `role=CHILD`). Phu
+                // huynh thi khong bao gio co ma nay. Vi vay:
+                //   role == PARENT                      -> phu huynh (khong chan)
+                //   role thieu/rong va studentCode rong  -> suy ra phu huynh (khong chan)
+                //   role == CHILD hoac co studentCode   -> con (chan binh thuong)
+                val rawRole = userSnap?.getString("role").orEmpty()
+                val studentCode = userSnap?.getString("studentCode").orEmpty()
+                val isParent = rawRole == UserRole.PARENT.name ||
+                    (rawRole.isBlank() && studentCode.isBlank())
+                if (isParent) {
                     detachAllPairings()
                     Log.i(
                         TAG,
-                        "May nay la PHU HUYNH (role=PARENT) — bo chan khong chay: " +
-                            "lich noi quy ap len may con, khong ap len may dat ra luat"
+                        "May nay la PHU HUYNH (role=${rawRole.ifBlank { "thieu" }}, " +
+                            "studentCode=${if (studentCode.isBlank()) "rong" else studentCode}) — " +
+                            "bo chan khong chay: lich noi quy ap len may con, khong ap len may dat ra luat"
                     )
                     return@addSnapshotListener
                 }

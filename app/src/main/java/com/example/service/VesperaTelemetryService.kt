@@ -417,8 +417,11 @@ class VesperaTelemetryService : Service() {
         val locationRequest = LocationRequest.Builder(priority, interval)
             .setMinUpdateIntervalMillis(fastest)
             .setMinUpdateDistanceMeters(if (foreground) 0f else 5f)
-            // Lấy cả điểm sai số lớn rồi tự đánh dấu (> 100 m) thay vì chờ GPS fix vô hạn.
-            .setWaitForAccurateLocation(false)
+            // Foreground (người dùng đang nhìn bản đồ): CHỜ điểm chính xác trước khi đẩy —
+            // đánh vài giây lấy vệ tinh/GPS để sai số nhỏ, đúng chỗ "định vị lỏ, sai số lớn".
+            // Background: lấy cả điểm sai số lớn rồi tự đánh dấu (> 100 m) thay vì chờ GPS fix
+            // vô hạn, để không cạn pin và không treo nhịp.
+            .setWaitForAccurateLocation(foreground)
             .build()
 
         locationCallback = object : LocationCallback() {

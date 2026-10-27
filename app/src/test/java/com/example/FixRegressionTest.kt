@@ -681,9 +681,22 @@ class FixRegressionTest {
         assertTrue("Phải đọc vai tro bang cot phang", listen.contains("getString(\"role\")"))
         assertTrue(
             "Phải so voi UserRole.PARENT.name (cot luu ten enum, khong phai so chuoi tay)",
-            listen.contains("role == UserRole.PARENT.name")
+            listen.contains("== UserRole.PARENT.name")
         )
-        val gateAt = listen.indexOf("role == UserRole.PARENT.name")
+        // Lo 69.x (fix loi nguoi dung bao): ho so PHU HUYNH doi cu thieu truong
+        // `role` (chuoi rong) nhung cung khong co `studentCode` — phai suy ra la
+        // phu huynh de may me bi chinh bo chan da ve Home khong tai dien. Nguoc
+        // lai, mo CHAT khong co studentCode thi van phai chan.
+        assertTrue(
+            "Cổng parent phải đọc thêm studentCode để suy ra vai khi role trống",
+            listen.contains("getString(\"studentCode\")") &&
+                listen.contains("rawRole.isBlank() && studentCode.isBlank()")
+        )
+        assertTrue(
+            "Phải gate qua bien isParent (role PARENT hoac ca role va studentCode deu trong)",
+            listen.contains("val isParent =") && listen.contains("if (isParent)")
+        )
+        val gateAt = listen.indexOf("val isParent =")
         val pairingAt = listen.indexOf("ids.isEmpty()")
         assertTrue("Cổng role phải đứng trước nhánh chưa ghép nối", gateAt in 0 until pairingAt)
         assertTrue(
@@ -691,7 +704,7 @@ class FixRegressionTest {
             !listen.contains("role == \"PARENT\"")
         )
 
-        val parentBranch = listen.substringAfter("role == UserRole.PARENT.name")
+        val parentBranch = listen.substringAfter("if (isParent)")
             .substringBefore("return@addSnapshotListener")
         assertTrue("Nhanh PHU HUYNH phai goi detachAllPairings()", parentBranch.contains("detachAllPairings()"))
         // Tat phai la tat that: ngat moi listener va xoa het gia tri dang ap

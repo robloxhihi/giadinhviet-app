@@ -247,9 +247,10 @@ object PermissionManager {
         )
         items += PermissionItem(
             "background_location", "Vị trí khi chạy nền",
-            "Cập nhật vị trí liên tục ngay cả khi đóng ứng dụng (giám sát an toàn 24/7). " +
+            "BẮT BUỘC để định vị chạy ngầm: không bật quyền này thì Android dừng dịch vụ " +
+                "ngay khi đóng app, bản đồ ngừng cập nhật vị trí của con. " +
                 "Android 10 trở lên chỉ cấp được qua hộp thoại hệ thống và sau khi Vị trí (GPS) đã được chấp thuận — bấm nút để mở hộp thoại xin quyền nền.",
-            hasBackgroundLocation(context), Kind.SPECIAL, required = false
+            hasBackgroundLocation(context), Kind.SPECIAL, required = true
         )
         items += PermissionItem(
             "sms", "Tin nhắn SMS",
@@ -292,8 +293,10 @@ object PermissionManager {
         )
         items += PermissionItem(
             "battery", "Tối ưu pin (tắt)",
-            "Cho phép dịch vụ giám sát chạy liên tục, không bị hệ thống tạm dừng.",
-            isIgnoringBatteryOptimizations(context), Kind.SPECIAL, required = false
+            "BẮT BUỘC để chạy ngầm ổn định: nếu để Android tối ưu pin, hệ thống sẽ " +
+                "ngắt dịch vụ định vị/ chặn ứng dụng khi máy nghỉ (Doze) — bản đồ ngừng cập nhật " +
+                "và nội quy không còn áp dụng. Bấm nút rồi chọn \"Không tối ưu hóa\".",
+            isIgnoringBatteryOptimizations(context), Kind.SPECIAL, required = true
         )
         // Danh dau "tu choi vinh vien" (Don't ask again) cho cac quyen runtime chua cap.
         // Trang thai granted luon doc truc tiep tu Android; co so nay chi bo sung loi duyet,
