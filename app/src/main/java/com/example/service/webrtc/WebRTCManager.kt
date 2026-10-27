@@ -75,8 +75,16 @@ class WebRTCManager(
         remoteRenderer: SurfaceViewRenderer? = null,
         enableVideo: Boolean = true
     ) {
+        // Nhiều STUN công khai: một máy hỏng/không tới được thì máy khác vãn tìm
+        // ra đường nối P2P. LƯU Ý THẬT: STUN chỉ đủ khi 2 máy không đứng sau NAT
+        // đối xứng. Muốn gọi chắc chắn trên 4G/sau NAT chặt thì CẦN thêm TURN
+        // (máy chủ relay, có credential) — chưa cấu hình TURN ở đây vì đó là hạ
+        // tầng phải dựng riêng, không phải hằng số nhét trong code.
         val iceServers = listOf(
-            PeerConnection.IceServer.builder("stun:stun.l.google.com:19302").createIceServer()
+            PeerConnection.IceServer.builder("stun:stun.l.google.com:19302").createIceServer(),
+            PeerConnection.IceServer.builder("stun:stun1.l.google.com:19302").createIceServer(),
+            PeerConnection.IceServer.builder("stun:stun2.l.google.com:19302").createIceServer(),
+            PeerConnection.IceServer.builder("stun:openrelay.metered.ca:80").createIceServer()
         )
 
         val rtcConfig = PeerConnection.RTCConfiguration(iceServers).apply {
