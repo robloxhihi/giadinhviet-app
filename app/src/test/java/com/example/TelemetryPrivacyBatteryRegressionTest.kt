@@ -96,8 +96,8 @@ class TelemetryPrivacyBatteryRegressionTest {
             Regex("\"\\$\\{partnerLoc\\.batteryLevel\\}%\"").containsMatchIn(dashboard))
         assertTrue("Pin <= 0 phai in '—' qua bien hasBat",
             dashboard.contains("val hasBat = bat > 0"))
-        assertTrue("Khong co doc thi dung bieu tuong BatteryUnknown",
-            dashboard.contains("Icons.Default.BatteryUnknown"))
+        assertTrue("Khong co so pin thi in '—', khong in gia tri tho",
+            dashboard.contains("if (hasBat) \"$bat%\" else \"—\""))
         // Bieu tuong sac chi khi isCharging THAT — khong phai moi telemetry.
         assertTrue("Chi bao sac khi isCharging",
             dashboard.contains("partnerLoc.isCharging -> Icons.Default.BatteryChargingFull"))

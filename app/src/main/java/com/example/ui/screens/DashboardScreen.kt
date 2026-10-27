@@ -27,9 +27,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.BatteryChargingFull
 import androidx.compose.material.icons.filled.BatteryFull
-import androidx.compose.material.icons.filled.BatteryLow
 import androidx.compose.material.icons.filled.BatteryStd
-import androidx.compose.material.icons.filled.BatteryUnknown
 import androidx.compose.material.icons.filled.Chat
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
@@ -735,11 +733,10 @@ fun DashboardScreen(
                             // telemetry drew BatteryChargingFull, so the parent
                             // saw "charging" on a phone that was draining.
                             val batIcon = when {
-                                partnerLoc == null || !hasBat -> Icons.Default.BatteryUnknown
+                                partnerLoc == null || !hasBat -> Icons.Default.BatteryStd
                                 partnerLoc.isCharging -> Icons.Default.BatteryChargingFull
                                 bat >= 95 -> Icons.Default.BatteryFull
-                                bat >= 20 -> Icons.Default.BatteryStd
-                                else -> Icons.Default.BatteryLow
+                                else -> Icons.Default.BatteryStd
                             }
                             val batTint = when {
                                 !hasBat -> TextMuted

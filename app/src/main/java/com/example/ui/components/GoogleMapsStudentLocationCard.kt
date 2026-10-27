@@ -25,9 +25,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.BatteryChargingFull
 import androidx.compose.material.icons.filled.BatteryFull
-import androidx.compose.material.icons.filled.BatteryLow
 import androidx.compose.material.icons.filled.BatteryStd
-import androidx.compose.material.icons.filled.BatteryUnknown
 import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
@@ -1180,11 +1178,10 @@ fun GoogleMapsStudentLocationCard(
                     // cả khi pin yếu và rút cạn. Sấm riêng vẫn ở dưới, chỉ hiện
                     // khi isCharging THẬT sự bật.
                     val batteryIcon = when {
-                        batteryLevel <= 0 -> Icons.Default.BatteryUnknown
+                        batteryLevel <= 0 -> Icons.Default.BatteryStd
                         isCharging -> Icons.Default.BatteryChargingFull
                         batteryLevel >= 95 -> Icons.Default.BatteryFull
-                        batteryLevel >= 20 -> Icons.Default.BatteryStd
-                        else -> Icons.Default.BatteryLow
+                        else -> Icons.Default.BatteryStd
                     }
                     StatPill(batteryIcon, batteryText, batteryTint)
                     // Dang sac: icon Bolt vector dung canh pill pin (emoji da
