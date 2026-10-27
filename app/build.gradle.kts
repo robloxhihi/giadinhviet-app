@@ -18,10 +18,15 @@ android {
     targetSdk = 36
     // Truoc day pin o 12/`12.0` trong khi phat hanh tren GitHub da toi v15, nen
     // nguoi dung cai xong khong kiem tra duoc may dang chay ban nao (man hinh
-    // "Thong tin ung dung" cua Android hien chinh chuoi nay). Giu thang bang
-    // so tag phat hanh; versionCode tang thi cai de chim ban cu, khong phai go.
-    versionCode = 69
+    // "Thong tin ung dung" cua Android hien chinh chuoi nay).
+    // versionCode SUAT day 69 trong khi da xuong toi 69.4 => cai ban cu hon bi
+    // Android tuoc INSTALL_FAILED_VERSION_DOWNGRADE, va lenh `adb install` fail
+    // ma van im lang (exit code bi `| head` nuot mat). Gio versionCode sinh tu
+    // versionName: "69.4" -> 6904, tang .x la code tang, khong bao gio trung.
     versionName = "69.4"
+    versionCode = versionName.split(".").map { it.toInt() }
+      .let { if (it.size > 1) it[0] * 100 + it[1] else it[0] * 100 }
+
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }
