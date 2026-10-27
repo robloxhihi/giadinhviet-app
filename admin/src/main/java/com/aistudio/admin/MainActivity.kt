@@ -560,6 +560,11 @@ private fun AdminApp() {
   var deleteTarget by remember { mutableStateOf<AdminRow?>(null) }
   var wipeRunning by remember { mutableStateOf(false) }
   var wipeOutcome by remember { mutableStateOf<AdminWipeOutcome?>(null) }
+  // HARDEN (69.8): Xoa tai khoan KHONG hoan tac duoc, nen phai GAP TUONG explicit.
+  // Truoc day chi can 1 nut "Xóa trên máy chủ" la wipe chay — mot cu tap theo
+  // index bi stale (danh sach ve lai duoi modal) co the arm + fire xoa NHAM tai
+  // khoan khac. Nay phai GO DUNG uid vao `wipeConfirmText` thi nut xoa moi mo.
+  var wipeConfirmText by remember { mutableStateOf("") }
 
   // DỌN ĐỊNH KÝ 30 NGÀY (67.0): confirm -> chạy -> biên nhận, cùng nhịp với
   // hộp thoại "Xóa tài khoản" ở dưới — không ai phải nhìn dòng "đang làm…"
@@ -968,7 +973,12 @@ private fun AdminApp() {
                   onClick = { banTarget = row },
                   colors = ButtonDefaults.buttonColors(containerColor = Rose)
                 ) { Text(if (row.banned || row.banExpired) "Đổi lệnh cấm" else "Cấm") }
-                OutlinedButton(onClick = { deleteTarget = row }) {
+                OutlinedButton(
+                  onClick = { wipeConfirmText = ""; deleteTarget = row },
+                  // Khóa mọi nút "Xóa tài khoản" khi hộp thoại đang mở: một cú tap
+                  // rơi trúng hàng khác lúc modal còn treo không còn đổi được target.
+                  enabled = deleteTarget == null
+                ) {
                   Text("Xóa tài khoản", color = Rose)
                 }
                 Spacer(Modifier.weight(1f))
@@ -1216,6 +1226,7 @@ private fun AdminApp() {
         if (!wipeRunning) {
           deleteTarget = null
           wipeOutcome = null
+          wipeConfirmText = ""
         }
       },
       containerColor = CardBg,
@@ -1250,6 +1261,20 @@ private fun AdminApp() {
                 "· Máy bên kia của cùng ghép nối: document ghép nối là của hai máy, " +
                 "xóa là máy còn lại MẤT liên kết và phải ghép lại bằng mã.",
               color = TxtDim, fontSize = 12.sp
+            )
+            Spacer(Modifier.height(4.dp))
+            Text(
+              "Để KHÔNG xóa nhầm tài khoản khác, gõ ĐÚNG uid sau vào ô bên dưới " +
+                "thì nút xóa mới mở khóa:",
+              color = Rose, fontSize = 12.sp, fontWeight = FontWeight.Bold
+            )
+            OutlinedTextField(
+              value = wipeConfirmText,
+              onValueChange = { wipeConfirmText = it },
+              label = { Text("uid = ${target.uid}") },
+              singleLine = true,
+              isError = wipeConfirmText.isNotEmpty() && wipeConfirmText.trim() != target.uid,
+              modifier = Modifier.fillMaxWidth()
             )
           } else {
             Text(
@@ -1297,7 +1322,7 @@ private fun AdminApp() {
                 refresh()
               }
             }
-          }, enabled = !wipeRunning) {
+          }, enabled = !wipeRunning && wipeConfirmText.trim() == target.uid) {
             Text(
               if (wipeRunning) "Đang xóa…" else "Xóa trên máy chủ",
               color = Rose, fontWeight = FontWeight.Bold
