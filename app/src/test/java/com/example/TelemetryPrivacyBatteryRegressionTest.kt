@@ -97,7 +97,7 @@ class TelemetryPrivacyBatteryRegressionTest {
         assertTrue("Pin <= 0 phai in '—' qua bien hasBat",
             dashboard.contains("val hasBat = bat > 0"))
         assertTrue("Khong co so pin thi in '—', khong in gia tri tho",
-            dashboard.contains("if (hasBat) \"$bat%\" else \"—\""))
+            dashboard.contains("if (hasBat) \"\$bat%\" else \"—\""))
         // Bieu tuong sac chi khi isCharging THAT — khong phai moi telemetry.
         assertTrue("Chi bao sac khi isCharging",
             dashboard.contains("partnerLoc.isCharging -> Icons.Default.BatteryChargingFull"))
