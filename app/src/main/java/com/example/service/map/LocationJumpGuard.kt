@@ -159,7 +159,10 @@ class LocationJumpGuard(
     /** Ban kinh cho phep hai phieu duoc coi la "cung mot noi moi". */
     private fun consensusRadius(p: GuardedFix?, candidate: GuardedFix): Float {
         val accs = listOfNotNull(p?.accuracyMeters, candidate.accuracyMeters, maxTrustedAccuracyMeters)
-        return maxOf(accs.max(), minConsensusRadiusMeters)
+        // maxOrNull (khong phai max()): `max()` khong bao gio ném o day vi
+        // accs luon co maxTrustedAccuracyMeters, nhung dung maxOrNull cho an
+        // toan voi moi phién Kotlin va tranh de nung 2.x.
+        return maxOf(accs.maxOrNull() ?: 0f, minConsensusRadiusMeters)
     }
 
     companion object {
