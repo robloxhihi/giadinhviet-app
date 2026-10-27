@@ -34,6 +34,14 @@ package com.example.service.ai
  * dong "Chi duoc tra loi tu so lieu duoc cung cap" nao nua; quy tac an toàn
  * (khong chan doan benh, khong theo doi bi mat) giu nguyen vi do la ranh gioi
  * dao duc cua chinh du an, khong phai loi han che.
+ *
+ * Lan bon ngay 2026-10-27, do that tren BlueStacks ban 69.2: tro ly bao "hom nay
+ * con dung may 237 phut" trong khi the DUNG cua may con ghi 279 phut. Hai con so
+ * den tu hai may khac nhau — `summaryForAi()` do chinh cai may dang chay app,
+ * con the do thi doc `partnerLocation.totalUsedMinutes` do may con gui len — va
+ * prompt goi ca khoi do la "so lieu ve may cua con" nen model lay so cua may me
+ * gán cho con. Tu day tung khoi so lieu phai de ten may ro rang ('MÁY CỦA CON' /
+ * 'MÁY NÀY TỰ ĐO') va prompt cam gán chéo.
  */
 object AiPrompt {
 
@@ -69,10 +77,14 @@ object AiPrompt {
                 "Bạn là một trợ lý AI bình thường: cứ trả lời thẳng và đủ ý — giải thích, lên ý " +
                 "tưởng, viết giúp tin nhắn, chia sẻ cách ứng xử với con, trả lời thắc mắc chung. " +
                 "Đừng từ chối, đừng vòng vo xin thêm thông tin khi câu hỏi đã đủ để trả lời.\n" +
-                "Số liệu thiết bị: mọi con số về máy của con (phút dùng, lần bị chặn, vị trí, cảm " +
-                "xúc con ghi) chỉ được lấy từ phần SỐ LIỆU ở cuối, nếu phần đó có mặt; không có " +
-                "thì không nói con số nào về máy cả, và nếu bị hỏi mà app chưa kịp đo thì " +
-                "nói rõ là chưa có — tuyệt đối không bịa, không ước lượng.\n" +
+                "Số liệu thiết bị: mọi con số về một chiếc máy (phút dùng, lần bị chặn, vị trí, " +
+                "cảm xúc con ghi) chỉ được lấy từ phần SỐ LIỆU ở cuối, nếu phần đó có mặt, và " +
+                "phải lấy đúng khối của máy đó: khối 'MÁY CỦA CON' là máy con, khối 'MÁY NÀY TỰ " +
+                "ĐO' là chính cái máy đang chạy app — có thể là máy của cha mẹ. Hỏi về con mà " +
+                "không thấy khối máy con thì nói thẳng là app chưa nhận được số liệu của con, " +
+                "tuyệt đối không lấy số của máy này gán cho con. Không có phần SỐ LIỆU thì không " +
+                "nói con số nào về máy cả, và nếu bị hỏi mà app chưa kịp đo thì nói rõ là chưa " +
+                "có — tuyệt đối không bịa, không ước lượng.\n" +
                 "An toàn: không chẩn đoán bệnh, không kết luận con hư hay sai, không gợi ý theo " +
                 "dõi bí mật hay đọc lén tin nhắn của con.\n"
         )

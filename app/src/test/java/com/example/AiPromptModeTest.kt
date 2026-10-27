@@ -120,9 +120,48 @@ class AiPromptModeTest {
         assertTrue("Màn hình AI phải hỏi wantsDeviceData trước khi lấy số liệu",
             screen.contains("AiPrompt.wantsDeviceData("))
         assertTrue("Không hỏi số liệu thì phải truyền chuỗi rỗng",
-            screen.contains("stats = if (withData) usage.summaryForAi() else \"\""))
+            screen.contains("stats = if (withData)"))
+        assertTrue("Số liệu gửi lên phải đi qua ham gan nhan may",
+            screen.contains("statsForAi(usage.summaryForAi(), childMinutesToday, viewerIsChild)"))
         assertTrue("Nút 'Phân tích hôm nay' vẫn phải được cấp số liệu",
             screen.contains("report = index < 2"))
+    }
+
+    /**
+     * 2026-10-27, ban 69.2 do tren BlueStacks: tro ly bao "hom nay con dung may
+     * 237 phut" trong khi the DUNG cua may con ghi 279 phut. Khong phai model bia:
+     * no doc `summaryForAi()` — so do CHINH may phu huynh dang chay app — roi
+     * gán cho con vi prompt goi khoi do la "so lieu may cua con". Tu 69.3 moi
+     * khoi so lieu phai de ten may, va man hinh chinh (the DANG DUNG) doc tu
+     * telemetry may con. Test nay giu ca hai ben: nhan co that, va chu khong con
+     * quang cao rang so lieu di theo MOI cau hoi.
+     */
+    @Test
+    fun khoiSoLieuPhaiDeTenMayVaKhongQuangCaoSai() {
+        val screen = source("src/main/java/com/example/ui/screens/AiChatScreen.kt")
+        val dashboard = source("src/main/java/com/example/ui/screens/DashboardScreen.kt")
+        val host = source("src/main/java/com/example/ui/screens/MainAppScreen.kt")
+
+        assertTrue("Phai nhan ro khoi may cua con", screen.contains("MÁY CỦA CON"))
+        assertTrue("Phai nhan ro khoi may dang chay app", screen.contains("MÁY NÀY TỰ ĐO"))
+        assertTrue("May con chua gui thi phai noi thang la chua co",
+            screen.contains("app chưa nhận được số liệu hôm nay từ máy con"))
+        assertTrue("So lieu may con gui len phai duoc truyen vao man hinh AI",
+            host.contains("childMinutesToday = uiState.partnerLocation?.totalUsedMinutes"))
+
+        listOf("gửi kèm mỗi câu hỏi", "Bảng số liệu gửi kèm mỗi câu hỏi").forEach { cu ->
+            assertFalse("Chu cu van noi so lieu di theo moi cau hoi: $cu", screen.contains(cu))
+        }
+        assertFalse("Subtitle cu van goi AI la cong cu doc so lieu",
+            screen.contains("hỏi về số liệu hôm nay của máy"))
+        assertFalse("The Tong quan van quang cao sai",
+            dashboard.contains("gửi kèm mỗi câu hỏi"))
+
+        val p = AiPrompt.system(stats, report = false)
+        assertTrue("Prompt phai cam lay so may nay gan cho may kia",
+            p.contains("không lấy số của máy này gán cho con"))
+        assertTrue("Prompt phai biet co hai khoi so lieu khac nhau",
+            p.contains("MÁY CỦA CON") && p.contains("MÁY NÀY TỰ ĐO"))
     }
 
     private fun source(relative: String): String {

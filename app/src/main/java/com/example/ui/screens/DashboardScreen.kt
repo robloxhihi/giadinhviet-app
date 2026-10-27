@@ -426,8 +426,9 @@ fun DashboardScreen(
                     }
                     Spacer(modifier = Modifier.height(6.dp))
                     Text(
-                        text = "Số liệu dùng máy hôm nay được lưu trên máy này và gửi kèm mỗi câu hỏi, " +
-                                "nên AI trả lời theo con số thật chứ không phải lời khuyên chung.",
+                        text = "Trợ lý trả lời như một AI bình thường. Số liệu của máy nào app chỉ đọc khi " +
+                                "bạn hỏi đúng máy đó, nên câu phân tích dựa trên con số thật chứ không " +
+                                "phải lời khuyên chung.",
                         style = MaterialTheme.typography.bodySmall,
                         color = TextSecondary
                     )

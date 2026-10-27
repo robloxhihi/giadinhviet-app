@@ -276,7 +276,11 @@ fun MainAppScreen(
                         onBack = close,
                         onToggleLocationHistory = { enabled -> viewModel.toggleLocationHistory(enabled) }
                     )
-                    "ai" -> AiChatScreen(onBack = close)
+                    "ai" -> AiChatScreen(
+                        onBack = close,
+                        childMinutesToday = uiState.partnerLocation?.totalUsedMinutes,
+                        viewerIsChild = isChild
+                    )
                 }
             }
         }

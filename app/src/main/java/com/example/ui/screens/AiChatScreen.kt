@@ -89,6 +89,30 @@ private const val AI_EXHAUSTED_MESSAGE =
         "Từ 0 giờ sẽ hỏi lại được. App Quản Trị Viên cho thấy tài khoản nào vừa chạm ngưỡng hôm nay."
 
 /**
+ * Khoi so lieu GUI LEN MODEL va hien ra man hinh — may nao ra may do.
+ *
+ * Ban 69.2 de tro ly doc thang `summaryForAi()` va goi do la "so lieu may cua
+ * con", nen tren may phu huynh no bao "hom nay con dung 237 phut" trong khi the
+ * DUNG cua may con ghi 279 phut: `summaryForAi()` do cai may dang chay app, con
+ * the do thi doc `partnerLocation.totalUsedMinutes` may con gui len. Tu 69.3
+ * tung khoi co nhan ro, va khi chua co so lieu may con thi noi thang la chua co
+ * thay vi de model tu suy.
+ */
+private fun statsForAi(local: String, childMinutes: Int?, viewerIsChild: Boolean): String =
+    if (viewerIsChild) {
+        "MÁY CỦA CON — cung la cai may dang chay app:\n$local"
+    } else {
+        buildString {
+            append("MÁY NÀY TỰ ĐO (máy của phụ huynh đang dùng app):\n").append(local)
+            append("\n\n")
+            append(
+                if (childMinutes != null) "MÁY CỦA CON GỬI LÊN HÔM NAY: $childMinutes phút."
+                else "MÁY CỦA CON: app chưa nhận được số liệu hôm nay từ máy con."
+            )
+        }
+    }
+
+/**
  * "Trợ lý gia đình" — man hinh chat RIENG voi AI, mo tu the Tong quan.
  *
  * Khong dung `ChatScreen` (tab Chat): cho do noi voi Firestore va phai ghep
@@ -105,7 +129,9 @@ private const val AI_EXHAUSTED_MESSAGE =
  */
 @Composable
 fun AiChatScreen(
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    childMinutesToday: Int? = null,
+    viewerIsChild: Boolean = false
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -127,8 +153,9 @@ fun AiChatScreen(
     // mang; LaunchedEffect ben duoi keo no len bang so that tren Firestore.
     var quotaUsed by remember { mutableStateOf(AiUsageCounter.observeToday(context)) }
 
-    val stats = remember(turns.size, busy, quotaUsed) {
-        usage.summaryForAi() + "\n" + AiUsageCounter.quotaNote(context)
+    val stats = remember(turns.size, busy, quotaUsed, childMinutesToday) {
+        statsForAi(usage.summaryForAi(), childMinutesToday, viewerIsChild) + "\n" +
+            AiUsageCounter.quotaNote(context)
     }
     val hasKey = AiKey.isUsable(key)
     val exhausted = quotaUsed >= AiUsageCounter.DAILY_LIMIT
@@ -169,7 +196,8 @@ fun AiChatScreen(
                 apiKey = key,
                 history = next.dropLast(1),
                 question = q,
-                stats = if (withData) usage.summaryForAi() else "",
+                stats = if (withData)
+                    statsForAi(usage.summaryForAi(), childMinutesToday, viewerIsChild) else "",
                 report = report
             )
             busy = false
@@ -193,7 +221,7 @@ fun AiChatScreen(
     ) {
         PremiumTopBar(
             title = "Trợ lý gia đình",
-            subtitle = if (hasKey) "Đang dùng ${model.label} · hỏi về số liệu hôm nay của máy"
+            subtitle = if (hasKey) "Đang dùng ${model.label} · hỏi gì cũng được, số liệu chỉ đọc khi bạn hỏi"
             else "Cần nhập ${AiModels.keyLabel(model)} để bắt đầu",
             onBack = onBack,
             trailing = {
@@ -411,7 +439,7 @@ fun AiChatScreen(
             Column {
                 SectionHeader(
                     title = "Hôm nay máy đo được",
-                    subtitle = if (showStats) "Bảng số liệu gửi kèm mỗi câu hỏi" else "Đang ẩn để dành chỗ cho đoạn chat",
+                    subtitle = if (showStats) "Số liệu app tự đo, chỉ gửi lên AI khi bạn hỏi về nó" else "Đang ẩn để dành chỗ cho đoạn chat",
                     tint = Premium.accent
                 )
                 Spacer(modifier = Modifier.height(6.dp))
