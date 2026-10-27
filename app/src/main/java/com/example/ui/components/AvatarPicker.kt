@@ -44,8 +44,15 @@ fun readImageAsAvatarBase64(context: Context, uri: Uri): String? = runCatching {
     val resolver = context.contentResolver
 
     val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+    // Lan do CHỈ lay kich thuoc. Voi inJustDecodeBounds=true, decodeStream LUON
+    // tra ve bitmap null (no khong nap anh vao RAM, chi ghi kich thuoc vao
+    // `bounds`). Vi vay khong duoc dung gia tri tra ve cua no lam hieu "mo khong
+    // duoc". Do chinh la loi that khien avatar khong bao gio doi duoc tren MOI
+    // may, khong rieng gia lap (69.6): `?: return null` o buoc nay bat ca
+    // truong hop mo stream thanh cong, vi `use { ... }` tra ve cai null ma
+    // decodeStream tra ra. Thu do that su mo duoc hay khong la `bounds.outWidth`
+    // ngay ben duoi — no van 0 neu stream khong mo duoc, nen guard duoi bat het.
     resolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, bounds) }
-        ?: return null
     if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
 
     var sample = 1

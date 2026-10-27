@@ -107,6 +107,34 @@ class AvatarRegressionTest {
             code.contains("avatarGetContentIntent(context)"))
     }
 
+    /**
+     * Loi that dung sau avatar, tim ra 27/10 khi ban 69.5 da khién bo chon tra
+     * duoc ve `content://` ma van khong luu duoc anh: buoc do kich thuoc dung
+     * `inJustDecodeBounds = true`, va voi che do do `decodeStream` LUON tra ve
+     * bitmap null (chi ghi kich thuoc vao Options). The ma nguon cu ghi
+     * `openInputStream(uri)?.use { decodeStream(...) } ?: return null` — `use`
+     * tra ve chinh cai null do, nen `?: return null` bat ca truong hop mo stream
+     * thanh cong. Ham tra null voi MOI anh, tren MOI may: do la "khong thay
+     * avatar duoc". Fix: buoc bounds KHONG duoc return null theo ket qua decode;
+     * chi duoc dung `bounds.outWidth` de phat hién stream khong mo duoc.
+     */
+    @Test
+    fun buocDoKichThuocKhongDuocCoiLaLoiKhiDecodeTraNull() {
+        val flat = codeOf(picker).replace(Regex("\\s+"), " ")
+        assertFalse(
+            "Bounds decode (inJustDecodeBounds) luon tra null — khong duoc `?: return null` theo no",
+            flat.contains("decodeStream(it, null, bounds) } ?: return null")
+        )
+        assertTrue(
+            "Sau bounds decode phai kiem tra outWidth, khong phai return null",
+            flat.contains("decodeStream(it, null, bounds) } if (bounds.outWidth <= 0")
+        )
+        // Decode that (lan 2, khong bounds) VAN PHAI co guard `?: return null`,
+        // vi o do null moi la bao hieu anh khong doc ra duoc.
+        assertTrue("Decode that van phai bao loi neu khong ra bitmap",
+            flat.contains("inSampleSize = sample } ) } ?: return null"))
+    }
+
     @Test
     fun loiBoChonPhaiHienRaThanhChu() {
         val code = codeOf(picker)
