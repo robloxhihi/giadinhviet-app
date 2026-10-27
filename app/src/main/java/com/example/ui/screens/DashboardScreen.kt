@@ -26,6 +26,9 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.BatteryChargingFull
+import androidx.compose.material.icons.filled.BatteryFull
+import androidx.compose.material.icons.filled.BatteryLow
+import androidx.compose.material.icons.filled.BatteryStd
 import androidx.compose.material.icons.filled.BatteryUnknown
 import androidx.compose.material.icons.filled.Chat
 import androidx.compose.material.icons.filled.Check
@@ -72,6 +75,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.model.EmotionTag
@@ -698,21 +702,61 @@ fun DashboardScreen(
                                 style = MaterialTheme.typography.bodySmall,
                                 color = if (partnerLoc == null) TextMuted else NeonCyan
                             )
+                            // MAY ME THAY CON DANG DUNG APP NAO — doc
+                            // `topActiveApp` tu doc /locations cua may con. May
+                            // phu huynh tu lam trang truong cua chinh minh khi
+                            // publish (viewmodel + service), nen o day no chi
+                            // rong khi ben kia THAT su dang dung mot app. Trac
+                            // nang nay bat buoc co khoang trang: khong bao gio
+                            // in "Dang dung: " vo nghia.
+                            partnerLoc?.topActiveApp?.takeIf { it.isNotBlank() }?.let { app ->
+                                Text(
+                                    text = "Đang dùng: $app",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = NeonAmber,
+                                    fontWeight = FontWeight.SemiBold,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
                         }
 
                         Row(verticalAlignment = Alignment.CenterVertically) {
+                            // The reading itself: batteryLevel <= 0 means the
+                            // device reported NOTHING (getBatteryInfo returns -1,
+                            // LocationData defaults 0). Those are not "0%" — a
+                            // parent who saw "-1%" or a fake "0%" thought the
+                            // tracker was broken. Show an honest em-dash instead,
+                            // exactly like the map card and the history list.
+                            val bat = partnerLoc?.batteryLevel ?: 0
+                            val hasBat = bat > 0
+                            // Icon is LEVEL-accurate and only shows the charging
+                            // bolt when isCharging is REALLY true. Before, any
+                            // telemetry drew BatteryChargingFull, so the parent
+                            // saw "charging" on a phone that was draining.
+                            val batIcon = when {
+                                partnerLoc == null || !hasBat -> Icons.Default.BatteryUnknown
+                                partnerLoc.isCharging -> Icons.Default.BatteryChargingFull
+                                bat >= 95 -> Icons.Default.BatteryFull
+                                bat >= 20 -> Icons.Default.BatteryStd
+                                else -> Icons.Default.BatteryLow
+                            }
+                            val batTint = when {
+                                !hasBat -> TextMuted
+                                bat < 20 -> NeonAmber
+                                else -> NeonEmerald
+                            }
                             Icon(
-                                imageVector = if (partnerLoc == null) Icons.Default.BatteryUnknown
-                                    else Icons.Default.BatteryChargingFull,
+                                imageVector = batIcon,
                                 contentDescription = null,
-                                tint = if (partnerLoc == null) TextMuted else NeonEmerald,
+                                tint = batTint,
                                 modifier = Modifier.size(18.dp)
                             )
                             Spacer(modifier = Modifier.width(4.dp))
                             Text(
-                                text = if (partnerLoc != null) "${partnerLoc.batteryLevel}%" else "—",
+                                text = if (hasBat) "$bat%" else "—",
                                 fontWeight = FontWeight.Bold,
-                                color = TextPrimary
+                                color = if (hasBat) TextPrimary else TextMuted
                             )
                         }
                     }

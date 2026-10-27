@@ -24,6 +24,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.BatteryChargingFull
+import androidx.compose.material.icons.filled.BatteryFull
+import androidx.compose.material.icons.filled.BatteryLow
+import androidx.compose.material.icons.filled.BatteryStd
+import androidx.compose.material.icons.filled.BatteryUnknown
 import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
@@ -704,6 +708,20 @@ fun GoogleMapsStudentLocationCard(
                             val moved = anchor == null ||
                                     haversineKm(anchor.first, anchor.second, latitude, longitude) > 0.005
                             if (moved) {
+                                // Dõi theo KIỂU GOOGLE MAPS: khi thật sự nhích, bản đồ
+                                // vừa trôi theo điểm mới VỪA tự hút sát tới mức bám mặt
+                                // đường (z19, trừ khi lớp đang chọn có trần thấp hơn).
+                                // Trước đây follow chỉ animate tâm mà giữ nguyên zoom,
+                                // nên "dõi theo" vẫn ở góc nhìn xa — người dùng muốn(map
+                                // bám sát chỗ con đang đứng khi di chuyển). followMode đã
+                                // bị tắt bởi mọi cú kéo/pinch (xem setOnTouchListener),
+                                // nên còn vào đây nghĩa là người dùng CHƯA tự ý chỉnh —
+                                // tăng zoom là đúng ý, không giành lại quyền điều khiển.
+                                val trackingZoom = 19.0.coerceAtMost(layer.maxZoom())
+                                if (currentZoom < trackingZoom) {
+                                    map.controller.setZoom(trackingZoom)
+                                    zoomLevel = trackingZoom
+                                }
                                 map.controller.animateTo(point)
                                 followAnchor[0] = latitude to longitude
                             }
@@ -1156,7 +1174,19 @@ fun GoogleMapsStudentLocationCard(
                         batteryLevel < 20 -> NeonAmber
                         else -> NeonEmerald
                     }
-                    StatPill(Icons.Default.BatteryChargingFull, batteryText, batteryTint)
+                    // Icon theo MỨC pin thật, không phải lúc cũng vẽ viên
+                    // "BatteryChargingFull". Trước đây pill pin luôn là viên
+                    // đầy-sấm, phụ huynh nhìn vào tưởng máy con đang sạc ngay
+                    // cả khi pin yếu và rút cạn. Sấm riêng vẫn ở dưới, chỉ hiện
+                    // khi isCharging THẬT sự bật.
+                    val batteryIcon = when {
+                        batteryLevel <= 0 -> Icons.Default.BatteryUnknown
+                        isCharging -> Icons.Default.BatteryChargingFull
+                        batteryLevel >= 95 -> Icons.Default.BatteryFull
+                        batteryLevel >= 20 -> Icons.Default.BatteryStd
+                        else -> Icons.Default.BatteryLow
+                    }
+                    StatPill(batteryIcon, batteryText, batteryTint)
                     // Dang sac: icon Bolt vector dung canh pill pin (emoji da
                     // duoc thay bang Material icon nhu cac cho khac trong app).
                     if (batteryLevel > 0 && isCharging) {

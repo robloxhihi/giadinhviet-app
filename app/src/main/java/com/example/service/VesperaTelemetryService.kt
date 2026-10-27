@@ -25,9 +25,13 @@ import com.example.MainActivity
 import com.example.R
 import com.example.data.model.LocationData
 import com.example.data.model.LocationHistoryEntry
+import com.example.data.model.UserRole
 import com.example.data.model.hasRealFix
 import com.example.data.repository.VesperaRepository
 import com.example.service.map.FixPrecision
+import com.example.service.map.FixVerdict
+import com.example.service.map.GuardedFix
+import com.example.service.map.LocationJumpGuard
 import com.google.android.gms.location.FusedLocationProviderClient
 import com.google.android.gms.location.LocationCallback
 import com.google.android.gms.location.LocationRequest
@@ -60,6 +64,24 @@ class VesperaTelemetryService : Service() {
 
     /** Điểm định vị gần nhất KÈM nguồn gốc/tuổi/sai số — không bao giờ là tọa độ bịa. */
     private var lastFix: LocationFix? = null
+
+    /**
+     * Bộ lọc nhảy cóc: chặn một phiếu coarse/glitch kéo vị trí đã công bố đi hàng
+     * cây số. Người dùng bản 69.x báo "di chuyển có mấy mét mà nó bay cả cây" —
+     * đó là do service trước đây LUÔN lấy phiếu cuối cùng ghi đè, kể cả khi phiếu
+     * đó ±500 m hay là một điểm GPS lỗi. Ngưỡng 100 m khớp
+     * [TelemetryAndUsageHelper.MAX_ACCEPTED_ACCURACY_METERS] để hai chỗ cùng một
+     * định nghĩa "tin được".
+     */
+    private val jumpGuard = LocationJumpGuard(maxTrustedAccuracyMeters = 100f)
+
+    /**
+     * Vai cua CHINH MAY NAY, doc mot lan tu ho so va nho lai theo uid. Service
+     * chay tren ca may phu huynh lan may con; no quyet co cong bo thong ke app
+     * cua minh vao /locations hay khong (phu huynh thi KHONG — see selfRole()).
+     */
+    private var cachedSelfRole: UserRole? = null
+    private var cachedSelfRoleUid: String? = null
 
     /**
      * Cờ foreground/background. `null` = dịch vụ tự dò ([isAppUiVisible]);
@@ -437,6 +459,35 @@ class VesperaTelemetryService : Service() {
             Log.w(TAG, "Bỏ qua điểm GPS bất hợp lý: ${location.latitude}, ${location.longitude}")
             return
         }
+
+        // Bỏ qua điểm lỗi TRƯỚC khi nó kịp thành "vị trí hiện tại".
+        val candidate = GuardedFix(
+            latitude = location.latitude,
+            longitude = location.longitude,
+            accuracyMeters = location.accuracy,
+            speedMetersPerSecond = if (location.hasSpeed()) location.speed else 0f,
+            timestampMs = System.currentTimeMillis()
+        )
+        when (jumpGuard.decide(candidate)) {
+            FixVerdict.SKIP_POOR_QUALITY -> {
+                Log.w(
+                    TAG,
+                    "Bỏ qua điểm ±${location.accuracy.toInt()} m — đang giữ điểm chính xác hơn"
+                )
+                return
+            }
+            FixVerdict.SKIP_UNCONFIRMED_JUMP -> {
+                Log.w(
+                    TAG,
+                    "Điểm nhảy ${jumpGuard.currentAnchor()?.let {
+                        LocationJumpGuard.distanceMeters(it, candidate).toInt()
+                    } ?: 0} m chưa được xác nhận — giữ nguyên vị trí đã công bố"
+                )
+                return
+            }
+            FixVerdict.ACCEPT -> Unit
+        }
+
         if (telemetryHelper.isAccuracyTooLow(location)) {
             Log.w(
                 TAG,
@@ -611,6 +662,12 @@ class VesperaTelemetryService : Service() {
                 )
                 updateNotificationText(notifStatus)
 
+                // MỘT CHIỀU: máy phụ huynh KHÔNG đẩy thống kê app của mình lên
+                // /locations — máy con đọc doc của bố mẹ phải thấy rỗng; chỉ vị
+                // trí + pin đi hai chiều. Notification của chính máy này vẫn hiển
+                // thị topApp (đọc cục bộ, không qua Firestore).
+                val hideSelfUsage = selfRole(currentUserId) == UserRole.PARENT
+
                 // Push to Firestore LocationData
                 val locData = LocationData(
                     userId = currentUserId,
@@ -623,9 +680,9 @@ class VesperaTelemetryService : Service() {
                     isCharging = isCharging,
                     isPrivacyActive = false,
                     currentSafeZone = safeZone,
-                    topActiveApp = topApp,
-                    topActiveAppMinutes = topAppMins,
-                    totalUsedMinutes = totalUsedMins,
+                    topActiveApp = if (hideSelfUsage) "" else topApp,
+                    topActiveAppMinutes = if (hideSelfUsage) 0 else topAppMins,
+                    totalUsedMinutes = if (hideSelfUsage) 0 else totalUsedMins,
                     updatedAt = fixTime
                 )
                 // Lưới chặn cuối: không ghi tọa độ rỗng/bịa lên Firestore.
@@ -714,6 +771,28 @@ class VesperaTelemetryService : Service() {
             prefs.edit().putString("guest_device_uid", id).apply()
         }
         return id
+    }
+
+    /**
+     * Vai cua CHINH MAY NAY (doc ho so mot lan, nho lai theo uid). Dung de quyet
+     * co cong bo thong ke app len /locations hay khong. Tra `null` khi chua doc
+     * duoc ho so (khach chua dang nhap / loi mang) — khi do GIU nguyen viec day
+     * du lieu, vi loi phia truong hop nay la "con thay me dung app", va me dang
+     * nhap thi ho so doc duoc, nen hide chi ap dung khi chac chan role = PARENT.
+     */
+    private suspend fun selfRole(uid: String): UserRole? {
+        if (cachedSelfRoleUid == uid && cachedSelfRole != null) return cachedSelfRole
+        val role = try {
+            repository.getUserProfile(uid)?.role
+        } catch (e: Exception) {
+            Log.w(TAG, "Không đọc được vai trò của máy này: ${e.message}")
+            null
+        }
+        if (role != null) {
+            cachedSelfRole = role
+            cachedSelfRoleUid = uid
+        }
+        return role
     }
 
     override fun onDestroy() {

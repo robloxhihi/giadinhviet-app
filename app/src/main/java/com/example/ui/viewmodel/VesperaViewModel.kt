@@ -1457,6 +1457,21 @@ class VesperaViewModel(
         val pairing = _uiState.value.activePairing
         val role = _uiState.value.userProfile?.role ?: UserRole.PARENT
         val actorName = _uiState.value.userProfile?.displayName.orEmpty()
+
+        // (0) MỘT CHIỀU: chỉ PHỤ HUYNH mới đặt được nội quy ứng dụng. Trước đây
+        // CHILD lọt qua ConsentPolicy.propose (nhận mọi byRole) và ghi thẳng
+        // blockedPackages — nghĩa là máy con tự gỡ chính danh sách chặn của mình,
+        // và về nguyên tắc có thể đụng tới luật của cặp. Người dùng 69.x chốt:
+        // "máy con ko có quyền chặn app". Chặn ngay ở cửa vào, TRƯỚC mọi nhánh
+        // khác, nên dù payload thế nào một tài khoản CHILD cũng không ghi được luật.
+        if (role == UserRole.CHILD) {
+            rejectBlockRules(
+                "Chỉ phụ huynh mới đặt được nội quy ứng dụng. Máy của con không thay đổi " +
+                    "được danh sách chặn — bố mẹ chỉnh ở máy của bố mẹ."
+            )
+            return
+        }
+
         val base = _uiState.value.usageSchedule ?: UsageSchedule()
         val pairingId = pairing?.id.orEmpty().ifEmpty { base.pairingId }
         val isPaired = pairing != null && pairing.status == PairingStatus.PAIRED
@@ -1727,7 +1742,20 @@ class VesperaViewModel(
                 if (canUpload) {
                     if (locationData.hasRealFix) {
                         try {
-                            repository.updateLocation(locationData)
+                            // MỘT CHIỀU: phụ huynh KHÔNG công bố thống kê app của
+                            // mình — chỉ vị trí + pin. Máy con đọc doc locations của
+                            // bố mẹ sẽ thấy các trường này rỗng, nên "con thấy mẹ
+                            // đang dùng app nào" hết đất xảy ra ngay ở tầng dữ liệu,
+                            // không phụ thuộc UI. uiState.myLocation vẫn giữ đủ để
+                            // màn hình của CHÍNH máy bố mẹ hiển thị.
+                            val publishLocation = if (user?.role == UserRole.PARENT)
+                                locationData.copy(
+                                    topActiveApp = "",
+                                    topActiveAppMinutes = 0,
+                                    totalUsedMinutes = 0
+                                )
+                            else locationData
+                            repository.updateLocation(publishLocation)
                         } catch (e: Exception) {
                             Log.w(TAG, "Failed to update location", e)
                             // Truoc day chi Log.w: bam "Lam moi" khi loi ghi Firestore

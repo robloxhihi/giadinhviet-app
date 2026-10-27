@@ -403,6 +403,26 @@ fun SettingsScreen(
                     )
                 }
             }
+        } else if (userProfile?.role == UserRole.CHILD) {
+            // Máy con không có cửa sổ ghi luật — cùng một chiều với cổng CHILD ở
+            // VesperaViewModel.updateBlockRules. Ẩn nút, chỉ nói ai đang quản lý.
+            BentoCard(modifier = Modifier.fillMaxWidth()) {
+                Column {
+                    Text(
+                        text = "NỘI QUY ỨNG DỤNG",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = NeonAmber,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "Bố mẹ đang quản lý nội quy ứng dụng trên máy này. " +
+                            "Chỉ phụ huynh mới thay đổi được danh sách chặn và giờ dùng.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = TextSecondary
+                    )
+                }
+            }
         } else {
             BlockRulesCard(
                 schedule = uiState.usageSchedule,
