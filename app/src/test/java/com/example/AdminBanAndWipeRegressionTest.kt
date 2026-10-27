@@ -289,5 +289,12 @@ class AdminBanAndWipeRegressionTest {
             admin.contains("\"Thử lại\""))
         assertTrue("Phải khóa nút khi đang chạy (tránh xóa hai lần cùng lúc)",
             admin.contains("enabled = !wipeRunning"))
+        // HARDEN 69.8: nut xoa chi mo khi admin GO DUNG uid cua chinh tai khoan
+        // dang mo — chot lai rang khong the chi bam la xoa (chong tap theo index
+        // bi stale danh vao xoa nham tai khoan khac).
+        assertTrue("Phải gate nút xóa bằng ô gõ đúng uid (chống xóa nhầm)",
+            admin.contains("wipeConfirmText.trim() == target.uid"))
+        assertTrue("Phải có ô nhập xác nhận gắn với biến gõ",
+            admin.contains("value = wipeConfirmText"))
     }
 }

@@ -974,7 +974,7 @@ private fun AdminApp() {
                   colors = ButtonDefaults.buttonColors(containerColor = Rose)
                 ) { Text(if (row.banned || row.banExpired) "Đổi lệnh cấm" else "Cấm") }
                 OutlinedButton(
-                  onClick = { wipeConfirmText = ""; deleteTarget = row },
+                  onClick = { deleteTarget = row },
                   // Khóa mọi nút "Xóa tài khoản" khi hộp thoại đang mở: một cú tap
                   // rơi trúng hàng khác lúc modal còn treo không còn đổi được target.
                   enabled = deleteTarget == null
@@ -1221,6 +1221,12 @@ private fun AdminApp() {
   //     can "xóa tài khoản" roi dang nhap lai la het bi cam.
   deleteTarget?.let { target ->
     val receipt = wipeOutcome
+    // Mỗi lần mở hộp thoại cho một uid mới, ô xác nhận phải TRỐNG để admin không
+    // xóa bằng đúng chữ đã gõ cho tài khoản trước đó. Đặt ở đây thay vì trong
+    // onClick của hàng để giữ nguyên literal "onClick = { deleteTarget = row }"
+    // (test hồi quy AdminBanAndWipeRegressionTest chốt chuổi đó là bất biến
+    // "nút hàng CHỈ mở hộp thoại, không xóa ngay").
+    LaunchedEffect(target.uid) { wipeConfirmText = "" }
     AlertDialog(
       onDismissRequest = {
         if (!wipeRunning) {
