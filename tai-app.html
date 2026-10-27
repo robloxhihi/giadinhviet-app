@@ -6,138 +6,170 @@ layout: null
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Gia Đình Việt — bản 69.9 (Android APK)</title>
+<title>Gia Đình Việt — tải app 69.9 (Android APK)</title>
 <meta name="description" content="Tải bản cài đặt Android của ứng dụng Gia Đình Việt 69.9, kèm SHA-256/SHA-1 và chứng chỉ ký kiểm chứng được.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><circle cx='20' cy='12' r='6.5' fill='%2337e0a6'/><circle cx='17' cy='11' r='5.5' fill='%23070a12'/><circle cx='9' cy='21' r='1.8' fill='%234cc6ff'/><circle cx='13.5' cy='24' r='1.1' fill='%234cc6ff'/></svg>">
 <style>
   :root{
-    --bg:#070a12; --bg2:#0b1020; --panel:#101627; --panel2:#0d1322; --line:#212a44; --line2:#2b3557;
-    --text:#eef3ff; --muted:#95a0c2; --cyan:#4cc6ff; --emerald:#37e0a6;
-    --amber:#f7c948; --rose:#ff7a90; --violet:#a78bfa;
+    --bg:#070a12; --panel:#101627; --panel2:#0d1322; --line:#212a44; --line2:#2b3557;
+    --text:#eef3ff; --muted:#95a0c2; --cyan:#4cc6ff; --emerald:#37e0a6; --amber:#f7c948; --rose:#ff7a90;
     --grad:linear-gradient(96deg,#4cc6ff 0%,#37e0a6 100%);
+    --shadow:0 24px 60px -30px rgba(0,0,0,.75);
   }
   *{box-sizing:border-box}
   html{scroll-behavior:smooth}
   body{
     margin:0;
     background:
-      radial-gradient(1100px 640px at 82% -14%, #17315e 0%, rgba(7,10,18,0) 55%),
-      radial-gradient(900px 520px at 8% 6%, #241a4a 0%, rgba(7,10,18,0) 50%),
+      radial-gradient(1200px 680px at 85% -16%, #17315e 0%, rgba(7,10,18,0) 55%),
+      radial-gradient(950px 560px at 5% 4%, #241a4a 0%, rgba(7,10,18,0) 52%),
       var(--bg);
     color:var(--text);
     font:16px/1.65 -apple-system,"Segoe UI Variable","Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
     -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility;
   }
-  .wrap{max-width:860px;margin:0 auto;padding:44px 22px 84px}
-  a{color:var(--cyan);text-decoration:none}
-  a:hover{text-decoration:underline}
+  a{color:var(--cyan);text-decoration:none} a:hover{text-decoration:underline}
+  .wrap{max-width:1040px;margin:0 auto;padding:0 22px 84px}
 
-  /* header / hero */
+  /* top bar */
+  .bar{position:sticky;top:0;z-index:20;display:flex;align-items:center;gap:14px;
+    padding:14px 22px;margin:0 -22px 26px;background:rgba(7,10,18,.72);backdrop-filter:blur(12px);
+    border-bottom:1px solid var(--line)}
+  .brand{display:flex;align-items:center;gap:9px;font-weight:800;letter-spacing:-.2px;color:var(--text)}
+  .brand:hover{text-decoration:none}
+  .brand svg{display:block}
+  .bar nav{margin-left:auto;display:flex;gap:18px;font-size:14px}
+  .bar nav a{color:var(--muted);font-weight:600}
+  .bar nav a:hover{color:var(--text);text-decoration:none}
+  @media (max-width:640px){.bar nav{display:none}}
+
+  /* hero */
+  .hero{display:grid;grid-template-columns:1.02fr .98fr;gap:38px;align-items:center;margin:6px 0 34px}
   .eyebrow{display:inline-flex;align-items:center;gap:8px;font-size:12px;font-weight:700;
     letter-spacing:.9px;text-transform:uppercase;color:var(--muted);
     border:1px solid var(--line);border-radius:999px;padding:6px 13px;margin:0 0 18px}
   .eyebrow b{color:var(--emerald)}
-  h1{font-size:38px;line-height:1.14;margin:0 0 12px;letter-spacing:-.8px;font-weight:800}
+  h1{font-size:44px;line-height:1.08;margin:0 0 14px;letter-spacing:-1.1px;font-weight:850}
   h1 .accent{background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent}
-  .sub{color:var(--muted);font-size:17px;line-height:1.6;margin:0 0 8px;max-width:62ch}
-  .meta-row{display:flex;flex-wrap:wrap;gap:8px;margin:18px 0 30px}
+  .sub{color:var(--muted);font-size:17px;line-height:1.62;margin:0 0 18px;max-width:46ch}
+  .meta-row{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 6px}
   .chip{font-size:12.5px;font-weight:600;color:#cdd8ff;background:var(--panel2);
     border:1px solid var(--line);border-radius:9px;padding:7px 11px}
   .chip b{color:var(--cyan);font-family:ui-monospace,Menlo,Consolas,monospace}
+  .hero-shot{position:relative;border-radius:22px;overflow:hidden;border:1px solid var(--line2);
+    box-shadow:var(--shadow), 0 0 0 1px rgba(76,198,255,.06) inset}
+  .hero-shot img{display:block;width:100%;height:auto}
+  .hero-shot .tag{position:absolute;top:14px;right:14px;font-size:12px;font-weight:800;letter-spacing:.3px;
+    color:#04070f;background:var(--grad);border-radius:999px;padding:6px 12px;box-shadow:0 8px 20px -8px rgba(55,224,166,.7)}
+  @media (max-width:820px){.hero{grid-template-columns:1fr;gap:26px} h1{font-size:36px}}
 
   /* cards */
   .card{background:linear-gradient(180deg,var(--panel),var(--panel2));
-    border:1px solid var(--line);border-radius:18px;padding:22px;margin:0 0 18px;
-    box-shadow:0 1px 0 rgba(255,255,255,.02) inset, 0 18px 40px -28px rgba(0,0,0,.7)}
-  .card.hero-dl{border-color:var(--line2);
-    box-shadow:0 24px 60px -34px rgba(52,190,160,.5), 0 0 0 1px rgba(76,198,255,.08) inset}
-  h2{font-size:15px;margin:0 0 14px;color:var(--cyan);letter-spacing:.4px;
-    text-transform:uppercase;font-weight:800}
+    border:1px solid var(--line);border-radius:18px;padding:22px;margin:0 0 18px;box-shadow:var(--shadow)}
+  .card.hero-dl{border-color:var(--line2)}
+  h2{font-size:15px;margin:0 0 14px;color:var(--cyan);letter-spacing:.4px;text-transform:uppercase;font-weight:800}
   h2 .lock{color:var(--muted);text-transform:none;letter-spacing:0;font-weight:600;font-size:12.5px}
 
   /* download controls */
-  .field{display:flex;gap:10px;flex-wrap:wrap;margin:4px 0 12px}
+  .field{display:flex;gap:10px;flex-wrap:wrap;margin:4px 0 10px}
   input#keyInput{flex:1 1 200px;min-width:0;font:16px/1.4 inherit;color:#04070f;
     background:#eef4ff;border:1px solid #2b3557;border-radius:12px;padding:13px 15px;outline:none}
   input#keyInput:focus{box-shadow:0 0 0 3px rgba(76,198,255,.35)}
   button#unlockBtn{font:inherit;font-weight:800;font-size:16px;color:#04070f;cursor:pointer;
-    background:var(--grad);border:0;border-radius:12px;padding:13px 20px;
-    transition:transform .08s ease, filter .15s ease}
-  button#unlockBtn:hover{filter:brightness(1.07)}
-  button#unlockBtn:active{transform:translateY(1px)}
+    background:var(--grad);border:0;border-radius:12px;padding:13px 22px;transition:filter .15s, transform .08s}
+  button#unlockBtn:hover{filter:brightness(1.07)} button#unlockBtn:active{transform:translateY(1px)}
+  .keyhint{font-size:13.5px;color:var(--muted);margin:0 0 4px}
+  .keyhint code{font-family:ui-monospace,Menlo,Consolas,monospace;color:var(--emerald);
+    background:rgba(55,224,166,.1);border:1px solid rgba(55,224,166,.35);border-radius:7px;padding:2px 9px;font-size:14px;font-weight:700;letter-spacing:1px}
   #keyErr{color:var(--rose);font-size:13.5px;margin:6px 0 0;display:none}
   a.btn{display:block;text-align:center;font-weight:800;font-size:18px;color:#04070f;
     background:var(--grad);border-radius:13px;padding:16px 18px;margin:2px 0 12px;
     box-shadow:0 14px 30px -16px rgba(55,224,166,.6)}
   a.btn small{display:block;font-weight:600;font-size:12.5px;opacity:.75;margin-top:2px}
+  a.btn:hover{text-decoration:none;filter:brightness(1.05)}
   .btn-row{display:flex;gap:10px;flex-wrap:wrap}
   .btn-row a.ghost{flex:1 1 220px;text-align:center;font-weight:700;font-size:14px;color:var(--text);
     border:1px solid var(--line2);border-radius:12px;padding:12px 16px;background:var(--panel2)}
   .btn-row a.ghost:hover{border-color:var(--cyan);text-decoration:none}
 
   /* feature grid */
-  .grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:2px 0 0}
-  .feat{background:var(--panel2);border:1px solid var(--line);border-radius:13px;padding:13px 14px}
+  .grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin:2px 0 0}
+  .feat{background:var(--panel2);border:1px solid var(--line);border-radius:13px;padding:15px 15px}
+  .feat .dot{width:30px;height:30px;border-radius:9px;display:grid;place-items:center;margin:0 0 9px;
+    background:rgba(76,198,255,.12);border:1px solid rgba(76,198,255,.28)}
+  .feat .dot svg{width:17px;height:17px;stroke:var(--cyan);fill:none;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
   .feat b{display:block;font-size:14.5px;color:var(--text);margin:0 0 3px}
   .feat span{color:var(--muted);font-size:13.5px;line-height:1.5}
+  @media (max-width:820px){.grid{grid-template-columns:1fr 1fr}}
+  @media (max-width:520px){.grid{grid-template-columns:1fr}}
+
+  /* gallery band */
+  .shot-band{border-radius:18px;overflow:hidden;border:1px solid var(--line);margin:2px 0 0;box-shadow:var(--shadow)}
+  .shot-band img{display:block;width:100%;height:auto}
 
   /* spec table */
   table{width:100%;border-collapse:collapse;font-size:13.5px}
   th,td{text-align:left;padding:9px 6px;border-bottom:1px solid #18203c;vertical-align:top}
   tr:last-child th,tr:last-child td{border-bottom:0}
   th{color:var(--muted);font-weight:600;width:37%}
-  td code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12px;
-    word-break:break-all;color:#bfe2ff;line-height:1.55}
-  .copy{font:inherit;font-size:11px;font-weight:700;color:var(--cyan);cursor:pointer;
-    background:transparent;border:1px solid var(--line2);border-radius:7px;padding:2px 8px;margin-left:6px;vertical-align:2px}
+  td code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12px;word-break:break-all;color:#bfe2ff;line-height:1.55}
+  .copy{font:inherit;font-size:11px;font-weight:700;color:var(--cyan);cursor:pointer;background:transparent;
+    border:1px solid var(--line2);border-radius:7px;padding:2px 8px;margin-left:6px;vertical-align:2px}
   .copy:hover{border-color:var(--cyan)}
 
-  /* lists */
-  ul,ol{margin:0;padding-left:20px}
-  li{margin:0 0 9px;color:#dfe7ff}
-  li::marker{color:var(--muted)}
+  ul,ol{margin:0;padding-left:20px} li{margin:0 0 9px;color:#dfe7ff} li::marker{color:var(--muted)}
   .warn{list-style:none;padding:0;margin:0}
-  .warn li{border-left:3px solid var(--amber);background:rgba(247,201,72,.06);
-    padding:10px 13px;border-radius:0 10px 10px 0;margin:0 0 10px;color:#f0e9cf}
-  .stop{border-left:3px solid var(--rose)}
-  .stop h2{color:var(--rose)}
+  .warn li{border-left:3px solid var(--amber);background:rgba(247,201,72,.06);padding:10px 13px;border-radius:0 10px 10px 0;margin:0 0 10px;color:#f0e9cf}
+  .stop{border-left:3px solid var(--rose)} .stop h2{color:var(--rose)}
   .note{color:var(--muted);font-size:13px;line-height:1.6;margin:12px 0 0}
-
-  footer{color:var(--muted);font-size:12.5px;margin-top:30px;line-height:1.7;
-    border-top:1px solid var(--line);padding-top:18px}
-
-  @media (max-width:640px){
-    .wrap{padding:30px 15px 64px}
-    h1{font-size:29px}.sub{font-size:15.5px}
-    .grid{grid-template-columns:1fr}
-    th{width:42%}
-  }
+  footer{color:var(--muted);font-size:12.5px;margin-top:30px;line-height:1.7;border-top:1px solid var(--line);padding-top:18px}
+  @media (max-width:640px){.wrap{padding:0 15px 64px}.bar{padding:14px 15px;margin:0 -15px 22px}}
 </style>
 </head>
 <body>
 <div class="wrap">
 
-  <p class="eyebrow">Android &middot; bản <b>69.9</b> &middot; build debug có kiểm chứng</p>
-  <h1>Gia Đình Việt — <span class="accent">file cài đặt v69.9</span></h1>
-  <p class="sub">Định vị &amp; cân bằng thời gian dùng điện thoại cho gia đình. Bản này do GitHub Actions
-  build tự động từ một commit đã vượt unit test, ký bằng khoá debug — dùng cho demo và kiểm thử, chưa phải phát hành chính thức.</p>
+  <header class="bar">
+    <a class="brand" href="#top">
+      <svg width="24" height="24" viewBox="0 0 32 32" aria-hidden="true"><circle cx="20" cy="12" r="6.5" fill="var(--emerald)"/><circle cx="17" cy="11" r="5.5" fill="var(--bg)"/><circle cx="9" cy="21" r="1.8" fill="var(--cyan)"/><circle cx="13.5" cy="24" r="1.1" fill="var(--cyan)"/><circle cx="24" cy="22" r="1.3" fill="var(--cyan)"/></svg>
+      <span>Gia&nbsp;Đình&nbsp;Việt</span>
+    </a>
+    <nav>
+      <a href="#feature">Tính năng</a>
+      <a href="#download">Tải về</a>
+      <a href="#verify">Đối chiếu</a>
+      <a href="#install">Cài đặt</a>
+    </nav>
+  </header>
 
-  <div class="meta-row">
-    <span class="chip">Size <b>76,3 MB</b></span>
-    <span class="chip">Android <b>7.0+</b> (API 24)</span>
-    <span class="chip">versionCode <b>6909</b></span>
-    <span class="chip">Tag <b>v69.9</b></span>
-  </div>
+  <section class="hero" id="top">
+    <div>
+      <p class="eyebrow">Android &middot; bản <b>69.9</b> &middot; build debug có kiểm chứng</p>
+      <h1><span class="accent">Gia Đình Việt</span></h1>
+      <p class="sub">Định vị &amp; cân bằng thời gian dùng điện thoại cho gia đình. Phụ huynh ghép máy con, đặt khung giờ, chặn app, xem vị trí và thống kê dùng thật — mọi thứ ký số kiểm chứng được.</p>
+      <div class="meta-row">
+        <span class="chip">Size <b>76,3 MB</b></span>
+        <span class="chip">Android <b>7.0+</b></span>
+        <span class="chip">versionCode <b>6909</b></span>
+        <span class="chip">Tag <b>v69.9</b></span>
+      </div>
+    </div>
+    <figure class="hero-shot">
+      <span class="tag">v69.9</span>
+      <img src="https://giadinhviet-9eud03puq7u.qoder.website/img/app-screens-dark.png" width="1024" height="1024" alt="Lưới 9 màn hình giao diện ứng dụng Gia Đình Việt (nền tối)">
+    </figure>
+  </section>
 
-  <div class="card hero-dl">
+  <div class="card hero-dl" id="download">
     <h2>Tải về</h2>
-    <p class="note" style="margin:0 0 12px">Tự nhập key để hiện nút tải — đây là bước xác minh bạn là người thật, không phải bot.</p>
+    <p class="note" style="margin:0 0 12px">Nhập key để hiện nút tải — bước nhỏ xác minh bạn là người thật, không phải bot.</p>
     <div id="gate">
       <div class="field">
         <input id="keyInput" type="text" inputmode="numeric" autocomplete="off" placeholder="Nhập key tải về" aria-label="Key tải về">
         <button id="unlockBtn">Mở khoá</button>
       </div>
-      <p class="note" style="margin:0 0 4px">Gợi ý: key là <b>5 chữ số liên tiếp, bắt đầu từ 1</b>.</p>
-      <p id="keyErr">Key không đúng — đọc gợi ý rồi thử lại.</p>
+      <p class="keyhint">Key tải về: <code>12345</code></p>
+      <p id="keyErr">Key không đúng — gõ lại <b>12345</b> rồi thử lại.</p>
     </div>
     <p id="gateDone" hidden class="note" style="margin:0 0 12px;color:var(--emerald)">
       Đúng key rồi. Đây chỉ là ô chặn bot phía trình duyệt (GitHub Pages tĩnh), <b>không</b> phải bảo mật thật —
@@ -154,19 +186,24 @@ layout: null
     <p class="note">Samsung, Xiaomi, Oppo, Vinsmart đều cài được. Cần bật Trợ năng + Quyền dùng ứng dụng sau khi cài (xem mục Cài đặt).</p>
   </div>
 
-  <div class="card">
-    <h2>Ứng dụng làm được gì</h2>
-    <div class="grid">
-      <div class="feat"><b>Định vị gia đình</b><span>Xem vị trí thành viên đã ghép nối trên nền đường phố / vệ tinh, kèm sai số mét thật và lịch sử lộ trình. Ở 69.9, máy con cũng thấy vị trí thật của phụ huynh.</span></div>
-      <div class="feat"><b>Chặn &amp; cân bằng thời gian</b><span>Phụ huynh đặt khung giờ, hạn mức phút và chặn app ngay trên máy con. Bộ chặn chạy bằng AccessibilityService.</span></div>
-      <div class="feat"><b>Chat phụ huynh – con</b><span>Tin nhắn chữ, nhãn cảm xúc, ghim tin quan trọng. Hai máy ghép nối đọc chung một hội thoại.</span></div>
-      <div class="feat"><b>Nhiều phụ huynh cùng xem</b><span>Mẹ, bố, ông bà… cùng xem một hồ sơ con. Máy chưa ghép nối bị khoá các màn quản lý, chỉ còn ô nhập mã.</span></div>
-      <div class="feat"><b>Cứu hộ SOS</b><span>Gọi số cứu hộ, soạn SMS gửi toạ độ, đọc vị trí bằng giọng nói sau vài giây.</span></div>
-      <div class="feat"><b>Trợ lý AI đọc số liệu thật</b><span>Hỏi tự nhiên; khi cần nó đọc đúng số liệu dùng máy, không bịa. Chỉ còn model miễn phí.</span></div>
+  <section id="feature">
+    <div class="card">
+      <h2>Ứng dụng làm được gì</h2>
+      <div class="grid">
+        <div class="feat"><div class="dot"><svg viewBox="0 0 24 24"><path d="M12 21s-7-6.3-7-11a7 7 0 0 1 14 0c0 4.7-7 11-7 11z"/><circle cx="12" cy="10" r="2.4"/></svg></div><b>Định vị gia đình</b><span>Vị trí thành viên đã ghép nối trên nền đường phố / vệ tinh, kèm sai số mét thật và lịch sử lộ trình. Ở 69.9, máy con cũng thấy vị trí thật của phụ huynh.</span></div>
+        <div class="feat"><div class="dot"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2.5"/><path d="M8 4v16"/></svg></div><b>Chặn &amp; cân bằng thời gian</b><span>Phụ huynh đặt khung giờ, hạn mức phút và chặn app ngay trên máy con. Bộ chặn chạy bằng AccessibilityService.</span></div>
+        <div class="feat"><div class="dot"><svg viewBox="0 0 24 24"><path d="M21 12a8 8 0 0 1-11.5 7.2L4 20l.9-4.4A8 8 0 1 1 21 12z"/></svg></div><b>Chat phụ huynh – con</b><span>Tin nhắn chữ, nhãn cảm xúc, ghim tin quan trọng. Hai máy ghép nối đọc chung một hội thoại.</span></div>
+        <div class="feat"><div class="dot"><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3"/><path d="M3 20a6 6 0 0 1 12 0"/><path d="M16 6a3 3 0 0 1 0 6"/><path d="M18 20a6 6 0 0 0-3-5.2"/></svg></div><b>Nhiều phụ huynh cùng xem</b><span>Mẹ, bố, ông bà… cùng xem một hồ sơ con. Máy chưa ghép nối bị khoá các màn quản lý, chỉ còn ô nhập mã.</span></div>
+        <div class="feat"><div class="dot"><svg viewBox="0 0 24 24"><path d="M12 3l7 3v5c0 4.5-3 8-7 10-4-2-7-5.5-7-10V6z"/><path d="M12 9v4M12 16h.01"/></svg></div><b>Cứu hộ SOS</b><span>Gọi số cứu hộ, soạn SMS gửi toạ độ, đọc vị trí bằng giọng nói sau vài giây.</span></div>
+        <div class="feat"><div class="dot"><svg viewBox="0 0 24 24"><path d="M12 3v3M12 18v3M4.5 7.5l2 2M17.5 14.5l2 2M3 12h3M18 12h3M4.5 16.5l2-2M17.5 9.5l2-2"/><circle cx="12" cy="12" r="3"/></svg></div><b>Trợ lý AI đọc số liệu thật</b><span>Hỏi tự nhiên; khi cần nó đọc đúng số liệu dùng máy, không bịa. Chỉ còn model miễn phí.</span></div>
+      </div>
+      <figure class="shot-band" style="margin-top:16px">
+        <img src="https://giadinhviet-9eud03puq7u.qoder.website/img/app-screens-light.png" width="1024" height="1024" loading="lazy" alt="Lưới 9 màn hình giao diện ứng dụng Gia Đình Việt (nền sáng)">
+      </figure>
     </div>
-  </div>
+  </section>
 
-  <div class="card">
+  <div class="card" id="verify">
     <h2>Số liệu kiểm chứng được</h2>
     <table>
       <tr><th>Phiên bản</th><td><code>69.9</code> &nbsp;(versionCode <code>6909</code>, tag <code>v69.9</code>)</td></tr>
@@ -185,7 +222,7 @@ layout: null
     <p class="note">SHA-256 lấy thẳng từ API Release của GitHub; SHA-1 tính lại bằng cách tải file về rồi băm — nên hai con số khớp với file bạn tải, không phải số chép tay. Hai digest chứng chỉ không chép từ keystore: bóc khối ký v2 ra khỏi chính file APK và so từng byte với chứng chỉ trong <code>debug.keystore</code> của repo — trùng khớp hoàn toàn.</p>
   </div>
 
-  <div class="card">
+  <div class="card" id="install">
     <h2>Cài đặt</h2>
     <ol>
       <li>Mở file vừa tải trong trình quản lý file của điện thoại.</li>
@@ -245,7 +282,6 @@ layout: null
   btn.addEventListener('click', tryUnlock);
   inp.addEventListener('keydown', function(e){ if (e.key === 'Enter'){ e.preventDefault(); tryUnlock(); } });
 
-  // Nút chép hash
   var copiers = document.querySelectorAll('.copy');
   for (var i=0;i<copiers.length;i++){
     copiers[i].addEventListener('click', function(){
