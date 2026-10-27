@@ -35,3 +35,9 @@ local.properties
 # keyAlias "androiddebugkey" la thong tin cong khai, khong phai bi mat.
 # CI can file nay vi app/build.gradle.kts ky ban debug bang debugConfig.
 # TUYET DOI khong dung no de ky ban phat hanh that.
+
+# APK/AAB tuyet doi khong nam trong repo. `build/` o tren da bao che file CI sinh
+# ra, nhung dong nay chan tiep ca khi co ai vo tinh (hay tool) roi file APK thang
+# vao thu muc goc — APK chi tai tu Release GitHub, khong bao gio commit.
+*.apk
+*.aab
