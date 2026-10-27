@@ -2407,6 +2407,17 @@ class VesperaViewModel(
             )
             return
         }
+        // SOTRANG: luu chuoi TRONG thi `savedBack` doc ra cung TRONG, phep so sanh
+        // o duoi dung "da luu" -> bao thanh cong gia cho mot so khong ton tai, va
+        // nut "Gui SOS nguoi than" ve sau moi phat hien truong hop nay. Chan ngay
+        // o day, khong de nguoi dung tuong da co so bao hiem.
+        if (clean.isBlank()) {
+            _uiState.value = _uiState.value.copy(
+                errorMessage = "Chưa nhập số điện thoại — không lưu được số trống. " +
+                    "Nhập số người thân rồi bấm Lưu, nếu không SOS SMS sẽ không gửi đi đâu cả."
+            )
+            return
+        }
         smsManager.saveEmergencyPhoneNumber(clean)
         // `apply()` ghi khong dong bo nhung SharedPreferences phuc vu gia tri
         // tu bo nho ngay, nen doc lai la cach duyet nhat de bao "đã lưu" co
