@@ -129,24 +129,25 @@ layout: null
   </div>
 
   <div class="card hero-dl">
-    <h2>Tải về <span class="lock">· ô dưới chỉ để chặn bot, không phải mật khẩu</span></h2>
-    <p class="note" style="margin:0 0 14px">Key đã ghi sẵn giúp người thật bấm là thấy nút tải — khỏi phải đoán. Đây là
-    trang GitHub Pages tĩnh, lớp khoá chỉ nằm phía trình duyệt (ai đọc mã nguồn cũng thấy),
-    <b>không</b> phải bảo mật thật: file APK vẫn nằm công khai trên GitHub Release.</p>
+    <h2>Tải về</h2>
+    <p class="note" style="margin:0 0 12px">Tự nhập key để hiện nút tải — đây là bước xác minh bạn là người thật, không phải bot.</p>
     <div id="gate">
       <div class="field">
-        <input id="keyInput" type="text" inputmode="text" autocomplete="off" value="12345" aria-label="Key tải về">
-        <button id="unlockBtn">Hiển thị nút tải ↓</button>
+        <input id="keyInput" type="text" inputmode="numeric" autocomplete="off" placeholder="Nhập key tải về" aria-label="Key tải về">
+        <button id="unlockBtn">Mở khoá</button>
       </div>
-      <p id="keyErr">Key không đúng — kiểm tra lại rồi thử nữa.</p>
+      <p class="note" style="margin:0 0 4px">Gợi ý: key là <b>5 chữ số liên tiếp, bắt đầu từ 1</b>.</p>
+      <p id="keyErr">Key không đúng — đọc gợi ý rồi thử lại.</p>
     </div>
+    <p id="gateDone" hidden class="note" style="margin:0 0 12px;color:var(--emerald)">
+      Đúng key rồi. Đây chỉ là ô chặn bot phía trình duyệt (GitHub Pages tĩnh), <b>không</b> phải bảo mật thật —
+      file APK vẫn nằm công khai trên GitHub Release.</p>
     <div id="downloads" hidden>
       <a class="btn" href="https://github.com/robloxhihi/giadinhviet-app/releases/download/v69.9/GiaDinhViet.apk" rel="nofollow">
         Tải GiaDinhViet.apk
         <small>80.010.184 byte · 76,3 MB · app cho phụ huynh &amp; con</small>
       </a>
       <div class="btn-row">
-        <a class="ghost" href="https://github.com/robloxhihi/giadinhviet-app/releases/download/v69.9/QuanTriVien.apk" rel="nofollow">Tải QuanTriVien.apk (15,9 MB)</a>
         <a class="ghost" href="https://github.com/robloxhihi/giadinhviet-app/releases/tag/v69.9">Trang Release · mã nguồn + nhật ký build</a>
       </div>
     </div>
@@ -232,6 +233,8 @@ layout: null
   var dl   = document.getElementById('downloads');
   function unlock(){
     gate.style.display = 'none';
+    var done = document.getElementById('gateDone');
+    if (done) done.hidden = false;
     dl.hidden = false;
     err.style.display = 'none';
   }
