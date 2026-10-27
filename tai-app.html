@@ -6,130 +6,211 @@ layout: null
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Gia Đình Việt — bản 69.8 (Android APK)</title>
-<meta name="description" content="Tải bản cài đặt Android của ứng dụng Gia Đình Việt 69.8, kèm hash kiểm chứng.">
+<title>Gia Đình Việt — bản 69.9 (Android APK)</title>
+<meta name="description" content="Tải bản cài đặt Android của ứng dụng Gia Đình Việt 69.9, kèm SHA-256/SHA-1 và chứng chỉ ký kiểm chứng được.">
 <style>
   :root{
-    --bg:#05060a; --panel:#0d1120; --line:#232a45;
-    --text:#eaf0ff; --muted:#9aa4c4; --cyan:#38bdf8; --emerald:#34d399; --amber:#fbbf24; --rose:#fb7185;
+    --bg:#070a12; --bg2:#0b1020; --panel:#101627; --panel2:#0d1322; --line:#212a44; --line2:#2b3557;
+    --text:#eef3ff; --muted:#95a0c2; --cyan:#4cc6ff; --emerald:#37e0a6;
+    --amber:#f7c948; --rose:#ff7a90; --violet:#a78bfa;
+    --grad:linear-gradient(96deg,#4cc6ff 0%,#37e0a6 100%);
   }
   *{box-sizing:border-box}
-  body{margin:0;background:radial-gradient(1200px 620px at 78% -12%,#122043 0%,var(--bg) 62%);
-       color:var(--text);font:16px/1.6 -apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
-       -webkit-font-smoothing:antialiased}
-  .wrap{max-width:760px;margin:0 auto;padding:40px 20px 72px}
-  h1{font-size:30px;line-height:1.25;margin:0 0 6px;letter-spacing:-.4px}
-  .sub{color:var(--muted);margin:0 0 26px}
-  .card{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:18px;margin:0 0 18px}
-  .badge{display:inline-block;font-size:12px;font-weight:700;letter-spacing:.4px;text-transform:uppercase;
-         color:#05060a;background:var(--emerald);border-radius:999px;padding:4px 10px;margin-bottom:12px}
-  a.btn{display:block;text-align:center;text-decoration:none;font-weight:800;font-size:17px;color:#030712;
-        background:linear-gradient(90deg,var(--cyan),var(--emerald));border-radius:12px;padding:14px 18px;margin:4px 0 10px}
-  a.ghost{display:block;text-align:center;text-decoration:none;font-weight:700;font-size:14px;color:var(--text);
-        border:1px solid var(--line);border-radius:12px;padding:11px 18px}
-  h2{font-size:16px;margin:0 0 10px;color:var(--cyan);letter-spacing:.2px}
+  html{scroll-behavior:smooth}
+  body{
+    margin:0;
+    background:
+      radial-gradient(1100px 640px at 82% -14%, #17315e 0%, rgba(7,10,18,0) 55%),
+      radial-gradient(900px 520px at 8% 6%, #241a4a 0%, rgba(7,10,18,0) 50%),
+      var(--bg);
+    color:var(--text);
+    font:16px/1.65 -apple-system,"Segoe UI Variable","Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+    -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility;
+  }
+  .wrap{max-width:860px;margin:0 auto;padding:44px 22px 84px}
+  a{color:var(--cyan);text-decoration:none}
+  a:hover{text-decoration:underline}
+
+  /* header / hero */
+  .eyebrow{display:inline-flex;align-items:center;gap:8px;font-size:12px;font-weight:700;
+    letter-spacing:.9px;text-transform:uppercase;color:var(--muted);
+    border:1px solid var(--line);border-radius:999px;padding:6px 13px;margin:0 0 18px}
+  .eyebrow b{color:var(--emerald)}
+  h1{font-size:38px;line-height:1.14;margin:0 0 12px;letter-spacing:-.8px;font-weight:800}
+  h1 .accent{background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent}
+  .sub{color:var(--muted);font-size:17px;line-height:1.6;margin:0 0 8px;max-width:62ch}
+  .meta-row{display:flex;flex-wrap:wrap;gap:8px;margin:18px 0 30px}
+  .chip{font-size:12.5px;font-weight:600;color:#cdd8ff;background:var(--panel2);
+    border:1px solid var(--line);border-radius:9px;padding:7px 11px}
+  .chip b{color:var(--cyan);font-family:ui-monospace,Menlo,Consolas,monospace}
+
+  /* cards */
+  .card{background:linear-gradient(180deg,var(--panel),var(--panel2));
+    border:1px solid var(--line);border-radius:18px;padding:22px;margin:0 0 18px;
+    box-shadow:0 1px 0 rgba(255,255,255,.02) inset, 0 18px 40px -28px rgba(0,0,0,.7)}
+  .card.hero-dl{border-color:var(--line2);
+    box-shadow:0 24px 60px -34px rgba(52,190,160,.5), 0 0 0 1px rgba(76,198,255,.08) inset}
+  h2{font-size:15px;margin:0 0 14px;color:var(--cyan);letter-spacing:.4px;
+    text-transform:uppercase;font-weight:800}
+  h2 .lock{color:var(--muted);text-transform:none;letter-spacing:0;font-weight:600;font-size:12.5px}
+
+  /* download controls */
+  .field{display:flex;gap:10px;flex-wrap:wrap;margin:4px 0 12px}
+  input#keyInput{flex:1 1 200px;min-width:0;font:16px/1.4 inherit;color:#04070f;
+    background:#eef4ff;border:1px solid #2b3557;border-radius:12px;padding:13px 15px;outline:none}
+  input#keyInput:focus{box-shadow:0 0 0 3px rgba(76,198,255,.35)}
+  button#unlockBtn{font:inherit;font-weight:800;font-size:16px;color:#04070f;cursor:pointer;
+    background:var(--grad);border:0;border-radius:12px;padding:13px 20px;
+    transition:transform .08s ease, filter .15s ease}
+  button#unlockBtn:hover{filter:brightness(1.07)}
+  button#unlockBtn:active{transform:translateY(1px)}
+  #keyErr{color:var(--rose);font-size:13.5px;margin:6px 0 0;display:none}
+  a.btn{display:block;text-align:center;font-weight:800;font-size:18px;color:#04070f;
+    background:var(--grad);border-radius:13px;padding:16px 18px;margin:2px 0 12px;
+    box-shadow:0 14px 30px -16px rgba(55,224,166,.6)}
+  a.btn small{display:block;font-weight:600;font-size:12.5px;opacity:.75;margin-top:2px}
+  .btn-row{display:flex;gap:10px;flex-wrap:wrap}
+  .btn-row a.ghost{flex:1 1 220px;text-align:center;font-weight:700;font-size:14px;color:var(--text);
+    border:1px solid var(--line2);border-radius:12px;padding:12px 16px;background:var(--panel2)}
+  .btn-row a.ghost:hover{border-color:var(--cyan);text-decoration:none}
+
+  /* feature grid */
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:2px 0 0}
+  .feat{background:var(--panel2);border:1px solid var(--line);border-radius:13px;padding:13px 14px}
+  .feat b{display:block;font-size:14.5px;color:var(--text);margin:0 0 3px}
+  .feat span{color:var(--muted);font-size:13.5px;line-height:1.5}
+
+  /* spec table */
   table{width:100%;border-collapse:collapse;font-size:13.5px}
-  th,td{text-align:left;padding:7px 0;border-bottom:1px solid #182040;vertical-align:top}
-  th{color:var(--muted);font-weight:600;width:38%}
-  td code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12px;word-break:break-all;color:#cfe3ff}
-  ul{margin:0;padding-left:20px}
-  li{margin:0 0 7px}
-  .warn{border-left:3px solid var(--amber);padding-left:12px;color:var(--text)}
-  .warn li{margin:0 0 9px}
-  .note{color:var(--muted);font-size:13px}
+  th,td{text-align:left;padding:9px 6px;border-bottom:1px solid #18203c;vertical-align:top}
+  tr:last-child th,tr:last-child td{border-bottom:0}
+  th{color:var(--muted);font-weight:600;width:37%}
+  td code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12px;
+    word-break:break-all;color:#bfe2ff;line-height:1.55}
+  .copy{font:inherit;font-size:11px;font-weight:700;color:var(--cyan);cursor:pointer;
+    background:transparent;border:1px solid var(--line2);border-radius:7px;padding:2px 8px;margin-left:6px;vertical-align:2px}
+  .copy:hover{border-color:var(--cyan)}
+
+  /* lists */
+  ul,ol{margin:0;padding-left:20px}
+  li{margin:0 0 9px;color:#dfe7ff}
+  li::marker{color:var(--muted)}
+  .warn{list-style:none;padding:0;margin:0}
+  .warn li{border-left:3px solid var(--amber);background:rgba(247,201,72,.06);
+    padding:10px 13px;border-radius:0 10px 10px 0;margin:0 0 10px;color:#f0e9cf}
   .stop{border-left:3px solid var(--rose)}
-  footer{color:var(--muted);font-size:12.5px;margin-top:26px}
-  @media (max-width:520px){h1{font-size:25px}.wrap{padding:26px 14px 56px}}
+  .stop h2{color:var(--rose)}
+  .note{color:var(--muted);font-size:13px;line-height:1.6;margin:12px 0 0}
+
+  footer{color:var(--muted);font-size:12.5px;margin-top:30px;line-height:1.7;
+    border-top:1px solid var(--line);padding-top:18px}
+
+  @media (max-width:640px){
+    .wrap{padding:30px 15px 64px}
+    h1{font-size:29px}.sub{font-size:15.5px}
+    .grid{grid-template-columns:1fr}
+    th{width:42%}
+  }
 </style>
 </head>
 <body>
 <div class="wrap">
 
-  <span class="badge">Android &middot; bản 69.8</span>
-  <h1>Gia Đình Việt — file cài đặt v69.8</h1>
-  <p class="sub">Ứng dụng định vị &amp; cân bằng thời gian sử dụng điện thoại cho gia đình. Đây là bản build
-  tự động trên GitHub Actions, ký bằng khoá debug — dùng cho bản demo và kiểm thử, chưa phải bản phát hành chính thức.</p>
+  <p class="eyebrow">Android &middot; bản <b>69.9</b> &middot; build debug có kiểm chứng</p>
+  <h1>Gia Đình Việt — <span class="accent">file cài đặt v69.9</span></h1>
+  <p class="sub">Định vị &amp; cân bằng thời gian dùng điện thoại cho gia đình. Bản này do GitHub Actions
+  build tự động từ một commit đã vượt unit test, ký bằng khoá debug — dùng cho demo và kiểm thử, chưa phải phát hành chính thức.</p>
 
-  <div class="card">
-    <h2>Nhập key để mở khoá tải về</h2>
-    <p class="note" style="margin:0 0 12px">Đây là trang GitHub Pages tĩnh, lớp khoá chỉ nằm phía trình
-    duyệt (ai cũng đọc được trong mã nguồn). Nó bắt người thử gõ đúng mã trước khi thấy nút tải,
-    <b>không</b> phải bảo mật thật — file APK vẫn nằm công khai trên GitHub Release.</p>
+  <div class="meta-row">
+    <span class="chip">Size <b>76,3 MB</b></span>
+    <span class="chip">Android <b>7.0+</b> (API 24)</span>
+    <span class="chip">versionCode <b>6909</b></span>
+    <span class="chip">Tag <b>v69.9</b></span>
+  </div>
+
+  <div class="card hero-dl">
+    <h2>Tải về <span class="lock">· ô dưới chỉ để chặn bot, không phải mật khẩu</span></h2>
+    <p class="note" style="margin:0 0 14px">Key đã ghi sẵn giúp người thật bấm là thấy nút tải — khỏi phải đoán. Đây là
+    trang GitHub Pages tĩnh, lớp khoá chỉ nằm phía trình duyệt (ai đọc mã nguồn cũng thấy),
+    <b>không</b> phải bảo mật thật: file APK vẫn nằm công khai trên GitHub Release.</p>
     <div id="gate">
-      <input id="keyInput" type="text" inputmode="text" autocomplete="off" placeholder="Nhập key tải về"
-        style="width:100%;box-sizing:border-box;font:16px/1.4 -apple-system,'Segoe UI',Roboto,Arial,sans-serif;color:#030712;background:#e7edff;border:1px solid #232a45;border-radius:12px;padding:12px 14px;margin:0 0 10px">
-      <button id="unlockBtn"
-        style="display:block;width:100%;text-align:center;font-weight:800;font-size:17px;color:#030712;background:linear-gradient(90deg,var(--cyan),var(--emerald));border:0;border-radius:12px;padding:14px 18px;cursor:pointer">Mở khoá</button>
-      <p id="keyErr" style="color:var(--rose);font-size:13.5px;margin:8px 0 0;display:none">Key không đúng — kiểm tra lại rồi thử nữa.</p>
+      <div class="field">
+        <input id="keyInput" type="text" inputmode="text" autocomplete="off" value="12345" aria-label="Key tải về">
+        <button id="unlockBtn">Hiển thị nút tải ↓</button>
+      </div>
+      <p id="keyErr">Key không đúng — kiểm tra lại rồi thử nữa.</p>
     </div>
     <div id="downloads" hidden>
-      <a class="btn" href="https://github.com/robloxhihi/giadinhviet-app/releases/download/v69.8/GiaDinhViet.apk" rel="nofollow">Tải GiaDinhViet.apk (76.2 MB)</a>
-      <a class="ghost" href="https://github.com/robloxhihi/giadinhviet-app/releases/tag/v69.8">Trang Release trên GitHub (mã nguồn + nhật ký build)</a>
+      <a class="btn" href="https://github.com/robloxhihi/giadinhviet-app/releases/download/v69.9/GiaDinhViet.apk" rel="nofollow">
+        Tải GiaDinhViet.apk
+        <small>80.010.184 byte · 76,3 MB · app cho phụ huynh &amp; con</small>
+      </a>
+      <div class="btn-row">
+        <a class="ghost" href="https://github.com/robloxhihi/giadinhviet-app/releases/download/v69.9/QuanTriVien.apk" rel="nofollow">Tải QuanTriVien.apk (15,9 MB)</a>
+        <a class="ghost" href="https://github.com/robloxhihi/giadinhviet-app/releases/tag/v69.9">Trang Release · mã nguồn + nhật ký build</a>
+      </div>
     </div>
-    <p class="note" style="margin:12px 0 0">Yêu cầu Android 7.0 trở lên (API 24). Máy Samsung, Xiaomi, Oppo, Vinsmart đều cài được.</p>
+    <p class="note">Samsung, Xiaomi, Oppo, Vinsmart đều cài được. Cần bật Trợ năng + Quyền dùng ứng dụng sau khi cài (xem mục Cài đặt).</p>
   </div>
 
   <div class="card">
-    <h2>Ứng dụng này làm được gì</h2>
-    <p class="note" style="margin:0 0 12px">Mô tả tính năng hiện có ở bản 69.8. Ảnh/tệp đính kèm trong chat
-    cần bật Firebase Storage trước khi gửi được — chưa bật thì app báo rõ và không gửi tin rỗng.</p>
-    <ul>
-      <li><b>Định vị gia đình trên bản đồ.</b> Xem vị trí thành viên đã ghép nối trên nền chi tiết (đường phố / vệ tinh), kèm sai số mét thật của thiết bị và lịch sử lộ trình di chuyển tự ghi.</li>
-      <li><b>Cân bằng thời gian dùng điện thoại.</b> Phụ huynh đặt khung giờ và chặn ứng dụng ngay trên máy con; bộ chặn chạy bằng AccessibilityService, con không tự tắt được.</li>
-      <li><b>Chat giữa phụ huynh và con.</b> Gửi tin nhắn chữ, gắn nhãn cảm xúc, ghim tin quan trọng. Hai máy cùng ghép nối đọc chung một hội thoại.</li>
-      <li><b>Ghép nối nhiều phụ huynh.</b> Mẹ, bố, ông bà… cùng xem một hồ sơ con. Máy chưa ghép nối bị khoá các màn hình quản lý, chỉ còn việc nhập mã.</li>
-      <li><b>Cứu hộ SOS.</b> Gọi số cứu hộ, soạn SMS gửi toạ độ, và đọc vị trí bằng giọng nói sau vài giây.</li>
-      <li><b>Trợ lý AI trong app.</b> Hỏi tự nhiên như một trợ lý; khi được yêu cầu nó đọc đúng số liệu dùng máy, không bịa. Có giới hạn số lượt hỏi mỗi ngày.</li>
-    </ul>
+    <h2>Ứng dụng làm được gì</h2>
+    <div class="grid">
+      <div class="feat"><b>Định vị gia đình</b><span>Xem vị trí thành viên đã ghép nối trên nền đường phố / vệ tinh, kèm sai số mét thật và lịch sử lộ trình. Ở 69.9, máy con cũng thấy vị trí thật của phụ huynh.</span></div>
+      <div class="feat"><b>Chặn &amp; cân bằng thời gian</b><span>Phụ huynh đặt khung giờ, hạn mức phút và chặn app ngay trên máy con. Bộ chặn chạy bằng AccessibilityService.</span></div>
+      <div class="feat"><b>Chat phụ huynh – con</b><span>Tin nhắn chữ, nhãn cảm xúc, ghim tin quan trọng. Hai máy ghép nối đọc chung một hội thoại.</span></div>
+      <div class="feat"><b>Nhiều phụ huynh cùng xem</b><span>Mẹ, bố, ông bà… cùng xem một hồ sơ con. Máy chưa ghép nối bị khoá các màn quản lý, chỉ còn ô nhập mã.</span></div>
+      <div class="feat"><b>Cứu hộ SOS</b><span>Gọi số cứu hộ, soạn SMS gửi toạ độ, đọc vị trí bằng giọng nói sau vài giây.</span></div>
+      <div class="feat"><b>Trợ lý AI đọc số liệu thật</b><span>Hỏi tự nhiên; khi cần nó đọc đúng số liệu dùng máy, không bịa. Chỉ còn model miễn phí.</span></div>
+    </div>
   </div>
 
   <div class="card">
     <h2>Số liệu kiểm chứng được</h2>
     <table>
-      <tr><th>Phiên bản</th><td><code>69.8</code> &nbsp;(versionCode <code>6908</code>, tag <code>v69.8</code>)</td></tr>
-      <tr><th>Kích thước file</th><td><code>79,944,592</code> byte ≈ 76.2 MB</td></tr>
-      <tr><th>SHA-256 của APK</th><td><code>106111366e8d8be7b6e1f589a53ae54b450e1bbca79966fa6ac0e61c6fba92de</code></td></tr>
-      <tr><th>SHA-1 của APK</th><td><code>315d166c6b4318da6010e5686ae80f51f12eac29</code></td></tr>
+      <tr><th>Phiên bản</th><td><code>69.9</code> &nbsp;(versionCode <code>6909</code>, tag <code>v69.9</code>)</td></tr>
+      <tr><th>Kích thước file</th><td><code>80010184</code> byte ≈ 76,3 MB</td></tr>
+      <tr><th>SHA-256 của APK <button class="copy" data-copy="e92523d68e1569fe3840eea042e51d4a631d36146d3f1c76270d8c1f74a6b2bc">chép</button></th>
+          <td><code>e92523d68e1569fe3840eea042e51d4a631d36146d3f1c76270d8c1f74a6b2bc</code></td></tr>
+      <tr><th>SHA-1 của APK <button class="copy" data-copy="7593bbd94d11aa58d3ad19326fb07be04c445d24">chép</button></th>
+          <td><code>7593bbd94d11aa58d3ad19326fb07be04c445d24</code></td></tr>
       <tr><th>Chứng chỉ ký (SHA-1)</th><td><code>AB:F2:F6:49:CB:02:29:63:DE:77:96:FC:FA:EB:2B:7C:85:94:07:E4</code></td></tr>
       <tr><th>Chứng chỉ ký (SHA-256)</th><td><code>4A:62:78:E5:B0:04:6C:60:48:B5:A8:A9:A0:94:F4:80:30:0E:91:D7:E0:98:7A:70:BE:6A:7E:E0:C2:55:E7:14</code></td></tr>
-      <tr><th>Xây dựng bởi</th><td>GitHub Actions <a href="https://github.com/robloxhihi/giadinhviet-app/actions/runs/40462048758">run 40462048758</a> (đơn vị chạy: ubuntu, JDK 21)</td></tr>
-      <tr><th>Phát hành</th><td><code>2026-10-27 06:39:15 UTC</code></td></tr>
-      <tr><th>Unit test</th><td>Đã chạy và xanh trong chính run này ("Test va build ca hai APK (mot lan go Gradle)" → success) trước khi APK được ký</td></tr>
-      <tr><th>Chạy thật trên máy</th><td>Cài bản 69.8 lên máy giả lập BlueStacks (Android 9, API 28): luồng xoá của app Quản Trị Viên bắt buộc <b>gõ đúng uid</b> thì nút "Xóa" mới mở khoá — để trống hoặc gõ sai thì nút mờ, không xoá được gì.</td></tr>
+      <tr><th>Xây dựng bởi</th><td>GitHub Actions <a href="https://github.com/robloxhihi/giadinhviet-app/actions/runs/40476941425">run 40476941425</a> (ubuntu, JDK 21)</td></tr>
+      <tr><th>Phát hành</th><td><code>2026-10-27 09:05:32 UTC</code></td></tr>
+      <tr><th>Unit test</th><td>Đã chạy và xanh trong chính run này ("Test va build ca hai APK (mot lan go Gradle)" → success) <b>trước khi</b> APK được ký.</td></tr>
+      <tr><th>Chạy thật trên máy</th><td>69.9 đổi ba hành vi runtime: máy con thấy vị trí thật của phụ huynh, bộ chống "bay cả cây" khi chỉ di chuyển vài mét, và hiển thị phần trăm pin thật. Ba cái này được unit test giữ và CI xanh ở run trên. Riêng luồng xoá của app Quản Trị Viên (bắt buộc gõ đúng uid thì nút "Xóa" mới mở) đã đo thật bằng tay trên BlueStacks ở bản 69.8; <b>ba hành vi mới của 69.9 chưa được chạy lại bằng tay trên máy</b>.</td></tr>
     </table>
-    <p class="note">SHA-256 lấy từ chính API Release của GitHub; SHA-1 tính lại bằng cách tải file về rồi băm,
-    nên hai con số này khớp với file bạn tải, không phải số chép tay. Hai digest chứng chỉ ở trên không chép
-    từ keystore: chúng tôi bóc khối ký v2 ra khỏi chính file APK và so từng byte với chứng chỉ trong
-    <code>debug.keystore</code> của repo — trùng khớp hoàn toàn.</p>
+    <p class="note">SHA-256 lấy thẳng từ API Release của GitHub; SHA-1 tính lại bằng cách tải file về rồi băm — nên hai con số khớp với file bạn tải, không phải số chép tay. Hai digest chứng chỉ không chép từ keystore: bóc khối ký v2 ra khỏi chính file APK và so từng byte với chứng chỉ trong <code>debug.keystore</code> của repo — trùng khớp hoàn toàn.</p>
   </div>
 
   <div class="card">
     <h2>Cài đặt</h2>
     <ol>
       <li>Mở file vừa tải trong trình quản lý file của điện thoại.</li>
-      <li>Android sẽ hỏi "Cho phép cài ứng dụng không rõ nguồn gốc?" — chọn Cho phép cho trình duyệt/bạn đang dùng.</li>
-      <li>Cài xong, mở ứng dụng và cấp quyền. Quyền <b>Vị trí</b> và <b>Tin nhắn</b> hiện hộp thoại ngay; các quyền <b>Trợ năng</b>, <b>Hiển thị trên ứng dụng khác</b>, <b>Dữ liệu sử dụng</b>, <b>Tối ưu pin</b> Android bắt buộc bạn tự bật trong Cài đặt — ứng dụng chỉ mở đúng màn hình đó, không tự bật được.</li>
-      <li>Đăng nhập bằng tài khoản và mật khẩu tự đặt, hoặc tài khoản Google.</li>
+      <li>Android hỏi "Cho phép cài ứng dụng không rõ nguồn gốc?" — chọn Cho phép cho đúng app bạn đang mở file.</li>
+      <li>Cài xong, mở app và cấp quyền. Quyền <b>Vị trí</b> và <b>Tin nhắn</b> hiện hộp thoại ngay; các quyền <b>Trợ năng</b>, <b>Hiển thị trên ứng dụng khác</b>, <b>Dữ liệu sử dụng</b>, <b>Tối ưu pin</b> Android bắt buộc bạn tự bật trong Cài đặt — app chỉ mở đúng màn hình đó, không tự bật được.</li>
+      <li>Đăng nhập bằng tài khoản tự đặt hoặc tài khoản Google, rồi ghép nối bằng mã pairing.</li>
     </ol>
   </div>
 
   <div class="card">
     <h2>Những giới hạn thật của bản này</h2>
     <ul class="warn">
-      <li>File ký bằng <b>debug.keystore công khai trong repo</b>. Nó chứng minh file chưa bị sửa đổi, nhưng <b>không</b> chứng minh người ký — đừng coi đây là bản phân phối chính thức.</li>
-      <li>Đăng nhập Google cần đúng SHA-1 của khoá ký được khai trong Firebase. Hai digest của khoá debug này (bảng ở trên) đã được ghi vào dự án Firebase ngày 24/10/2026, nhưng <b>chưa</b> có một lần đăng nhập Google thật được kiểm chứng trên máy; Firebase có thể mất vài phút để lan toả. Đăng nhập bằng email + mật khẩu tự đặt thì đã chạy thật.</li>
-      <li>Trang này là GitHub Pages tĩnh, <b>không</b> có lớp kiểm Cloudflare Turnstile như trang chủ. Trang chủ (link bên dưới) mới là nơi tải về có kiểm chứng người thật.</li>
-      <li>Không có file <b>.exe</b> hay <b>.ipa</b> cho ứng dụng này, và không thể có: toàn bộ app viết bằng Kotlin/Compose cho Android và dựa vào ba cơ chế chỉ Android mới có — AccessibilityService để chặn ứng dụng, UsageStatsManager để đo thời gian dùng app, và quyền định vị nền. Windows không có ba thứ đó, iOS thì cấm hẳn ý tưởng "app cha điều khiển app con". Muốn chạy trên Windows chỉ có giả lập Android, trên iPhone chỉ có bản viết lại hoàn toàn bằng Swift + một tài khoản Apple Nhà phát triển.</li>
+      <li>Ký bằng <b>debug.keystore công khai trong repo</b>. Nó chứng minh file chưa bị sửa đổi, nhưng <b>không</b> chứng minh người ký — đừng coi là bản phân phối chính thức.</li>
+      <li>Đăng nhập Google cần đúng SHA-1 khoá ký được khai trong Firebase. Hai digest của khoá debug này đã ghi vào dự án Firebase ngày 24/10/2026, nhưng <b>chưa</b> có lần đăng nhập Google thật được kiểm chứng trên máy; Firebase có thể mất vài phút lan toả. Đăng nhập email + mật khẩu tự đặt thì đã chạy thật.</li>
+      <li>Trang này là GitHub Pages tĩnh, <b>không</b> có lớp kiểm Cloudflare Turnstile như trang chủ (link cuối trang). Trang chủ mới là nơi tải về có kiểm chứng người thật.</li>
+      <li>Không có <b>.exe</b> hay <b>.ipa</b>, và không thể có: app viết bằng Kotlin/Compose cho Android, dựa vào ba cơ chế chỉ Android có — AccessibilityService để chặn app, UsageStatsManager để đo thời gian dùng, và quyền định vị nền. Windows không có ba thứ đó; iOS cấm hẳn ý tưởng "app cha điều khiển app con". Muốn chạy trên Windows chỉ có giả lập Android; trên iPhone chỉ có bản viết lại bằng Swift + tài khoản Apple Nhà phát triển.</li>
     </ul>
   </div>
 
   <div class="card stop">
-    <h2 style="color:var(--rose)">Nếu bản đồ hiện vị trí sai</h2>
+    <h2>Nếu bản đồ hiện vị trí sai</h2>
     <ul class="warn">
-      <li>Ứng dụng không tự đoán vị trí. Điểm trên bản đồ đúng bằng toạ độ mà chính điện thoại báo lên.</li>
-      <li>Muốn biết vì sao lệch, bật bảng chi tiết (chạm vào chip vị trí) và xem hai dòng: <b>sai số ± mét</b> và <b>toạ độ</b>. Sai số trên 40 m nghĩa là định vị chỉ tới cấp toà nhà, không tới cấp cửa.</li>
-      <li>Máy tính giả lập (BlueStacks, LDPlayer...) có GPS ảo cố định — vị trí trên đó thường là một điểm mặc định, không phải nơi bạn ngồi.</li>
-      <li>Sai số dưới 3 m bị hiển thị là ±3 m, đó là sàn của thiết bị chứ không phải phép đo chính xác tuyệt đối.</li>
+      <li>App không tự đoán vị trí. Điểm trên bản đồ đúng bằng toạ độ mà chính điện thoại báo lên.</li>
+      <li>Muốn biết vì sao lệch, mở bảng chi tiết (chạm chip vị trí) và xem hai dòng: <b>sai số ± mét</b> và <b>toạ độ</b>. Sai số trên 40 m nghĩa là định vị chỉ tới cấp toà nhà, không tới cấp cửa.</li>
+      <li>Máy giả lập (BlueStacks, LDPlayer…) có GPS ảo cố định — vị trí trên đó thường là một điểm mặc định, không phải nơi bạn ngồi.</li>
+      <li>Sai số dưới 3 m hiển thị là ±3 m — đó là sàn của thiết bị, không phải phép đo tuyệt đối.</li>
     </ul>
   </div>
 
@@ -137,7 +218,7 @@ layout: null
     Trang tải về của mã nguồn mở <a href="https://github.com/robloxhihi/giadinhviet-app">robloxhihi/giadinhviet-app</a>
     &nbsp;·&nbsp; Trang giới thiệu chính thức:
     <a href="https://giadinhviet-9eud03puq7u.qoder.website">giadinhviet-9eud03puq7u.qoder.website</a>
-    &nbsp;·&nbsp; Sinh tự động từ GitHub Release API ngày 2026-10-27.
+    &nbsp;·&nbsp; Số liệu lấy từ GitHub Release API ngày 2026-10-27.
   </footer>
 
 </div>
@@ -149,18 +230,34 @@ layout: null
   var btn  = document.getElementById('unlockBtn');
   var err  = document.getElementById('keyErr');
   var dl   = document.getElementById('downloads');
+  function unlock(){
+    gate.style.display = 'none';
+    dl.hidden = false;
+    err.style.display = 'none';
+  }
   function tryUnlock(){
-    if (inp.value.trim() === KEY) {
-      gate.style.display = 'none';
-      dl.hidden = false;
-      err.style.display = 'none';
-      inp.focus();
-    } else {
-      err.style.display = 'block';
-    }
+    if (inp.value.trim() === KEY) { unlock(); }
+    else { err.style.display = 'block'; }
   }
   btn.addEventListener('click', tryUnlock);
   inp.addEventListener('keydown', function(e){ if (e.key === 'Enter'){ e.preventDefault(); tryUnlock(); } });
+
+  // Nút chép hash
+  var copiers = document.querySelectorAll('.copy');
+  for (var i=0;i<copiers.length;i++){
+    copiers[i].addEventListener('click', function(){
+      var t = this.getAttribute('data-copy'), b = this;
+      function ok(){ b.textContent = 'đã chép'; setTimeout(function(){ b.textContent='chép'; }, 1400); }
+      if (navigator.clipboard && navigator.clipboard.writeText){
+        navigator.clipboard.writeText(t).then(ok, ok);
+      } else {
+        var ta = document.createElement('textarea');
+        ta.value = t; document.body.appendChild(ta); ta.select();
+        try { document.execCommand('copy'); } catch(e){}
+        document.body.removeChild(ta); ok();
+      }
+    });
+  }
 })();
 </script>
 </body>
