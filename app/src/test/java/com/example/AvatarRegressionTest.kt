@@ -62,6 +62,28 @@ class AvatarRegressionTest {
             code.contains("inJustDecodeBounds = true"))
     }
 
+    /**
+     * Do tren BlueStacks ngay 2026-10-27, sau khi ban 69.2 da cai: bam avatar o
+     * CA HAI man (Tong quan va may hoc sinh), bo chon mo that, bam xong anh thi
+     * ve app — va KHONG CO GI XA RA ca: `users/{uid}.avatarBase64` van rong,
+     * khong mot dong chu nao noi len. Do la hop chon anh chuan nhan duoc ket qua
+     * rong (vi du Huy) nen im lang. May duoi Android 13 vi the phai tu mo lay
+     * duong dan trong ket qua thay vi chi tin mot con duong.
+     */
+    @Test
+    fun mayCuPhaiTuMoKetQuaBoChon() {
+        val code = codeOf(picker)
+        assertTrue("May duoi Android 13 phai co duong GET_CONTENT",
+            code.contains("Build.VERSION.SDK_INT >= 33") &&
+                code.contains("Intent.ACTION_GET_CONTENT"))
+        assertTrue("Phai doc duoc ket qua dang ClipData", code.contains("clipData"))
+        assertTrue("Phai doc duoc ket qua dang extra", code.contains("extras"))
+        assertTrue("Bo chon mo ma khong tra anh thi PHAI co chu",
+            code.contains("không trả tệp ảnh nào về app"))
+        assertTrue("Nguoi dung Huy thi van im lang",
+            code.contains("result.resultCode != Activity.RESULT_OK"))
+    }
+
     @Test
     fun loiBoChonPhaiHienRaThanhChu() {
         val code = codeOf(picker)

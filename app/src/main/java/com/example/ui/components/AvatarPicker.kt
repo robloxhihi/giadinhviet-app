@@ -1,10 +1,14 @@
 package com.example.ui.components
 
+import android.app.Activity
 import android.content.ActivityNotFoundException
 import android.content.Context
+import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
+import android.os.Build
+import android.os.Bundle
 import android.util.Base64
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -75,14 +79,20 @@ fun readImageAsAvatarBase64(context: Context, uri: Uri): String? = runCatching {
  * chet im lang — bam khong mo gi, hoac mo xong doc anh khong ra — va nguoi dung
  * khong phan biet duoc voi "app loi".
  *
- * Vi sao PickVisualMedia: do la hop chon anh chuan hien nay, khong can quyen
- * doc bo nho va khong mo khuon "chon tap tin" tren may Android 13+. May cu hon
- * thi chinh androidx roi no ve ACTION_GET_CONTENT — do la dieu can kiem chung
- * tren may that: BlueStacks 5 la Android 9 (API 28, do ngay 2026-10-26), va
- * `pm resolve-activity -a android.intent.action.GET_CONTENT` voi MIME wildcard
- * tren may do tra ve `com.android.documentsui/.picker.PickActivity`, tuc la duong van
- * song. May nao khong co host nao thi nguoi dung phai thay mot dong chu chu
- * khong phai mot cai bam khong toi dau.
+ * Vi sao PickVisualMedia o Android 13 tro len: do la hop chon anh chuan hien
+ * nay, khong can quyen doc bo nho va khong mo khuon "chon tap tin". Tren may cu
+ * hon thi KHONG the tin no. Do that tren BlueStacks 5 (Android 9, API 28) nga
+ * 26-27/10/2026: `pm resolve-activity -a android.intent.action.GET_CONTENT` tro
+ * ve `com.android.documentsui/.picker.PickActivity`, duong xem la song, nhung
+ * bam avatar thi he dieu hanh lai mo `com.google.android.gms.photopicker` (ban
+ * backport cua Google), va ket qua cua no ve den app thi hop chon anh chuan doc
+ * ra null. App mo duoc bo chon, nguoi dung bam anh, xong khong gi xay ra va
+ * cung khong co mot dong chu nao — dung cai "khong thay avatar duoc" nguoi dung
+ * bao, va vi no xay ra o CA HAI man (Tong quan cua phụ huynh lan man hoc sinh)
+ * nen loi nam o duong tra ket qua, khong phai o man hinh. Tu 69.4: may duoi
+ * Android 13 di ACTION_GET_CONTENT va ty mo be ket qua (`urisFromResult`), may
+ * 13 tro len giu PhotoPicker goc. May nao khong co host nao thi nguoi dung phai
+ * thay mot dong chu chu khong phai mot cai bam khong toi dau.
  *
  * THU QUY UOC cua ngon ngu dinh tuyen (khong phai loi chinh ta): KHONG duoc viet
  * tai day chuoi "xuyen qua + dau sao" (slash roi star liet nhau). Kotlin dem
@@ -96,9 +106,7 @@ fun readImageAsAvatarBase64(context: Context, uri: Uri): String? = runCatching {
 fun rememberAvatarPicker(onPicked: (String) -> Unit): () -> Unit {
     val context = LocalContext.current
 
-    val launcher = rememberLauncherForActivityResult(
-        ActivityResultContracts.PickVisualMedia()
-    ) { uri: Uri? ->
+    fun receive(uri: Uri?) {
         // uri == null la nguoi dung Huy — im lang la dung, day khong phai loi.
         if (uri != null) {
             val base64 = readImageAsAvatarBase64(context, uri)
@@ -111,13 +119,37 @@ fun rememberAvatarPicker(onPicked: (String) -> Unit): () -> Unit {
         }
     }
 
-    // Khong `remember` vong lap thu hai: `launcher` da on-dinh, con lambda nay
-    // chi la mot tui goi ham, tai tao moi lan recomposition cung khong doi gi.
+    // Android 13 tro len: PhotoPicker goc cua he dieu hanh, khong can quyen doc
+    // bo nho. May cu hon (va BlueStacks 5 la Android 9): du PickVisualMedia mo
+    // ra thi host tra ket qua o dang ma hop nay doc ra null, nen dung duong
+    // GET_CONTENT cu va ty mo be ket qua lay ra — xem `urisFromResult`.
+    val modern = rememberLauncherForActivityResult(
+        ActivityResultContracts.PickVisualMedia()
+    ) { uri: Uri? -> receive(uri) }
+
+    val legacy = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode != Activity.RESULT_OK) return@rememberLauncherForActivityResult
+        val uri = urisFromResult(result.data).firstOrNull()
+        if (uri != null) receive(uri)
+        else Toast.makeText(
+            context,
+            "Bộ chọn của máy này mở ra nhưng không trả tệp ảnh nào về app. " +
+                "Thử chọn ảnh khác hoặc chọn từ Album.",
+            Toast.LENGTH_LONG
+        ).show()
+    }
+
     return {
         runCatching {
-            launcher.launch(
-                PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
-            )
+            if (Build.VERSION.SDK_INT >= 33) {
+                modern.launch(
+                    PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                )
+            } else {
+                legacy.launch(avatarGetContentIntent())
+            }
         }.onFailure { error ->
             val reason = if (error is ActivityNotFoundException)
                 "Máy này không có ứng dụng chọn ảnh." else "Không mở được bộ chọn ảnh."
@@ -125,3 +157,46 @@ fun rememberAvatarPicker(onPicked: (String) -> Unit): () -> Unit {
         }
     }
 }
+
+/** Chuoi MIME xin tu bo chon — ghep hai doan de khong lan nao viet no trong comment. */
+private const val IMAGE_MIME = "image/" + "*"
+
+/** Mo bo chon anh kieu cu tren may duoi Android 13; chi xin anh, khong xin quyen. */
+private fun avatarGetContentIntent(): Intent = Intent(Intent.ACTION_GET_CONTENT).apply {
+    type = IMAGE_MIME
+    addCategory(Intent.CATEGORY_OPENABLE)
+    putExtra(Intent.EXTRA_MIME_TYPES, arrayOf(IMAGE_MIME))
+    putExtra(Intent.EXTRA_ALLOW_MULTIPLE, false)
+}
+
+/**
+ * Mo het nhung cho bo chon co the dat duong dan anh vao: `data`, `clipData`,
+ * va bat ky extra nao la `Uri` hay chuoi bat dau bang `content:`. BlueStacks
+ * dung bo chon anh cua Google, va do la cho ket qua nam ma hop chon anh chuan
+ * khong nhin thay — app mo duoc bo chon, nguoi dung bam anh, xong khong gi xay
+ * ra ca. Do chinh la "khong thay avatar duoc".
+ */
+private fun urisFromResult(data: Intent?): List<Uri> {
+    if (data == null) return emptyList()
+    val out = mutableListOf<Uri>()
+    data.clipData?.let { clip ->
+        for (i in 0 until clip.itemCount) runCatching { clip.getItemAt(i).uri }.getOrNull()?.let { out.add(it) }
+    }
+    data.data?.let { out.add(it) }
+    val extras = data.extras ?: Bundle.EMPTY
+    for (key in extras.keySet()) {
+        when (val value = runCatching { extras.get(key) }.getOrNull()) {
+            is Uri -> out.add(value)
+            is String -> if (value.startsWith("content://") || value.startsWith("file://")) out.add(Uri.parse(value))
+            is Iterable<*> -> value.forEach { item ->
+                when {
+                    item is Uri -> out.add(item)
+                    item is String && (item.startsWith("content://") || item.startsWith("file://")) ->
+                        out.add(Uri.parse(item))
+                }
+            }
+        }
+    }
+    return out.distinct()
+}
+
