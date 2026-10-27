@@ -81,18 +81,18 @@ fun readImageAsAvatarBase64(context: Context, uri: Uri): String? = runCatching {
  *
  * Vi sao PickVisualMedia o Android 13 tro len: do la hop chon anh chuan hien
  * nay, khong can quyen doc bo nho va khong mo khuon "chon tap tin". Tren may cu
- * hon thi KHONG the tin no. Do that tren BlueStacks 5 (Android 9, API 28) nga
- * 26-27/10/2026: `pm resolve-activity -a android.intent.action.GET_CONTENT` tro
- * ve `com.android.documentsui/.picker.PickActivity`, duong xem la song, nhung
- * bam avatar thi he dieu hanh lai mo `com.google.android.gms.photopicker` (ban
- * backport cua Google), va ket qua cua no ve den app thi hop chon anh chuan doc
- * ra null. App mo duoc bo chon, nguoi dung bam anh, xong khong gi xay ra va
- * cung khong co mot dong chu nao — dung cai "khong thay avatar duoc" nguoi dung
- * bao, va vi no xay ra o CA HAI man (Tong quan cua phụ huynh lan man hoc sinh)
- * nen loi nam o duong tra ket qua, khong phai o man hinh. Tu 69.4: may duoi
- * Android 13 di ACTION_GET_CONTENT va ty mo be ket qua (`urisFromResult`), may
- * 13 tro len giu PhotoPicker goc. May nao khong co host nao thi nguoi dung phai
- * thay mot dong chu chu khong phai mot cai bam khong toi dau.
+ * hon thi KHONG the tin no. Do that thu 27/10 tren BlueStacks 5 (Android 9, API
+ * 28): bam avatar mo ra `com.bluestacks.filemanager` (FileSharer cua gia lap),
+ * khong phai DocumentsUI. No liet ke du anh trong may, nhung cham vao mot anh thi
+ * Activity cua no khong bao gio finish — dem chon "0" dung nguyen, khong co nut
+ * Mo, va app khong bao gio nhan duoc Intent ket qua nao de ma doc. 69.4 da mo het
+ * duong tra ve (data, clipData, moi extra) nen loi khong con o cho doc ket qua;
+ * con lai la chon sai bo chon. Vi vay 69.5 pin ACTION_GET_CONTENT ve DocumentsUI
+ * goc khi may co no — bo chon do tra ve `content://` chuan va co finish — may 13
+ * tro len van giu PhotoPicker goc, may khong co DocumentsUI thi de he tu chon.
+ * Xay ra o CA HAI man (Tong quan cua phụ huynh lan man hoc sinh) nen loi nam o
+ * duong chon bo chon, khong phai o man hinh. Moi nhanh khong lay duoc anh deu
+ * phai noi mot dong chu chu khong phai mot cai bam khong toi dau.
  *
  * THU QUY UOC cua ngon ngu dinh tuyen (khong phai loi chinh ta): KHONG duoc viet
  * tai day chuoi "xuyen qua + dau sao" (slash roi star liet nhau). Kotlin dem
@@ -148,7 +148,7 @@ fun rememberAvatarPicker(onPicked: (String) -> Unit): () -> Unit {
                     PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
                 )
             } else {
-                legacy.launch(avatarGetContentIntent())
+                legacy.launch(avatarGetContentIntent(context))
             }
         }.onFailure { error ->
             val reason = if (error is ActivityNotFoundException)
@@ -161,12 +161,31 @@ fun rememberAvatarPicker(onPicked: (String) -> Unit): () -> Unit {
 /** Chuoi MIME xin tu bo chon — ghep hai doan de khong lan nao viet no trong comment. */
 private const val IMAGE_MIME = "image/" + "*"
 
-/** Mo bo chon anh kieu cu tren may duoi Android 13; chi xin anh, khong xin quyen. */
-private fun avatarGetContentIntent(): Intent = Intent(Intent.ACTION_GET_CONTENT).apply {
-    type = IMAGE_MIME
-    addCategory(Intent.CATEGORY_OPENABLE)
-    putExtra(Intent.EXTRA_MIME_TYPES, arrayOf(IMAGE_MIME))
-    putExtra(Intent.EXTRA_ALLOW_MULTIPLE, false)
+/** Package cua bo chon tai lieu goc cua he dieu hanh — noi duy nhat tra ket qua chuan. */
+private const val DOCUMENTS_UI = "com.android.documentsui"
+
+/**
+ * Mo bo chon anh kieu cu tren may duoi Android 13; chi xin anh, khong xin quyen.
+ *
+ * Gan `setPackage` ve DocumentsUI goc khi may co no. Do that thu 27/10 tren
+ * BlueStacks 5: ACTION_GET_CONTENT tu do roi vao `com.bluestacks.filemanager`
+ * (FileSharer cua gia lap). Bo chon do mo len, liet ke het anh, nhung cham vao
+ * mot anh thi Activity khong bao gio finish — dem chon "0" dung nguyen, khong co
+ * nut Mo, nen `urisFromResult` khong bao gio chay vi app khong bao gio nhan duoc
+ * Intent ket qua. Do la han che cua rieng FileSharer cua gia lap, khong phai loi
+ * doc ket qua. DocumentsUI la bo chon he dieu hanh tra ve duong dan `content://`
+ * chuan va co finish, nen pin ve do thi chup duoc anh. May that nao khong co
+ * DocumentsUI thi de nguyen cho he tu chon bo chon mac dinh cua no.
+ */
+private fun avatarGetContentIntent(context: Context): Intent {
+    val base = Intent(Intent.ACTION_GET_CONTENT).apply {
+        type = IMAGE_MIME
+        addCategory(Intent.CATEGORY_OPENABLE)
+        putExtra(Intent.EXTRA_MIME_TYPES, arrayOf(IMAGE_MIME))
+        putExtra(Intent.EXTRA_ALLOW_MULTIPLE, false)
+    }
+    val pinned = Intent(base).setPackage(DOCUMENTS_UI)
+    return if (pinned.resolveActivity(context.packageManager) != null) pinned else base
 }
 
 /**

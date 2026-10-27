@@ -84,6 +84,29 @@ class AvatarRegressionTest {
             code.contains("result.resultCode != Activity.RESULT_OK"))
     }
 
+    /**
+     * Do that thu 27/10 tren BlueStacks: ACTION_GET_CONTENT tu do roi vao
+     * `com.bluestacks.filemanager` (FileSharer cua gia lap). No liet ke du anh
+     * nhung cham vao anh thi Activity khong bao gio finish — dem chon "0" dung
+     * nguyen, khong co nut Mo — nen app khong bao gio nhan duoc Intent ket qua
+     * nao. 69.4 da mo het duong doc ket qua (data/clipData/extras) nen loi con
+     * lai la chon SAI bo chon, khong phai doc sai. Fix: pin ve DocumentsUI goc
+     * khi may co no. Test nay khop len CHUOI CODE that (khong phai comment) de
+     * khong ai vo tinh bo mat gan bo chon nay di.
+     */
+    @Test
+    fun pinBoChonVeDocumentsUIKhiMayCo() {
+        val code = codeOf(picker)
+        assertTrue("Phai dinh nghia package DocumentsUI",
+            code.contains("com.android.documentsui"))
+        assertTrue("Phai gan setPackage ve DocumentsUI",
+            code.contains("setPackage(DOCUMENTS_UI)"))
+        assertTrue("Chi pin khi may that su co bo chon do (resolveActivity)",
+            code.contains("resolveActivity"))
+        assertTrue("Ham mo bo chon phai nhan context de resolve",
+            code.contains("avatarGetContentIntent(context)"))
+    }
+
     @Test
     fun loiBoChonPhaiHienRaThanhChu() {
         val code = codeOf(picker)

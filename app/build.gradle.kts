@@ -23,7 +23,7 @@ android {
     // Android tuoc INSTALL_FAILED_VERSION_DOWNGRADE, va lenh `adb install` fail
     // ma van im lang (exit code bi `| head` nuot mat). Gio versionCode sinh tu
     // versionName: "69.4" -> 6904, tang .x la code tang, khong bao gio trung.
-    val gdvVersion = "69.4"
+    val gdvVersion = "69.5"
     versionName = gdvVersion
     versionCode = gdvVersion.split(".").map { it.toInt() }
       .let { if (it.size > 1) it[0] * 100 + it[1] else it[0] * 100 }
