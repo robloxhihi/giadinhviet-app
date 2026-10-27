@@ -38,20 +38,19 @@ GitHub Actions tự chạy unit test, build `assembleDebug`, ký bằng `debug.k
 repo và gắn file `GiaDinhViet.apk` vào Release.
 
 ```bash
-git tag -a v61 -m "ban 61.0"
-git push origin refs/tags/v61          # -> https://github.com/robloxhihi/giadinhviet-app/releases
+git tag -a v69.6 -m "ban 69.6"
+git push origin refs/tags/v69.6        # -> https://github.com/robloxhihi/giadinhviet-app/releases
 ```
 
-Bản mới nhất có file cài đặt thật: **v61** (`GiaDinhViet.apk` gắn kèm Release, tải qua
-[GiaDinhViet.apk](https://github.com/robloxhihi/giadinhviet-app/releases/download/v61/GiaDinhViet.apk)
+Bản mới nhất có file cài đặt thật: **v69.6** (`GiaDinhViet.apk` + `QuanTriVien.apk` gắn kèm
+Release, tải qua [GiaDinhViet.apk](https://github.com/robloxhihi/giadinhviet-app/releases/download/v69.6/GiaDinhViet.apk)
 hoặc trang [Tai app](https://robloxhihi.github.io/giadinhviet-app/tai-app.html)).
-Tag `v50` vẫn nằm trong repo nhưng **không có Release**: CI đỏ vì hai test hồi quy tự
-viết sai (`stripComments` ăn cả `https://` trong URL), đã sửa ở `v51`.
-Tag `v61` đã được **gắn lại** cùng ngày 24/10/2026: lần đầu build xanh và đã phát hành,
-nhưng kiểm chứng trên máy cho thấy hộp thoại "Ngừng dùng trên máy này" dẫn người đọc tới
-một nút vừa bị ẩn khi chưa ghép nối. Release cũ bị xoá, tag chuyển sang commit sửa. Mọi
-APK mang tag này đều là `versionCode 61` — muốn biết chính xác bản nào, so SHA-256 của
-file với con số in trên trang tải về.
+Bản 69.x sửa hẳn lỗi "không đổi được ảnh đại diện": bộ chọn ảnh cũ trên BlueStacks rơi vào
+`BlueStacksFileSharer` không bao giờ trả kết quả, và hàm đọc ảnh trả `null` ngay ở bước đo
+kích thước (`decodeStream` với `inJustDecodeBounds=true` luôn trả null). Nay đã gim bộ chọn
+về DocumentsUI và bỏ guard sai đó; ảnh được nén vuông 96px trước khi ghi Firestore.
+Mỗi bản phát hành đều có SHA-256 in trên trang tải về — muốn biết chính xác file nào, so
+SHA-256 của tệp đã tải với con số đó.
 
 Muốn build bằng Android Studio: mở thư mục này, tạo `.env` chứa `OPENROUTER_API_KEY`
 (xem `.env.example` — không commit key thật), rồi chạy `assembleDebug`. Từ bản 69.0 đây
