@@ -5,8 +5,9 @@ của con, đặt giới hạn ứng dụng theo khung giờ, và nhận cấp c
 Sản phẩm dự thi khoa học kỹ thuật, viết bằng Kotlin + Jetpack Compose, dữ liệu đồng bộ
 qua Firebase Firestore.
 
-**Tải bản cài đặt mới nhất:** <a href="tai-app.html"><strong>Gia Đình Việt &mdash; file cài đặt</strong></a>
-(`tai-app.html` trong thư mục này, kèm kích thước và hash kiểm chứng)
+**Tải bản cài đặt mới nhất:** <a href="index.html"><strong>Gia Đình Việt &mdash; file cài đặt</strong></a>
+(HTML publish ở gốc repo nên link gọn: <https://robloxhihi.github.io/giadinhviet-app/>,
+kèm kích thước và hash kiểm chứng. `tai-app.html` chỉ còn là trang chuyển hướng tới link đó.)
 
 *Trang giới thiệu có kiểm chứng người thật (Cloudflare Turnstile):*
 <https://giadinhviet-9eud03puq7u.qoder.website>
@@ -42,9 +43,9 @@ git tag -a v69.6 -m "ban 69.6"
 git push origin refs/tags/v69.6        # -> https://github.com/robloxhihi/giadinhviet-app/releases
 ```
 
-Bản mới nhất có file cài đặt thật: **v69.6** (`GiaDinhViet.apk` + `QuanTriVien.apk` gắn kèm
-Release, tải qua [GiaDinhViet.apk](https://github.com/robloxhihi/giadinhviet-app/releases/download/v69.6/GiaDinhViet.apk)
-hoặc trang [Tai app](https://robloxhihi.github.io/giadinhviet-app/tai-app.html)).
+Bản mới nhất có file cài đặt thật: **v69.11** (`GiaDinhViet.apk` + `QuanTriVien.apk` gắn kèm
+Release, tải qua [GiaDinhViet.apk](https://github.com/robloxhihi/giadinhviet-app/releases/download/v69.11/GiaDinhViet.apk)
+hoặc ngay tại [trang gốc](https://robloxhihi.github.io/giadinhviet-app/)).
 Bản 69.x sửa hẳn lỗi "không đổi được ảnh đại diện": bộ chọn ảnh cũ trên BlueStacks rơi vào
 `BlueStacksFileSharer` không bao giờ trả kết quả, và hàm đọc ảnh trả `null` ngay ở bước đo
 kích thước (`decodeStream` với `inJustDecodeBounds=true` luôn trả null). Nay đã gim bộ chọn
